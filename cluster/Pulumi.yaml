@@ -1,0 +1,6 @@
+name: oceanid-cluster
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Oceanid Cluster - Talos + k3s + Vault + Cloudflare Infrastructure

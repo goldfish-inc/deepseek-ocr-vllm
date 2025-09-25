@@ -1,0 +1,89 @@
+# Talos Configuration for Oceanid Cluster
+# Generate with: talosctl gen config oceanid-cluster https://tethys:6443
+
+cluster:
+  name: oceanid-cluster
+  network:
+    cni:
+      name: flannel  # Lightweight for k3s
+
+nodes:
+  tethys:
+    role: controlplane
+    install:
+      disk: /dev/sda
+      image: ghcr.io/siderolabs/installer:latest
+    network:
+      hostname: tethys
+      interfaces:
+        - interface: eth0
+          dhcp: true
+    nodeLabels:
+      node-role.kubernetes.io/master: ""
+      oceanid.io/provider: "hostinger"
+
+  styx:
+    role: worker
+    install:
+      disk: /dev/sda
+      image: ghcr.io/siderolabs/installer:latest
+    network:
+      hostname: styx
+      interfaces:
+        - interface: eth0
+          dhcp: true
+    nodeLabels:
+      oceanid.io/provider: "hostinger"
+
+  meliae:
+    role: worker
+    install:
+      disk: /dev/sda
+      image: ghcr.io/siderolabs/installer:latest
+    network:
+      hostname: meliae
+      interfaces:
+        - interface: ens3
+          dhcp: true
+    nodeLabels:
+      oceanid.io/provider: "oracle"
+
+  poseidon:
+    role: worker
+    install:
+      disk: /dev/nvme0n1  # Adjust for workstation
+      image: ghcr.io/siderolabs/installer:latest
+    network:
+      hostname: poseidon
+      interfaces:
+        - interface: eth0
+          dhcp: true
+    nodeLabels:
+      oceanid.io/provider: "local"
+      oceanid.io/gpu: "rtx4090"
+      nvidia.com/gpu: "true"
+
+# Machine configuration patches
+machine:
+  kubelet:
+    extraArgs:
+      feature-gates: "DevicePlugins=true"
+      enforce-node-allocatable: "pods"
+  kernel:
+    modules:
+      - name: nvidia
+      - name: nvidia_uvm
+  sysctls:
+    net.core.rmem_max: "2500000"
+    net.core.wmem_max: "2500000"
+
+# Disable all public ports - only Cloudflare Tunnels
+firewall:
+  ingress:
+    - protocol: tcp
+      port: 6443
+      source: 10.0.0.0/8  # Internal only
+  egress:
+    - protocol: tcp
+      port: 443
+      destination: 0.0.0.0/0  # Allow HTTPS out

@@ -1,0 +1,85 @@
+---
+# Cloudflared Tunnel Deployment for k3s
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflared-credentials
+  namespace: cloudflare
+type: Opaque
+stringData:
+  credentials.json: |
+    # Will be populated from 1Password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflare
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+      - name: cloudflared
+        image: cloudflare/cloudflared:latest
+        args:
+        - tunnel
+        - --no-autoupdate
+        - run
+        - --token
+        - $(TUNNEL_TOKEN)
+        env:
+        - name: TUNNEL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cloudflared-credentials
+              key: token
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 100m
+          requests:
+            memory: 64Mi
+            cpu: 50m
+---
+# Ingress Controller Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflare-ingress-config
+  namespace: cloudflare
+data:
+  config.yml: |
+    tunnel: oceanid-cluster
+    credentials-file: /etc/cloudflared/credentials.json
+
+    ingress:
+      # Vault UI
+      - hostname: vault.oceanid.internal
+        service: http://vault-1password.vault:8200
+
+      # Pulumi Dashboard
+      - hostname: pulumi.oceanid.internal
+        service: http://pulumi.pulumi:8080
+
+      # k3s Dashboard
+      - hostname: k3s.oceanid.internal
+        service: https://kubernetes-dashboard.kube-system:443
+
+      # Grafana Monitoring
+      - hostname: grafana.oceanid.internal
+        service: http://grafana.monitoring:3000
+
+      # Catch-all
+      - service: http_status:404

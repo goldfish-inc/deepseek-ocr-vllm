@@ -1,0 +1,36 @@
+{
+  "name": "@oceanid/cluster",
+  "version": "1.0.0",
+  "description": "Oceanid Kubernetes Cluster - Production-Ready 2025 Infrastructure",
+  "main": "bin/index.js",
+  "types": "bin/index.d.ts",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf bin",
+    "deploy": "pulumi up --yes --suppress-outputs",
+    "preview": "pulumi preview --diff --suppress-outputs",
+    "destroy": "pulumi destroy --yes",
+    "refresh": "pulumi refresh --yes",
+    "stack:init": "pulumi stack init prod",
+    "stack:select": "pulumi stack select prod",
+    "stack:output": "pulumi stack output --json",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@pulumi/kubernetes": "^4.23.0",
+    "@pulumi/pulumi": "^3.197.0"
+  },
+  "peerDependencies": {
+    "@pulumi/pulumi": "^3.0.0"
+  }
+}

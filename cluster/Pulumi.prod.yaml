@@ -1,0 +1,9 @@
+config:
+  oceanid-cluster:tethysIp: "157.173.210.123"
+  oceanid-cluster:styxIp: "191.101.1.3"
+  pulumi:disable-default-providers:
+    - "*"
+
+environment:
+  imports:
+    - default/oceanid-cluster

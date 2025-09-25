@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Build outputs
+bin/
+dist/
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+
+# Pulumi
+.pulumi/
+Pulumi.*.yaml
+!Pulumi.yaml
+!Pulumi.prod.yaml
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.secret
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Kubernetes
+kubeconfig*
+!kubeconfig.yaml.example
+
+# Backup files
+*.backup
+*.bak
+*-old.*
