@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import { dnsStatus } from "./dns";
 
 // =============================================================================
 // CONFIGURATION
@@ -121,18 +122,22 @@ no-autoupdate: true
 
 ingress:
   # Kubernetes Dashboard (if deployed)
-  - hostname: dashboard.goldfish.io
+  - hostname: dashboard.boathou.se
     service: https://kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
     originRequest:
       noTLSVerify: true
 
   # Metrics endpoint
-  - hostname: metrics.goldfish.io
+  - hostname: metrics.boathou.se
     service: http://localhost:2000
 
   # Health check endpoint
-  - hostname: health.goldfish.io
+  - hostname: health.boathou.se
     service: http_status:200
+
+  # Vault endpoint
+  - hostname: vault.boathou.se
+    service: http://vault.vault.svc.cluster.local:8200
 
   # Catch-all
   - service: http_status:404

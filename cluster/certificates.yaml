@@ -1,0 +1,21 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: boathouse-wildcard-cert
+  namespace: default
+spec:
+  secretName: boathouse-wildcard-tls
+  issuerRef:
+    name: letsencrypt-oceanid-prod
+    kind: ClusterIssuer
+  commonName: boathou.se
+  dnsNames:
+  - boathou.se
+  - "*.boathou.se"
+  duration: 2160h # 90 days
+  renewBefore: 720h # 30 days before expiry
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+    rotationPolicy: Always
