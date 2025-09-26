@@ -3,7 +3,9 @@ config:
   oceanid-cluster:styxIp: "191.101.1.3"
   pulumi:disable-default-providers:
     - "*"
-
+  oceanid-cluster:k3s_token:
+    secure: AAABAO5HBrygywW2C6s0NbKCSz59eyK290hxxy8lJCMWoaro9GdJtE9SP07WJU3zBz6AJQaDAQhK+KwGmdM7xcbW47EAFa2i2GTCdXY8ET97VPWvMTs1K57ekMoqS8MrUgWf07GLkDU0uzUUnO4KoUXhkTFNQ5MynvEMkV1AybZNizdkYo4fzw1o4Fk=
+  oceanid-cluster:k3s_server_url: https://tethys.boathou.se:6443
 environment:
   imports:
     - default/oceanid-cluster

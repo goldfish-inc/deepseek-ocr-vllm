@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { dnsStatus } from "./dns";
+import { nodes, clusterInfo, nodeStatus } from "./nodes";
 
 // =============================================================================
 // CONFIGURATION
