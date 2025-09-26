@@ -3,6 +3,7 @@ config:
     - "*"
     # All other configuration now comes from ESC (Pulumi Environments, Secrets, and Configuration)
     # SSH keys, IPs, tokens, etc. are managed in ESC for secure rotation
+  oceanid-cluster:cloudflare_zone_id: PLACEHOLDER_ZONE_ID
 environment:
   imports:
     - default/oceanid-cluster

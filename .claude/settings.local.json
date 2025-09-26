@@ -11,7 +11,9 @@
       "Bash(opa test:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(pulumi:*)"
+      "Bash(pulumi:*)",
+      "Bash(pnpm build:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

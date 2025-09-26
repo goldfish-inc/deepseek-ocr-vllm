@@ -35,7 +35,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             chart: "flux2",
             version: chartVersion,
             repositoryOpts: {
-                repo: "oci://ghcr.io/fluxcd/charts",
+                repo: "https://fluxcd-community.github.io/helm-charts",
             },
             namespace: namespaceName,
             createNamespace,

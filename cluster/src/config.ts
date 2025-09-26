@@ -35,22 +35,22 @@ const stack = getStack();
 const kubeconfigPath = cfg.get("kubeconfigPath") ?? process.env.KUBECONFIG ?? "./kubeconfig.yaml";
 const clusterName = cfg.get("clusterName") ?? `oceanid-${stack}`;
 
-const tunnelId = cfg.require("cloudflareTunnelId");
+const tunnelId = cfg.get("cloudflare_tunnel_id") ?? cfg.require("cloudflareTunnelId");
 
 export const clusterConfig: ClusterConfig = {
     name: clusterName,
     kubeconfigPath,
     metricsPort: cfg.getNumber("metricsPort") ?? 2000,
     cloudflare: {
-        accountId: cfg.require("cloudflareAccountId"),
-        zoneId: cfg.require("cloudflareZoneId"),
-        apiToken: cfg.requireSecret("cloudflareApiToken"),
+        accountId: cfg.get("cloudflare_account_id") ?? cfg.require("cloudflareAccountId"),
+        zoneId: cfg.get("cloudflare_zone_id") ?? cfg.require("cloudflareZoneId"),
+        apiToken: cfg.getSecret("cloudflare_api_token") ?? cfg.requireSecret("cloudflareApiToken"),
         tunnelId,
-        tunnelToken: cfg.requireSecret("cloudflareTunnelToken"),
-        tunnelHostname: cfg.get("cloudflareTunnelHostname") ?? cfg.require("tunnelHostname"),
-        tunnelServiceUrl: cfg.get("cloudflareTunnelServiceUrl") ?? cfg.require("tunnelServiceUrl"),
-        tunnelTarget: cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
-        image: cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:2024.9.1",
+        tunnelToken: cfg.getSecret("cloudflare_tunnel_token") ?? cfg.requireSecret("cloudflareTunnelToken"),
+        tunnelHostname: cfg.get("cloudflare_tunnel_hostname") ?? cfg.get("cloudflareTunnelHostname") ?? "k3s.boahou.se",
+        tunnelServiceUrl: cfg.get("cloudflare_tunnel_service_url") ?? cfg.get("cloudflareTunnelServiceUrl") ?? "http://kubernetes.default.svc.cluster.local:443",
+        tunnelTarget: cfg.get("cloudflare_tunnel_target") ?? cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
+        image: cfg.get("cloudflared_image") ?? cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:2024.9.1",
     },
     gitops: {
         repositoryUrl: cfg.get("gitRepositoryUrl") ?? "https://github.com/goldfish-inc/oceanid",
