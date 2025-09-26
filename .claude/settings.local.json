@@ -13,7 +13,12 @@
       "Bash(git commit:*)",
       "Bash(pulumi:*)",
       "Bash(pnpm build:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(python3:*)",
+      "Bash(op item list:*)",
+      "Bash(op read:*)",
+      "Bash(op:*)",
+      "Read(//private/tmp/**)"
     ],
     "deny": [],
     "ask": []

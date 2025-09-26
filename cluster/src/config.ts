@@ -47,7 +47,7 @@ export const clusterConfig: ClusterConfig = {
         apiToken: cfg.getSecret("cloudflare_api_token") ?? cfg.requireSecret("cloudflareApiToken"),
         tunnelId,
         tunnelToken: cfg.getSecret("cloudflare_tunnel_token") ?? cfg.requireSecret("cloudflareTunnelToken"),
-        tunnelHostname: cfg.get("cloudflare_tunnel_hostname") ?? cfg.get("cloudflareTunnelHostname") ?? "k3s.boahou.se",
+        tunnelHostname: cfg.get("cloudflare_tunnel_hostname") ?? cfg.get("cloudflareTunnelHostname") ?? "k3s.boathou.se",
         tunnelServiceUrl: cfg.get("cloudflare_tunnel_service_url") ?? cfg.get("cloudflareTunnelServiceUrl") ?? "http://kubernetes.default.svc.cluster.local:443",
         tunnelTarget: cfg.get("cloudflare_tunnel_target") ?? cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
         image: cfg.get("cloudflared_image") ?? cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:2024.9.1",

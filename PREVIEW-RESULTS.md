@@ -3,7 +3,9 @@
 ## Preview Summary
 - **Stack**: `ryan-taylor/oceanid-cluster/prod`
 - **Date**: 2025-09-26
-- **Domain**: `boahou.se` (corrected from incorrect oceanid.io)
+- **Domain**: `boathou.se` (corrected spelling and zone ID configured)
+- **Zone ID**: `a81f75a1931dcac429c50f2ee5252955`
+- **Status**: ✅ Ready for deployment
 
 ## Resource Count Summary
 
@@ -67,9 +69,12 @@ These are old resources from previous deployment:
 2. Config key mapping fixed for ESC integration (snake_case support)
 3. Flux Helm repository URL corrected to community charts
 
-### ⚠️ Pending Issues
-1. **Zone ID**: Currently using `PLACEHOLDER_ZONE_ID` - needs actual Cloudflare zone ID for boahou.se
-2. **Deprecation Warning**: `cloudflare.Record` deprecated, should use `cloudflare.DnsRecord`
+### ✅ Resolved Issues
+1. **Zone ID**: Fixed - using actual zone ID `a81f75a1931dcac429c50f2ee5252955` for boathou.se
+2. **Domain Spelling**: Corrected from boahou.se to proper boathou.se
+
+### ⚠️ Minor Issues
+1. **Deprecation Warning**: `cloudflare.Record` deprecated, should use `cloudflare.DnsRecord` (non-blocking)
 
 ## Stack Outputs Expected
 Based on the component structure, the following outputs should be available:

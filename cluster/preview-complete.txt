@@ -1,0 +1,1249 @@
+Previewing update (prod)
+
+View Live: https://app.pulumi.com/ryan-taylor/oceanid-cluster/prod/previews/fde6b466-02fa-4336-b452-d1a0932033c5
+
+  pulumi:pulumi:Stack: (same)
+    [urn=urn:pulumi:prod::oceanid-cluster::pulumi:pulumi:Stack::oceanid-cluster-prod]
+    + oceanid:gitops:FluxBootstrap: (create)
+        [urn=urn:pulumi:prod::oceanid-cluster::oceanid:gitops:FluxBootstrap::gitops]
+    + oceanid:core:CloudflareTunnel: (create)
+        [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel::cloudflare]
+warning: Record is deprecated: cloudflare.index/record.Record has been deprecated in favor of cloudflare.index/dnsrecord.DnsRecord
+    + pulumi:providers:cloudflare: (create)
+        [urn=urn:pulumi:prod::oceanid-cluster::pulumi:providers:cloudflare::cloudflare-provider]
+        apiToken  : [secret]
+        version   : "6.9.1"
+    + pulumi:providers:kubernetes: (create)
+        [urn=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider]
+        kubeconfig: (yaml) {
+            apiVersion     : "v1"
+            clusters       : [
+                [0]: {
+                    cluster: {
+                        certificate-authority-data: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lCQURBS0JnZ3Foa2pPUFFRREFqQWpNU0V3SHdZRFZRUUREQmhyTTNNdGMyVnkKZG1WeUxXTmhRREUzTlRnM09EWX..."
+                        server                    : "https://157.173.210.123:6443"
+                    }
+                    name   : "default"
+                }
+            ]
+            contexts       : [
+                [0]: {
+                    context: {
+                        cluster: "default"
+                        user   : "default"
+                    }
+                    name   : "default"
+                }
+            ]
+            current-context: "default"
+            kind           : "Config"
+            preferences    : {}
+            users          : [
+                [0]: {
+                    name: "default"
+                    user: {
+                        client-certificate-data: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJrakNDQVRlZ0F3SUJBZ0lJTHN4NVptUUkzVll3Q2dZSUtvWkl6ajBFQXdJd0l6RWhNQjhHQTFVRUF3d1kKYXpOekxXTnNhV1Z1ZEMxallVQX..."
+                        client-key-data        : "LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSU1CMFFRdy9yaTFTY1NOVVJTWERqWHg2SU5iRlNORVM3cXpveVZ1NElGYmJvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFRVF1aE..."
+                    }
+                }
+            ]
+        }
+
+        version   : "4.23.0"
+        + cloudflare:index/record:Record: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$cloudflare:index/record:Record::cloudflare-record]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:cloudflare::cloudflare-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            comment: "Managed by Pulumi for cluster oceanid-cluster"
+            content: "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc.cfargotunnel.com"
+            name   : "k3s.boathou.se"
+            proxied: true
+            ttl    : 1
+            type   : "CNAME"
+            zoneId : "a81f75a1931dcac429c50f2ee5252955"
+        + kubernetes:core/v1:Namespace: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:gitops:FluxBootstrap$kubernetes:core/v1:Namespace::gitops-ns]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "v1"
+            kind      : "Namespace"
+            metadata  : {
+                labels: {
+                    app.kubernetes.io/part-of         : "flux"
+                    pod-security.kubernetes.io/enforce: "baseline"
+                }
+                name  : "flux-system"
+            }
+        + kubernetes:core/v1:Namespace: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$kubernetes:core/v1:Namespace::cloudflare-ns]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "v1"
+            kind      : "Namespace"
+            metadata  : {
+                labels: {
+                    app.kubernetes.io/name            : "cloudflared"
+                    app.kubernetes.io/part-of         : "oceanid-cluster"
+                    oceanid.cluster/component         : "networking"
+                    oceanid.cluster/managed-by        : "pulumi"
+                    pod-security.kubernetes.io/enforce: "baseline"
+                }
+                name  : "cloudflared"
+            }
+
+
+        + kubernetes:core/v1:Secret: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$kubernetes:core/v1:Secret::cloudflare-credentials]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "v1"
+            data      : [secret]
+            kind      : "Secret"
+            metadata  : {
+                name     : "cloudflared-credentials"
+                namespace: "cloudflared"
+            }
+        + kubernetes:core/v1:ConfigMap: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$kubernetes:core/v1:ConfigMap::cloudflare-config]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "v1"
+            data      : {
+                config.yaml: (yaml) {
+                    credentials-file: "/etc/cloudflared/token/token"
+                    ingress         : [
+                        [0]: {
+                            hostname: "k3s.boathou.se"
+                            service : "http://kubernetes.default.svc.cluster.local:443"
+                        }
+                        [1]: {
+                            service: "http_status:404"
+                        }
+                    ]
+                    metrics         : "0.0.0.0:2000"
+                    no-autoupdate   : true
+                    tunnel          : "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc"
+                }
+
+            }
+            kind      : "ConfigMap"
+            metadata  : {
+                name     : "cloudflared-config"
+                namespace: "cloudflared"
+            }
+        + kubernetes:helm.sh/v3:Release: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:gitops:FluxBootstrap$kubernetes:helm.sh/v3:Release::gitops-flux]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            allowNullValues         : false
+            atomic                  : false
+            chart                   : "flux2"
+            cleanupOnFail           : false
+            createNamespace         : true
+            dependencyUpdate        : false
+            description             : ""
+            devel                   : false
+            disableCRDHooks         : false
+            disableOpenapiValidation: false
+            disableWebhooks         : false
+            forceUpdate             : false
+            keyring                 : ""
+            lint                    : false
+            name                    : "gitops-flux-6468cae7"
+            namespace               : "flux-system"
+            postrender              : ""
+            recreatePods            : false
+            renderSubchartNotes     : false
+            replace                 : false
+            repositoryOpts          : {
+                caFile  : ""
+                certFile: ""
+                keyFile : ""
+                password: ""
+                repo    : "https://fluxcd-community.github.io/helm-charts"
+                username: ""
+            }
+            resetValues             : false
+            reuseValues             : false
+            skipAwait               : false
+            skipCrds                : false
+            timeout                 : 300
+            values                  : {
+                components : [
+                    [0]: "source-controller"
+                    [1]: "kustomize-controller"
+                ]
+                installCRDs: true
+            }
+            verify                  : false
+            version                 : "2.12.0"
+            waitForJobs             : false
+        + kubernetes:apps/v1:Deployment: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$kubernetes:apps/v1:Deployment::cloudflare-deployment]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "apps/v1"
+            kind      : "Deployment"
+            metadata  : {
+                labels   : {
+                    app.kubernetes.io/name   : "cloudflared"
+                    app.kubernetes.io/part-of: "oceanid-cluster"
+                }
+                name     : "cloudflared"
+                namespace: "cloudflared"
+            }
+            spec      : {
+                replicas: 2
+                selector: {
+                    matchLabels: {
+                        app.kubernetes.io/name: "cloudflared"
+                    }
+                }
+                template: {
+                    metadata: {
+                        labels: {
+                            app.kubernetes.io/name   : "cloudflared"
+                            app.kubernetes.io/part-of: "oceanid-cluster"
+                        }
+                    }
+                    spec    : {
+                        containers       : [
+                            [0]: {
+                                args           : [
+                                    [0]: "tunnel"
+                                    [1]: "--config"
+                                    [2]: "/etc/cloudflared/config/config.yaml"
+                                    [3]: "run"
+                                ]
+                                env            : [
+                                    [0]: {
+                                        name     : "TUNNEL_TOKEN"
+                                        valueFrom: {
+                                            secretKeyRef: {
+                                                key : "token"
+                                                name: "cloudflared-credentials"
+                                            }
+                                        }
+                                    }
+                                ]
+                                image          : "cloudflare/cloudflared:2024.9.1"
+                                livenessProbe  : {
+                                    httpGet            : {
+                                        path: "/ready"
+                                        port: "metrics"
+                                    }
+                                    initialDelaySeconds: 15
+                                    periodSeconds      : 20
+                                }
+                                name           : "cloudflared"
+                                ports          : [
+                                    [0]: {
+                                        containerPort: 2000
+                                        name         : "metrics"
+                                    }
+                                ]
+                                readinessProbe : {
+                                    httpGet            : {
+                                        path: "/ready"
+                                        port: "metrics"
+                                    }
+                                    initialDelaySeconds: 5
+                                    periodSeconds      : 10
+                                }
+                                resources      : {
+                                    limits  : {
+                                        cpu   : "250m"
+                                        memory: "256Mi"
+                                    }
+                                    requests: {
+                                        cpu   : "100m"
+                                        memory: "128Mi"
+                                    }
+                                }
+                                securityContext: {
+                                    allowPrivilegeEscalation: false
+                                    capabilities            : {
+                                        drop: [
+                                            [0]: "ALL"
+                                        ]
+                                    }
+                                    readOnlyRootFilesystem  : true
+                                    runAsNonRoot            : true
+                                    runAsUser               : 65532
+                                }
+                                volumeMounts   : [
+                                    [0]: {
+                                        mountPath: "/etc/cloudflared/config"
+                                        name     : "config"
+                                    }
+                                    [1]: {
+                                        mountPath: "/etc/cloudflared/token"
+                                        name     : "token"
+                                        readOnly : true
+                                    }
+                                ]
+                            }
+                        ]
+                        priorityClassName: "system-cluster-critical"
+                        securityContext  : {
+                            fsGroup: 65532
+                        }
+                        volumes          : [
+                            [0]: {
+                                configMap: {
+                                    name: "cloudflared-config"
+                                }
+                                name     : "config"
+                            }
+                            [1]: {
+                                name  : "token"
+                                secret: {
+                                    secretName: "cloudflared-credentials"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        + kubernetes:source.toolkit.fluxcd.io/v1:GitRepository: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:gitops:FluxBootstrap$kubernetes:source.toolkit.fluxcd.io/v1:GitRepository::gitops-git-repo]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "source.toolkit.fluxcd.io/v1"
+            kind      : "GitRepository"
+            metadata  : {
+                name     : "flux-system"
+                namespace: "flux-system"
+            }
+            spec      : {
+                interval: "60s"
+                ref     : {
+                    branch: "main"
+                }
+                url     : "https://github.com/goldfish-inc/oceanid"
+            }
+        + kubernetes:kustomize.toolkit.fluxcd.io/v1:Kustomization: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:gitops:FluxBootstrap$kubernetes:kustomize.toolkit.fluxcd.io/v1:Kustomization::gitops-kustomization]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "kustomize.toolkit.fluxcd.io/v1"
+            kind      : "Kustomization"
+            metadata  : {
+                name     : "flux-system"
+                namespace: "flux-system"
+            }
+            spec      : {
+                force       : false
+                healthChecks: [
+                    [0]: {
+                        apiVersion: "kustomize.toolkit.fluxcd.io/v1"
+                        kind      : "Kustomization"
+                        name      : "flux-system"
+                        namespace : "flux-system"
+                    }
+                ]
+                interval    : "600s"
+                path        : "clusters/tethys"
+                prune       : true
+                sourceRef   : {
+                    kind: "GitRepository"
+                    name: "flux-system"
+                }
+                wait        : true
+            }
+        + kubernetes:core/v1:Service: (create)
+            [urn=urn:pulumi:prod::oceanid-cluster::oceanid:core:CloudflareTunnel$kubernetes:core/v1:Service::cloudflare-svc]
+            [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k3s-provider::04da6b54-80e4-46f7-96ec-b56ff0331ba9]
+            apiVersion: "v1"
+            kind      : "Service"
+            metadata  : {
+                labels   : {
+                    app.kubernetes.io/name: "cloudflared"
+                }
+                name     : "cloudflared-metrics"
+                namespace: "cloudflared"
+            }
+            spec      : {
+                ports   : [
+                    [0]: {
+                        name      : "metrics"
+                        port      : 2000
+                        targetPort: "metrics"
+                    }
+                ]
+                selector: {
+                    app.kubernetes.io/name: "cloudflared"
+                }
+            }
+    - kubernetes:apps/v1:Deployment: (delete)
+        [id=cloudflare/cloudflared]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:apps/v1:Deployment::cloudflared]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "apps/v1"
+        kind      : "Deployment"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "networking"
+            }
+            name     : "cloudflared"
+            namespace: "cloudflare"
+        }
+        spec      : {
+            replicas: 2
+            selector: {
+                matchLabels: {
+                    app: "cloudflared"
+                }
+            }
+            template: {
+                metadata: {
+                    annotations: {
+                        prometheus.io/port  : "2000"
+                        prometheus.io/scrape: "true"
+                    }
+                    labels     : {
+                        app                      : "cloudflared"
+                        oceanid.cluster/component: "networking"
+                    }
+                }
+                spec    : {
+                    containers        : [
+                        [0]: {
+                            args           : [
+                                [0]: "tunnel"
+                                [1]: "--config"
+                                [2]: "/etc/cloudflared/config/config.yaml"
+                                [3]: "--metrics"
+                                [4]: "0.0.0.0:2000"
+                                [5]: "run"
+                            ]
+                            env            : [
+                                [0]: {
+                                    name     : "TUNNEL_TOKEN"
+                                    valueFrom: {
+                                        secretKeyRef: {
+                                            key : "token"
+                                            name: "cloudflared-credentials"
+                                        }
+                                    }
+                                }
+                                [1]: {
+                                    name : "TUNNEL_METRICS"
+                                    value: "0.0.0.0:2000"
+                                }
+                                [2]: {
+                                    name : "TUNNEL_LOGLEVEL"
+                                    value: "info"
+                                }
+                            ]
+                            image          : "cloudflare/cloudflared:latest"
+                            livenessProbe  : {
+                                httpGet            : {
+                                    path: "/ready"
+                                    port: 2000
+                                }
+                                initialDelaySeconds: 10
+                                periodSeconds      : 30
+                            }
+                            name           : "cloudflared"
+                            ports          : [
+                                [0]: {
+                                    containerPort: 2000
+                                    name         : "metrics"
+                                }
+                            ]
+                            readinessProbe : {
+                                httpGet            : {
+                                    path: "/ready"
+                                    port: 2000
+                                }
+                                initialDelaySeconds: 5
+                                periodSeconds      : 10
+                            }
+                            resources      : {
+                                limits  : {
+                                    cpu   : "200m"
+                                    memory: "256Mi"
+                                }
+                                requests: {
+                                    cpu   : "100m"
+                                    memory: "128Mi"
+                                }
+                            }
+                            securityContext: {
+                                allowPrivilegeEscalation: false
+                                capabilities            : {
+                                    drop: [
+                                        [0]: "ALL"
+                                    ]
+                                }
+                                readOnlyRootFilesystem  : true
+                                runAsNonRoot            : true
+                                runAsUser               : 65532
+                                seccompProfile          : {
+                                    type: "RuntimeDefault"
+                                }
+                            }
+                            volumeMounts   : [
+                                [0]: {
+                                    mountPath: "/etc/cloudflared/config"
+                                    name     : "config"
+                                    readOnly : true
+                                }
+                                [1]: {
+                                    mountPath: "/etc/cloudflared/creds"
+                                    name     : "creds"
+                                    readOnly : true
+                                }
+                            ]
+                        }
+                    ]
+                    securityContext   : {
+                        fsGroup: 65532
+                    }
+                    serviceAccountName: "cloudflared"
+                    volumes           : [
+                        [0]: {
+                            configMap: {
+                                items: [
+                                    [0]: {
+                                        key : "config.yaml"
+                                        path: "config.yaml"
+                                    }
+                                ]
+                                name : "cloudflared-config"
+                            }
+                            name     : "config"
+                        }
+                        [1]: {
+                            name  : "creds"
+                            secret: {
+                                secretName: "cloudflared-credentials"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    - kubernetes:core/v1:ConfigMap: (delete)
+        [id=cloudflare/cloudflared-config]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:ConfigMap::cloudflared-config]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        data      : {
+            config.yaml: (yaml) {
+                credentials-file: "/etc/cloudflared/creds/credentials.json"
+                ingress         : [
+                    [0]: {
+                        hostname     : "dashboard.goldfish.io"
+                        originRequest: {
+                            noTLSVerify: true
+                        }
+                        service      : "https://kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local"
+                    }
+                    [1]: {
+                        hostname: "metrics.goldfish.io"
+                        service : "http://localhost:2000"
+                    }
+                    [2]: {
+                        hostname: "health.goldfish.io"
+                        service : "http_status:200"
+                    }
+                    [3]: {
+                        service: "http_status:404"
+                    }
+                ]
+                metrics         : "0.0.0.0:2000"
+                no-autoupdate   : true
+                tunnel          : "oceanid-cluster"
+            }
+
+        }
+        kind      : "ConfigMap"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "networking"
+            }
+            name     : "cloudflared-config"
+            namespace: "cloudflare"
+        }
+    - kubernetes:core/v1:Secret: (delete)
+        [id=cloudflare/cloudflared-credentials]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:Secret::cloudflared-credentials]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        data      : [secret]
+        kind      : "Secret"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "networking"
+            }
+            name     : "cloudflared-credentials"
+            namespace: "cloudflare"
+        }
+    - kubernetes:core/v1:ServiceAccount: (delete)
+        [id=cloudflare/cloudflared]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:ServiceAccount::cloudflared-sa]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        kind      : "ServiceAccount"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "networking"
+            }
+            name     : "cloudflared"
+            namespace: "cloudflare"
+        }
+    - kubernetes:core/v1:Service: (delete)
+        [id=cloudflare/cloudflared-metrics]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:Service::cloudflared-metrics]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        kind      : "Service"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "networking"
+            }
+            name     : "cloudflared-metrics"
+            namespace: "cloudflare"
+        }
+        spec      : {
+            ports   : [
+                [0]: {
+                    name      : "metrics"
+                    port      : 2000
+                    targetPort: 2000
+                }
+            ]
+            selector: {
+                app: "cloudflared"
+            }
+        }
+    - kubernetes:gateway.networking.k8s.io/v1:Gateway: (delete)
+        [id=gateway-system/oceanid-gateway]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:gateway.networking.k8s.io/v1:Gateway::main-gateway]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "gateway.networking.k8s.io/v1"
+        kind      : "Gateway"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "gateway-api"
+            }
+            name     : "oceanid-gateway"
+            namespace: "gateway-system"
+        }
+        spec      : {
+            addresses       : [
+                [0]: {
+                    value: "157.173.210.123"
+                }
+                [1]: {
+                    value: "191.101.1.3"
+                }
+            ]
+            gatewayClassName: "oceanid-gateway-class"
+            listeners       : [
+                [0]: {
+                    allowedRoutes: {
+                        namespaces: {
+                            from: "All"
+                        }
+                    }
+                    name         : "http"
+                    port         : 80
+                    protocol     : "HTTP"
+                }
+                [1]: {
+                    allowedRoutes: {
+                        namespaces: {
+                            from: "All"
+                        }
+                    }
+                    name         : "https"
+                    port         : 443
+                    protocol     : "HTTPS"
+                    tls          : {
+                        certificateRefs: [
+                            [0]: {
+                                name     : "oceanid-tls"
+                                namespace: "gateway-system"
+                            }
+                        ]
+                        mode           : "Terminate"
+                    }
+                }
+            ]
+        }
+    - kubernetes:core/v1:Namespace: (delete)
+        [id=cloudflare]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:Namespace::cloudflare]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        kind      : "Namespace"
+        metadata  : {
+            labels: {
+                oceanid.cluster/component         : "networking"
+                pod-security.kubernetes.io/enforce: "restricted"
+            }
+            name  : "cloudflare"
+        }
+    - kubernetes:core/v1:Namespace: (delete)
+        [id=gateway-system]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:core/v1:Namespace::gateway-system]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "v1"
+        kind      : "Namespace"
+        metadata  : {
+            labels: {
+                oceanid.cluster/component         : "gateway-api"
+                pod-security.kubernetes.io/enforce: "restricted"
+            }
+            name  : "gateway-system"
+        }
+    - kubernetes:gateway.networking.k8s.io/v1:GatewayClass: (delete)
+        [id=oceanid-gateway-class]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:gateway.networking.k8s.io/v1:GatewayClass::gateway-class]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "gateway.networking.k8s.io/v1"
+        kind      : "GatewayClass"
+        metadata  : {
+            labels: {
+                oceanid.cluster/component: "gateway-api"
+            }
+            name  : "oceanid-gateway-class"
+        }
+        spec      : {
+            controllerName: "io.k8s.gateway-controller/envoy-gateway"
+            description   : "Oceanid Cluster Gateway powered by Envoy"
+        }
+    - kubernetes:networking.k8s.io/v1:NetworkPolicy: (delete)
+        [id=default/allow-internal-communication]
+        [urn=urn:pulumi:prod::oceanid-cluster::kubernetes:networking.k8s.io/v1:NetworkPolicy::allow-internal]
+        [provider=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider::7561cf09-cce7-4090-844a-8fa6d6321888]
+        apiVersion: "networking.k8s.io/v1"
+        kind      : "NetworkPolicy"
+        metadata  : {
+            labels   : {
+                oceanid.cluster/component: "network-policy"
+            }
+            name     : "allow-internal-communication"
+            namespace: "default"
+        }
+        spec      : {
+            egress     : [
+                [0]: {
+                    to: [
+                        [0]: {
+                            namespaceSelector: {}
+                        }
+                        [1]: {
+                            podSelector: {}
+                        }
+                    ]
+                }
+            ]
+            ingress    : [
+                [0]: {
+                    from: [
+                        [0]: {
+                            namespaceSelector: {}
+                        }
+                        [1]: {
+                            podSelector: {}
+                        }
+                    ]
+                }
+            ]
+            podSelector: {}
+            policyTypes: [
+                [0]: "Ingress"
+                [1]: "Egress"
+            ]
+        }
+    - pulumi:providers:kubernetes: (delete)
+        [id=7561cf09-cce7-4090-844a-8fa6d6321888]
+        [urn=urn:pulumi:prod::oceanid-cluster::pulumi:providers:kubernetes::k8s-provider]
+        kubeconfig: "./kubeconfig.yaml"
+        version   : "4.23.0"
+    --outputs:--
+  - cloudflareMetricsUrl : "http://cloudflared-metrics.cloudflare.svc.cluster.local:2000/metrics"
+  - cloudflaredDeployment: {
+      - apiVersion: "apps/v1"
+      - id        : "cloudflare/cloudflared"
+      - kind      : "Deployment"
+      - metadata  : {
+          - annotations      : {
+              - deployment.kubernetes.io/revision: "1"
+            }
+          - creationTimestamp: "2025-09-25T15:48:34Z"
+          - generation       : 1
+          - labels           : {
+              - oceanid.cluster/component: "networking"
+            }
+          - managedFields    : [
+          -     [0]: {
+                  - apiVersion: "apps/v1"
+                  - fieldsType: "FieldsV1"
+                  - fieldsV1  : {
+                      - f:metadata: {
+                          - f:labels: {
+                              - f:oceanid.cluster/component: {}
+                            }
+                        }
+                      - f:spec    : {
+                          - f:replicas: {}
+                          - f:selector: {}
+                          - f:template: {
+                              - f:metadata: {
+                                  - f:annotations: {
+                                      - f:prometheus.io/port  : {}
+                                      - f:prometheus.io/scrape: {}
+                                    }
+                                  - f:labels     : {
+                                      - f:app                      : {}
+                                      - f:oceanid.cluster/component: {}
+                                    }
+                                }
+                              - f:spec    : {
+                                  - f:containers        : {
+                                      - k:{"name":"cloudflared"}: {
+                                          - .                : {}
+                                          - f:args           : {}
+                                          - f:env            : {
+                                              - k:{"name":"TUNNEL_LOGLEVEL"}: {
+                                                  - .      : {}
+                                                  - f:name : {}
+                                                  - f:value: {}
+                                                }
+                                              - k:{"name":"TUNNEL_METRICS"} : {
+                                                  - .      : {}
+                                                  - f:name : {}
+                                                  - f:value: {}
+                                                }
+                                              - k:{"name":"TUNNEL_TOKEN"}   : {
+                                                  - .          : {}
+                                                  - f:name     : {}
+                                                  - f:valueFrom: {
+                                                      - f:secretKeyRef: {}
+                                                    }
+                                                }
+                                            }
+                                          - f:image          : {}
+                                          - f:livenessProbe  : {
+                                              - f:httpGet            : {
+                                                  - f:path: {}
+                                                  - f:port: {}
+                                                }
+                                              - f:initialDelaySeconds: {}
+                                              - f:periodSeconds      : {}
+                                            }
+                                          - f:name           : {}
+                                          - f:ports          : {
+                                              - k:{"containerPort":2000,"protocol":"TCP"}: {
+                                                  - .              : {}
+                                                  - f:containerPort: {}
+                                                  - f:name         : {}
+                                                }
+                                            }
+                                          - f:readinessProbe : {
+                                              - f:httpGet            : {
+                                                  - f:path: {}
+                                                  - f:port: {}
+                                                }
+                                              - f:initialDelaySeconds: {}
+                                              - f:periodSeconds      : {}
+                                            }
+                                          - f:resources      : {
+                                              - f:limits  : {
+                                                  - f:cpu   : {}
+                                                  - f:memory: {}
+                                                }
+                                              - f:requests: {
+                                                  - f:cpu   : {}
+                                                  - f:memory: {}
+                                                }
+                                            }
+                                          - f:securityContext: {
+                                              - f:allowPrivilegeEscalation: {}
+                                              - f:capabilities            : {
+                                                  - f:drop: {}
+                                                }
+                                              - f:readOnlyRootFilesystem  : {}
+                                              - f:runAsNonRoot            : {}
+                                              - f:runAsUser               : {}
+                                              - f:seccompProfile          : {
+                                                  - f:type: {}
+                                                }
+                                            }
+                                          - f:volumeMounts   : {
+                                              - k:{"mountPath":"/etc/cloudflared/config"}: {
+                                                  - .          : {}
+                                                  - f:mountPath: {}
+                                                  - f:name     : {}
+                                                  - f:readOnly : {}
+                                                }
+                                              - k:{"mountPath":"/etc/cloudflared/creds"} : {
+                                                  - .          : {}
+                                                  - f:mountPath: {}
+                                                  - f:name     : {}
+                                                  - f:readOnly : {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                  - f:securityContext   : {
+                                      - f:fsGroup: {}
+                                    }
+                                  - f:serviceAccountName: {}
+                                  - f:volumes           : {
+                                      - k:{"name":"config"}: {
+                                          - .          : {}
+                                          - f:configMap: {
+                                              - f:items: {}
+                                              - f:name : {}
+                                            }
+                                          - f:name     : {}
+                                        }
+                                      - k:{"name":"creds"} : {
+                                          - .       : {}
+                                          - f:name  : {}
+                                          - f:secret: {
+                                              - f:secretName: {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                  - manager   : "pulumi-kubernetes-92c5173b"
+                  - operation : "Apply"
+                  - time      : "2025-09-25T15:48:34Z"
+                }
+          -     [1]: {
+                  - apiVersion : "apps/v1"
+                  - fieldsType : "FieldsV1"
+                  - fieldsV1   : {
+                      - f:metadata: {
+                          - f:annotations: {
+                              - .                                  : {}
+                              - f:deployment.kubernetes.io/revision: {}
+                            }
+                        }
+                      - f:status  : {
+                          - f:availableReplicas : {}
+                          - f:conditions        : {
+                              - .                       : {}
+                              - k:{"type":"Available"}  : {
+                                  - .                   : {}
+                                  - f:lastTransitionTime: {}
+                                  - f:lastUpdateTime    : {}
+                                  - f:message           : {}
+                                  - f:reason            : {}
+                                  - f:status            : {}
+                                  - f:type              : {}
+                                }
+                              - k:{"type":"Progressing"}: {
+                                  - .                   : {}
+                                  - f:lastTransitionTime: {}
+                                  - f:lastUpdateTime    : {}
+                                  - f:message           : {}
+                                  - f:reason            : {}
+                                  - f:status            : {}
+                                  - f:type              : {}
+                                }
+                            }
+                          - f:observedGeneration: {}
+                          - f:readyReplicas     : {}
+                          - f:replicas          : {}
+                          - f:updatedReplicas   : {}
+                        }
+                    }
+                  - manager    : "k3s"
+                  - operation  : "Update"
+                  - subresource: "status"
+                  - time       : "2025-09-25T15:48:48Z"
+                }
+            ]
+          - name             : "cloudflared"
+          - namespace        : "cloudflare"
+          - resourceVersion  : "17176"
+          - uid              : "7bcc3c80-d53e-4331-a079-c94805e30485"
+        }
+      - spec      : {
+          - progressDeadlineSeconds: 600
+          - replicas               : 2
+          - revisionHistoryLimit   : 10
+          - selector               : {
+              - matchLabels: {
+                  - app: "cloudflared"
+                }
+            }
+          - strategy               : {
+              - rollingUpdate: {
+                  - maxSurge      : "25%"
+                  - maxUnavailable: "25%"
+                }
+              - type         : "RollingUpdate"
+            }
+          - template               : {
+              - metadata: {
+                  - annotations: {
+                      - prometheus.io/port  : "2000"
+                      - prometheus.io/scrape: "true"
+                    }
+                  - labels     : {
+                      - app                      : "cloudflared"
+                      - oceanid.cluster/component: "networking"
+                    }
+                }
+              - spec    : {
+                  - containers                   : [
+                  -     [0]: {
+                          - args                    : [
+                          -     [0]: "tunnel"
+                          -     [1]: "--config"
+                          -     [2]: "/etc/cloudflared/config/config.yaml"
+                          -     [3]: "--metrics"
+                          -     [4]: "0.0.0.0:2000"
+                          -     [5]: "run"
+                            ]
+                          - env                     : [
+                          -     [0]: {
+                                  - name     : "TUNNEL_TOKEN"
+                                  - valueFrom: {
+                                      - secretKeyRef: {
+                                          - key : "token"
+                                          - name: "cloudflared-credentials"
+                                        }
+                                    }
+                                }
+                          -     [1]: {
+                                  - name : "TUNNEL_METRICS"
+                                  - value: "0.0.0.0:2000"
+                                }
+                          -     [2]: {
+                                  - name : "TUNNEL_LOGLEVEL"
+                                  - value: "info"
+                                }
+                            ]
+                          - image                   : "cloudflare/cloudflared:latest"
+                          - imagePullPolicy         : "Always"
+                          - livenessProbe           : {
+                              - failureThreshold   : 3
+                              - httpGet            : {
+                                  - path  : "/ready"
+                                  - port  : 2000
+                                  - scheme: "HTTP"
+                                }
+                              - initialDelaySeconds: 10
+                              - periodSeconds      : 30
+                              - successThreshold   : 1
+                              - timeoutSeconds     : 1
+                            }
+                          - name                    : "cloudflared"
+                          - ports                   : [
+                          -     [0]: {
+                                  - containerPort: 2000
+                                  - name         : "metrics"
+                                  - protocol     : "TCP"
+                                }
+                            ]
+                          - readinessProbe          : {
+                              - failureThreshold   : 3
+                              - httpGet            : {
+                                  - path  : "/ready"
+                                  - port  : 2000
+                                  - scheme: "HTTP"
+                                }
+                              - initialDelaySeconds: 5
+                              - periodSeconds      : 10
+                              - successThreshold   : 1
+                              - timeoutSeconds     : 1
+                            }
+                          - resources               : {
+                              - limits  : {
+                                  - cpu   : "200m"
+                                  - memory: "256Mi"
+                                }
+                              - requests: {
+                                  - cpu   : "100m"
+                                  - memory: "128Mi"
+                                }
+                            }
+                          - securityContext         : {
+                              - allowPrivilegeEscalation: false
+                              - capabilities            : {
+                                  - drop: [
+                                  -     [0]: "ALL"
+                                    ]
+                                }
+                              - readOnlyRootFilesystem  : true
+                              - runAsNonRoot            : true
+                              - runAsUser               : 65532
+                              - seccompProfile          : {
+                                  - type: "RuntimeDefault"
+                                }
+                            }
+                          - terminationMessagePath  : "/dev/termination-log"
+                          - terminationMessagePolicy: "File"
+                          - volumeMounts            : [
+                          -     [0]: {
+                                  - mountPath: "/etc/cloudflared/config"
+                                  - name     : "config"
+                                  - readOnly : true
+                                }
+                          -     [1]: {
+                                  - mountPath: "/etc/cloudflared/creds"
+                                  - name     : "creds"
+                                  - readOnly : true
+                                }
+                            ]
+                        }
+                    ]
+                  - dnsPolicy                    : "ClusterFirst"
+                  - restartPolicy                : "Always"
+                  - schedulerName                : "default-scheduler"
+                  - securityContext              : {
+                      - fsGroup: 65532
+                    }
+                  - serviceAccount               : "cloudflared"
+                  - serviceAccountName           : "cloudflared"
+                  - terminationGracePeriodSeconds: 30
+                  - volumes                      : [
+                  -     [0]: {
+                          - configMap: {
+                              - defaultMode: 420
+                              - items      : [
+                              -     [0]: {
+                                      - key : "config.yaml"
+                                      - path: "config.yaml"
+                                    }
+                                ]
+                              - name       : "cloudflared-config"
+                            }
+                          - name     : "config"
+                        }
+                  -     [1]: {
+                          - name  : "creds"
+                          - secret: {
+                              - defaultMode: 420
+                              - secretName : "cloudflared-credentials"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+      - status    : {
+          - availableReplicas : 2
+          - conditions        : [
+          -     [0]: {
+                  - lastTransitionTime: "2025-09-25T15:48:48Z"
+                  - lastUpdateTime    : "2025-09-25T15:48:48Z"
+                  - message           : "Deployment has minimum availability."
+                  - reason            : "MinimumReplicasAvailable"
+                  - status            : "True"
+                  - type              : "Available"
+                }
+          -     [1]: {
+                  - lastTransitionTime: "2025-09-25T15:48:34Z"
+                  - lastUpdateTime    : "2025-09-25T15:48:48Z"
+                  - message           : "ReplicaSet \"cloudflared-5f6dfc579f\" has successfully progressed."
+                  - reason            : "NewReplicaSetAvailable"
+                  - status            : "True"
+                  - type              : "Progressing"
+                }
+            ]
+          - observedGeneration: 1
+          - readyReplicas     : 2
+          - replicas          : 2
+          - updatedReplicas   : 2
+        }
+      - urn       : "urn:pulumi:prod::oceanid-cluster::kubernetes:apps/v1:Deployment::cloudflared"
+    }
+  - clusterEndpoint      : "https://157.173.210.123:6443"
+  - components           : {
+      - monitoring: "Sentry (External)"
+      - networking: "Cloudflare Tunnels + Gateway API (2025 Standard)"
+      - secrets   : "Pulumi ESC (Environments, Secrets, Configuration)"
+      - security  : "Network Policies + RBAC + Pod Security Standards"
+      - storage   : "Persistent Volumes via k3s local-path"
+    }
+  - gatewayUrl           : "http://oceanid-gateway.gateway-system.svc.cluster.local"
+  - internalNetworkPolicy: {
+      - apiVersion: "networking.k8s.io/v1"
+      - id        : "default/allow-internal-communication"
+      - kind      : "NetworkPolicy"
+      - metadata  : {
+          - creationTimestamp: "2025-09-25T15:45:48Z"
+          - generation       : 1
+          - labels           : {
+              - oceanid.cluster/component: "network-policy"
+            }
+          - managedFields    : [
+          -     [0]: {
+                  - apiVersion: "networking.k8s.io/v1"
+                  - fieldsType: "FieldsV1"
+                  - fieldsV1  : {
+                      - f:metadata: {
+                          - f:labels: {
+                              - f:oceanid.cluster/component: {}
+                            }
+                        }
+                      - f:spec    : {
+                          - f:egress     : {}
+                          - f:ingress    : {}
+                          - f:podSelector: {}
+                          - f:policyTypes: {}
+                        }
+                    }
+                  - manager   : "pulumi-kubernetes-47083736"
+                  - operation : "Apply"
+                  - time      : "2025-09-25T15:45:48Z"
+                }
+            ]
+          - name             : "allow-internal-communication"
+          - namespace        : "default"
+          - resourceVersion  : "17024"
+          - uid              : "7ee9b6a2-845e-4ff2-9bed-2870fd9a2918"
+        }
+      - spec      : {
+          - egress     : [
+          -     [0]: {
+                  - to: [
+                  -     [0]: {
+                          - namespaceSelector: {}
+                        }
+                  -     [1]: {
+                          - podSelector: {}
+                        }
+                    ]
+                }
+            ]
+          - ingress    : [
+          -     [0]: {
+                  - from: [
+                  -     [0]: {
+                          - namespaceSelector: {}
+                        }
+                  -     [1]: {
+                          - podSelector: {}
+                        }
+                    ]
+                }
+            ]
+          - podSelector: {}
+          - policyTypes: [
+          -     [0]: "Ingress"
+          -     [1]: "Egress"
+            ]
+        }
+      - urn       : "urn:pulumi:prod::oceanid-cluster::kubernetes:networking.k8s.io/v1:NetworkPolicy::allow-internal"
+    }
+  + outputs              : {
+      + cloudflareDeployment    : "cloudflared"
+      + cloudflareDnsRecord     : "k3s.boathou.se"
+      + cloudflareMetricsService: "cloudflared-metrics"
+      + cloudflareNamespace     : "cloudflared"
+      + fluxNamespace           : "flux-system"
+      + gitPath                 : "clusters/tethys"
+      + gitRepository           : "https://github.com/goldfish-inc/oceanid"
+      + kubeconfigPath          : "/Users/rt/Developer/oceanid/cluster/kubeconfig.yaml"
+    }
+  - status               : "Oceanid Cluster - 100% Pulumi Infrastructure with ESC"
+Resources:
+    + 14 to create
+    - 11 to delete
+    25 changes. 1 unchanged
