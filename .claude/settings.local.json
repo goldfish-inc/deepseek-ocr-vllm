@@ -9,7 +9,9 @@
       "Bash(pnpm --filter @oceanid/policy test)",
       "Bash(brew install:*)",
       "Bash(opa test:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(pulumi:*)"
     ],
     "deny": [],
     "ask": []

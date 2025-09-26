@@ -1,8 +1,8 @@
 config:
   pulumi:disable-default-providers:
     - "*"
-  # All other configuration now comes from ESC (Pulumi Environments, Secrets, and Configuration)
-  # SSH keys, IPs, tokens, etc. are managed in ESC for secure rotation
+    # All other configuration now comes from ESC (Pulumi Environments, Secrets, and Configuration)
+    # SSH keys, IPs, tokens, etc. are managed in ESC for secure rotation
 environment:
   imports:
     - default/oceanid-cluster
