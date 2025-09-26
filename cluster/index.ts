@@ -2,6 +2,8 @@ import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { dnsStatus } from "./dns";
 import { nodes, clusterInfo, nodeStatus } from "./nodes";
+import { provisioningStatus } from "./node-provisioning";
+import { tunnelStatus, securityStatus } from "./cloudflare-tunnel";
 
 // =============================================================================
 // CONFIGURATION

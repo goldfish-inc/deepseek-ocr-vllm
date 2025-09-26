@@ -7,7 +7,7 @@ echo "============================"
 
 # Configuration
 MASTER_IP="157.173.210.123"
-MASTER_SSH_KEY="/tmp/tethys_new_key"
+MASTER_SSH_KEY="$HOME/.ssh/oceanid/tethys_key"
 OP_ITEM_ID="c5s7qr6dvpzqpluqok2a7gfmzu"
 ESC_ENV="default/oceanid-cluster"
 
@@ -56,7 +56,7 @@ pulumi config set k3s_token "$NEW_TOKEN" --secret
 # Step 5: Update worker nodes
 echo "🔄 Updating worker nodes..."
 WORKER_NODES=("191.101.1.3" "192.168.2.80")
-WORKER_KEYS=("/tmp/styx_key" "/tmp/calypso_key")
+WORKER_KEYS=("$HOME/.ssh/oceanid/styx_key" "$HOME/.ssh/oceanid/calypso_key")
 WORKER_USERS=("root" "oceanid")
 
 for i in ${!WORKER_NODES[@]}; do

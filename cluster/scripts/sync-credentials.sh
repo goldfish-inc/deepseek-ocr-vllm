@@ -28,7 +28,7 @@ K3S_TOKEN=$(esc env get default/oceanid-cluster | grep -A2 'k3s:' | grep -A1 'to
 
 if [ -z "$K3S_TOKEN" ]; then
     # Token is not encrypted, get it directly
-    K3S_TOKEN=$(ssh -i /tmp/tethys_new_key root@157.173.210.123 "cat /var/lib/rancher/k3s/server/node-token")
+    K3S_TOKEN=$(ssh -i $HOME/.ssh/oceanid/tethys_key root@157.173.210.123 "cat /var/lib/rancher/k3s/server/node-token")
     echo "  Got token from master node"
 fi
 

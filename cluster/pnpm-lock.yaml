@@ -11,12 +11,18 @@ importers:
       '@pulumi/cloudflare':
         specifier: ^6.9.1
         version: 6.9.1(typescript@5.9.2)
+      '@pulumi/command':
+        specifier: ^1.1.1
+        version: 1.1.1(typescript@5.9.2)
       '@pulumi/kubernetes':
         specifier: ^4.23.0
         version: 4.23.0(typescript@5.9.2)
       '@pulumi/pulumi':
         specifier: ^3.197.0
         version: 3.197.0(typescript@5.9.2)
+      '@pulumi/tls':
+        specifier: ^5.2.2
+        version: 5.2.2(typescript@5.9.2)
     devDependencies:
       '@types/node':
         specifier: ^24.5.2
@@ -221,6 +227,9 @@ packages:
   '@pulumi/cloudflare@6.9.1':
     resolution: {integrity: sha512-DpZXRXhRyRat8BQxPIBO+V/opFjqktXA0tMrKBmZIo8QgjB5cDnrjvUWv5DrZRtHldE9Z3gTLT2T3OxgkD+f3g==}
 
+  '@pulumi/command@1.1.1':
+    resolution: {integrity: sha512-8dS/2B62wSd9XYVAGD4v8x52vbMQlEEsTB4YOdcE5o+le0pq+f9RtPSkqGWypDI+JblHr7j0W5wHl4CuGmL7Eg==}
+
   '@pulumi/kubernetes@4.23.0':
     resolution: {integrity: sha512-sMNV8cNx+MdvwNXCze3EiYgfRCTilJ9PMq4hqT8lOz7hgX5Un9yyDILJCkrt0wlGlB11Dgbq39mjwCeoImOEgg==}
 
@@ -235,6 +244,9 @@ packages:
         optional: true
       typescript:
         optional: true
+
+  '@pulumi/tls@5.2.2':
+    resolution: {integrity: sha512-g/BWc9eIAaPEXP9rrUTqs09q/4cOxDNp0NoZwV9JdD2tVv/OqbpOHXRT3NU5yEFSdRngSvscuH/XHNmCLncE6Q==}
 
   '@sigstore/bundle@2.3.2':
     resolution: {integrity: sha512-wueKWDk70QixNLB363yHc2D2ItTgYiMTdPwK8D9dKQMR3ZQ0c35IxP5xnwQ8cNLoCgCRcHf14kE+CLIvNX1zmA==}
@@ -1370,6 +1382,15 @@ snapshots:
       - ts-node
       - typescript
 
+  '@pulumi/command@1.1.1(typescript@5.9.2)':
+    dependencies:
+      '@pulumi/pulumi': 3.197.0(typescript@5.9.2)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
+
   '@pulumi/kubernetes@4.23.0(typescript@5.9.2)':
     dependencies:
       '@pulumi/pulumi': 3.197.0(typescript@5.9.2)
@@ -1416,6 +1437,15 @@ snapshots:
     transitivePeerDependencies:
       - bluebird
       - supports-color
+
+  '@pulumi/tls@5.2.2(typescript@5.9.2)':
+    dependencies:
+      '@pulumi/pulumi': 3.197.0(typescript@5.9.2)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
 
   '@sigstore/bundle@2.3.2':
     dependencies:

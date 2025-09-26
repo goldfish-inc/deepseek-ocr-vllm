@@ -28,8 +28,10 @@
   },
   "dependencies": {
     "@pulumi/cloudflare": "^6.9.1",
+    "@pulumi/command": "^1.1.1",
     "@pulumi/kubernetes": "^4.23.0",
-    "@pulumi/pulumi": "^3.197.0"
+    "@pulumi/pulumi": "^3.197.0",
+    "@pulumi/tls": "^5.2.2"
   },
   "peerDependencies": {
     "@pulumi/pulumi": "^3.0.0"
