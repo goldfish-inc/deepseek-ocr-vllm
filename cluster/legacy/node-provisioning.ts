@@ -4,17 +4,19 @@ import * as tls from "@pulumi/tls";
 import { nodes, k3sConfig } from "./nodes";
 
 // =============================================================================
-// SSH KEY MANAGEMENT (Store in ESC)
+// SSH KEY MANAGEMENT (Stored securely in Pulumi ESC)
 // =============================================================================
 
-// Generate SSH keys for each node if they don't exist
-export const sshKeys: Record<string, tls.PrivateKey> = {};
-
-Object.keys(nodes).forEach(nodeName => {
-    sshKeys[nodeName] = new tls.PrivateKey(`${nodeName}-ssh-key`, {
-        algorithm: "ED25519",
-    });
-});
+// SSH keys are now stored in Pulumi ESC (Environments, Secrets, and Configuration)
+// This allows for secure storage and rotation of SSH keys
+//
+// Keys are stored as base64-encoded secrets in ESC and automatically decoded
+// when accessed by Pulumi configuration
+//
+// To rotate SSH keys:
+// 1. Generate new SSH keys
+// 2. Run: ./scripts/migrate-ssh-to-esc.sh
+// 3. Deploy changes: pulumi up
 
 // =============================================================================
 // NODE PROVISIONING WITH PULUMI

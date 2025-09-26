@@ -1,0 +1,49 @@
+apiVersion: pulumi.com/v1
+kind: Stack
+metadata:
+  name: oceanid-cluster-prod
+  namespace: pulumi-system
+spec:
+  # Git source configuration
+  projectRepo: https://github.com/goldfish-inc/oceanid
+  branch: refs/heads/main
+  repoDir: cluster
+
+  # Pulumi stack configuration
+  stack: ryan-taylor/oceanid-cluster/prod
+
+  # Environment configuration from ESC
+  envRefs:
+    PULUMI_ACCESS_TOKEN:
+      type: Secret
+      secret:
+        name: pulumi-credentials
+        key: accessToken
+    PULUMI_CONFIG_PASSPHRASE:
+      type: Secret
+      secret:
+        name: pulumi-credentials
+        key: configPassphrase
+
+  # Stack configuration values
+  config:
+    oceanid-cluster:environment: production
+    oceanid-cluster:clusterName: oceanid
+
+  # Reconciliation settings
+  continueResyncOnCommitMatch: true
+  resyncFrequencySeconds: 300
+  retryOnUpdateConflict: true
+  refresh: true
+
+  # Resource limits for pulumi operations
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  # Destroy protection
+  destroyOnFinalize: false

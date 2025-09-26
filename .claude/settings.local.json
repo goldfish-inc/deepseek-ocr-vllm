@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue create:*)",
+      "Bash(gh issue close:*)",
+      "Bash(pnpm --filter @oceanid/cluster build)",
+      "Bash(cat:*)",
+      "Bash(pnpm --filter @oceanid/policy lint)",
+      "Bash(pnpm --filter @oceanid/policy test)",
+      "Bash(brew install:*)",
+      "Bash(opa test:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -12,7 +12,7 @@
     "noEmitOnError": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "bin",
-    "rootDir": ".",
+    "rootDir": "src",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -27,8 +27,7 @@
     "exactOptionalPropertyTypes": false
   },
   "include": [
-    "index.ts",
-    "**/*.ts"
+    "src"
   ],
   "exclude": [
     "node_modules",
