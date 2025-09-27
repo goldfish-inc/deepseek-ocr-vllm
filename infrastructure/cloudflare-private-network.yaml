@@ -1,0 +1,78 @@
+---
+# This creates a private network tunnel for calypso to communicate with the cluster
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-private-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    tunnel: 6ff4dfd7-2b77-4a4f-84d9-3241bea658dc
+    credentials-file: /etc/cloudflared/token/token
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+
+    # Private network configuration
+    warp-routing:
+      enabled: true
+
+    # Route all pod network traffic through tunnel
+    ingress:
+      - hostname: calypso.local
+        service: tcp://192.168.2.80:6443
+        originRequest:
+          noTLSVerify: true
+      - hostname: "*.cluster.local"
+        service: tcp://10.43.0.10:53
+        originRequest:
+          noTLSVerify: true
+      - service: http_status:404
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudflared-private
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: cloudflared-private
+  template:
+    metadata:
+      labels:
+        app: cloudflared-private
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: calypso
+      tolerations:
+        - key: workload-type
+          operator: Equal
+          value: gpu-compute
+          effect: NoSchedule
+      hostNetwork: true
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config/config.yaml
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-credentials
+                  key: token
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config
+            - name: token
+              mountPath: /etc/cloudflared/token
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-private-config
+        - name: token
+          secret:
+            secretName: cloudflared-credentials

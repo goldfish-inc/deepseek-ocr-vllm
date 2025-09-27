@@ -43,7 +43,10 @@
       "Bash(awk:*)",
       "Bash(git push:*)",
       "Bash(xargs:*)",
-      "Bash(helm:*)"
+      "Bash(helm:*)",
+      "Bash(chmod:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh repo deploy-key add:*)"
     ],
     "deny": [],
     "ask": []

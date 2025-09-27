@@ -31,6 +31,25 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this })
             : undefined;
 
+        // Create SSH secret for private repository access
+        const cfg = new pulumi.Config();
+        const sshPrivateKey = cfg.getSecret("flux.ssh_private_key");
+        const knownHosts = cfg.get("flux.known_hosts");
+
+        const sshSecret = sshPrivateKey && knownHosts
+            ? new k8s.core.v1.Secret(`${name}-ssh`, {
+                metadata: {
+                    name: "flux-system-ssh",
+                    namespace: namespaceName,
+                },
+                type: "Opaque",
+                stringData: {
+                    identity: sshPrivateKey,
+                    known_hosts: knownHosts,
+                },
+            }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
+            : undefined;
+
         const release = new k8s.helm.v3.Release(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
@@ -62,12 +81,15 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
             spec: {
                 interval: `${cluster.gitops.intervalSeconds}s`,
-                url: cluster.gitops.repositoryUrl,
+                url: cluster.gitops.repositoryUrl.replace("https://", "ssh://git@"),
                 ref: {
                     branch: cluster.gitops.branch,
                 },
+                secretRef: sshSecret ? {
+                    name: "flux-system-ssh",
+                } : undefined,
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: release });
+        }, { provider: k8sProvider, parent: this, dependsOn: [release, ...(sshSecret ? [sshSecret] : [])] });
 
         new k8s.apiextensions.CustomResource(`${name}-kustomization`, {
             apiVersion: "kustomize.toolkit.fluxcd.io/v1",
