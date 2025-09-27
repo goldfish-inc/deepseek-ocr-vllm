@@ -130,7 +130,7 @@ export class ImageAutomation extends pulumi.ComponentResource {
 
         // Create alert for new versions
         const versionAlert = new k8s.apiextensions.CustomResource(`${name}-version-alert`, {
-            apiVersion: "notification.toolkit.fluxcd.io/v1",
+            apiVersion: "notification.toolkit.fluxcd.io/v1beta3",
             kind: "Alert",
             metadata: {
                 name: "image-updates",

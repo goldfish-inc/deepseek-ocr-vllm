@@ -33,5 +33,7 @@ config:
   oceanid-cluster:pulumi:
     access_token:
       secure: AAABAGi7xU/8xaeIvqfsYqnoX5ozGHMQt9NaSxY1N0ykr5qjLFdh5Ln4oDDswOh/GIU4R80Hx3QqYOhMajsd5O8JjqEp/+sGj0aulQ==
+  oceanid-cluster:github.token:
+    secure: AAABAGKNlste4LYNFC/4kOla5hDcgSwU8wU1JHoOxFuVaaCImj5E/SnZ5/vQbcJKW3gQY/OvG8cBvBdrmR7qLneCGj448YLPDsoR3YtCmmzLtm8I2jP0mZeuvZoFsVRqW+tQqU2XkJGJww+x5NSkMVcQhJ0lPZyaqfMxoDY=
 environment:
   - default/oceanid-cluster
