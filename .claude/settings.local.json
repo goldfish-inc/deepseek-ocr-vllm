@@ -41,7 +41,9 @@
       "Read(//Users/rt/.ssh/**)",
       "Bash(kubectl:*)",
       "Bash(awk:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(xargs:*)",
+      "Bash(helm:*)"
     ],
     "deny": [],
     "ask": []

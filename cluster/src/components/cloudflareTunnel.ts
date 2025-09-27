@@ -97,6 +97,19 @@ ingress:
                             fsGroup: 65532,
                         },
                         priorityClassName: "system-cluster-critical",
+                        affinity: {
+                            nodeAffinity: {
+                                requiredDuringSchedulingIgnoredDuringExecution: {
+                                    nodeSelectorTerms: [{
+                                        matchExpressions: [{
+                                            key: "workload-type",
+                                            operator: "NotIn",
+                                            values: ["gpu-compute"],
+                                        }],
+                                    }],
+                                },
+                            },
+                        },
                         containers: [
                             {
                                 name: "cloudflared",
