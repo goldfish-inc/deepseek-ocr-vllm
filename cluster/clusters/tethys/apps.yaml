@@ -1,0 +1,12 @@
+# Applications configuration for automated image updates
+# This file contains application deployments with image policy markers
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-image-markers
+  namespace: flux-system
+data:
+  # Application images can be added here with proper policy markers
+  # Example: app-name: "registry/image:tag" # {"$imagepolicy": "flux-system:policy-name"}
+  placeholder: "enabled"
