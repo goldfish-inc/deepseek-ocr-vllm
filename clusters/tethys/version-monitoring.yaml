@@ -91,3 +91,15 @@ metadata:
 spec:
   type: generic
   address: http://notification-controller-webhook.flux-system.svc.cluster.local/
+---
+# GitHub provider for creating issues/PRs (uses token from ESC)
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: github-notifications
+  namespace: flux-system
+spec:
+  type: github
+  address: https://github.com/goldfish-inc/oceanid
+  secretRef:
+    name: github-token  # This secret is created by Pulumi from ESC

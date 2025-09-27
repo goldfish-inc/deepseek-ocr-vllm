@@ -1,0 +1,158 @@
+---
+# Automated image update configuration using GitHub token from ESC
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1h
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: flux@boathou.se
+        name: Flux Bot
+      messageTemplate: |
+        chore: automated image updates for non-breaking changes
+
+        {{range .Changed}}
+        - {{.Registry}}/{{.Repository}}: {{.OldTag}} → {{.NewTag}}
+        {{end}}
+
+        This update was automatically applied based on the configured semver policy.
+        Only non-breaking changes (patch and minor versions) are auto-applied.
+
+        [ci skip]
+
+        🤖 Generated with Flux Image Automation
+        Co-Authored-By: Flux <noreply@fluxcd.io>
+    push:
+      branch: flux-image-updates
+      refspec: refs/heads/flux-image-updates:refs/heads/flux-image-updates
+  update:
+    path: "./clusters/tethys"
+    strategy: Setters
+---
+# Update cert-manager deployment with image marker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-manager-image-update
+  namespace: flux-system
+data:
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: cert-manager
+      namespace: cert-manager
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cert-manager-controller
+            image: quay.io/jetstack/cert-manager-controller:v1.16.2 # {"$imagepolicy": "flux-system:cert-manager"}
+---
+# Update cert-manager webhook with image marker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-manager-webhook-image-update
+  namespace: flux-system
+data:
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: cert-manager-webhook
+      namespace: cert-manager
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cert-manager-webhook
+            image: quay.io/jetstack/cert-manager-webhook:v1.16.2 # {"$imagepolicy": "flux-system:cert-manager-webhook"}
+---
+# Update cert-manager cainjector with image marker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-manager-cainjector-image-update
+  namespace: flux-system
+data:
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: cert-manager-cainjector
+      namespace: cert-manager
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cert-manager-cainjector
+            image: quay.io/jetstack/cert-manager-cainjector:v1.16.2 # {"$imagepolicy": "flux-system:cert-manager-cainjector"}
+---
+# Add policies for cert-manager components
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cert-manager-webhook
+  namespace: flux-system
+spec:
+  image: quay.io/jetstack/cert-manager-webhook
+  interval: 1h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cert-manager-webhook
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cert-manager-webhook
+  policy:
+    semver:
+      range: ">=1.16.0 <1.19.0"  # Allow minor updates within v1.16-v1.18
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cert-manager-cainjector
+  namespace: flux-system
+spec:
+  image: quay.io/jetstack/cert-manager-cainjector
+  interval: 1h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cert-manager-cainjector
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cert-manager-cainjector
+  policy:
+    semver:
+      range: ">=1.16.0 <1.19.0"  # Allow minor updates within v1.16-v1.18
+---
+# Update the main cert-manager policy to allow minor updates
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cert-manager
+  filterTags:
+    pattern: '^v1\.1[6-8]\.\d+$'  # Match v1.16.x, v1.17.x, v1.18.x
+  policy:
+    semver:
+      range: ">=1.16.0 <1.19.0"  # Allow updates up to v1.18.x

@@ -1,0 +1,56 @@
+---
+# This file enables automatic updates for cert-manager
+# Flux will automatically apply patches when new versions are detected
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  annotations:
+    # Enable auto-updates for this namespace
+    fluxcd.io/automated: "true"
+---
+# Patch to update cert-manager images automatically
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+  annotations:
+    fluxcd.io/automated: "true"
+    fluxcd.io/tag.cert-manager-controller: semver:~1.18  # Auto-update patch versions
+spec:
+  template:
+    spec:
+      containers:
+      - name: cert-manager-controller
+        image: quay.io/jetstack/cert-manager-controller:v1.18.2  # {"$imagepolicy": "flux-system:cert-manager"}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager-webhook
+  namespace: cert-manager
+  annotations:
+    fluxcd.io/automated: "true"
+    fluxcd.io/tag.cert-manager-webhook: semver:~1.18
+spec:
+  template:
+    spec:
+      containers:
+      - name: cert-manager-webhook
+        image: quay.io/jetstack/cert-manager-webhook:v1.18.2  # {"$imagepolicy": "flux-system:cert-manager-webhook"}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cert-manager-cainjector
+  namespace: cert-manager
+  annotations:
+    fluxcd.io/automated: "true"
+    fluxcd.io/tag.cert-manager-cainjector: semver:~1.18
+spec:
+  template:
+    spec:
+      containers:
+      - name: cert-manager-cainjector
+        image: quay.io/jetstack/cert-manager-cainjector:v1.18.2  # {"$imagepolicy": "flux-system:cert-manager-cainjector"}

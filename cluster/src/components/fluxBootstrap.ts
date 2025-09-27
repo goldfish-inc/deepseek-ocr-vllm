@@ -50,6 +50,21 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
+        // Create GitHub token secret for automated PRs (from ESC)
+        const githubToken = cfg.getSecret("github.token");
+        const githubTokenSecret = githubToken
+            ? new k8s.core.v1.Secret(`${name}-github-token`, {
+                metadata: {
+                    name: "github-token",
+                    namespace: namespaceName,
+                },
+                type: "Opaque",
+                stringData: {
+                    token: githubToken,
+                },
+            }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
+            : undefined;
+
         const release = new k8s.helm.v3.Release(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,

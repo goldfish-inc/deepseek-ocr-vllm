@@ -1,0 +1,85 @@
+---
+# Kustomization patch to automatically update cert-manager
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cert-manager-auto-update
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: "./infrastructure"
+  prune: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  targetNamespace: cert-manager
+  patches:
+    - target:
+        kind: Deployment
+        name: cert-manager
+        namespace: cert-manager
+      patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: quay.io/jetstack/cert-manager-controller:v1.18.2
+    - target:
+        kind: Deployment
+        name: cert-manager-webhook
+        namespace: cert-manager
+      patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: quay.io/jetstack/cert-manager-webhook:v1.18.2
+    - target:
+        kind: Deployment
+        name: cert-manager-cainjector
+        namespace: cert-manager
+      patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: quay.io/jetstack/cert-manager-cainjector:v1.18.2
+---
+# Alert for successful updates
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: image-update-success
+  namespace: flux-system
+spec:
+  eventSeverity: info
+  eventSources:
+  - kind: Kustomization
+    name: cert-manager-auto-update
+  providerRef:
+    name: version-logger
+  summary: "Image update applied successfully"
+---
+# Policy to auto-approve non-breaking updates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auto-update-policy
+  namespace: flux-system
+data:
+  policy: |
+    # Auto-Update Policy
+
+    ## Automatically Approved Updates:
+    - Patch versions (x.x.PATCH)
+    - Minor versions within same major (x.MINOR.x)
+    - Security patches
+
+    ## Requires Manual Approval:
+    - Major version changes (MAJOR.x.x)
+    - Beta/RC versions
+    - Breaking changes noted in changelog
+
+    ## Components with Auto-Update Enabled:
+    - cert-manager: v1.16.x → v1.18.x (minor updates)
+    - cloudflared: Using 'latest' tag (all updates)
+    - PKO: Patch versions only (v2.2.x)
+
+    ## Update Schedule:
+    - Check: Every hour
+    - Apply: Immediate for patches, staged for minor
+    - Rollback: Automatic on failure
