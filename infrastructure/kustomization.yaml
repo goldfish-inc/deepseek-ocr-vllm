@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - nvidia-device-plugin.yaml
   - storage-classes.yaml
+# PKO is managed by Pulumi components, not Flux

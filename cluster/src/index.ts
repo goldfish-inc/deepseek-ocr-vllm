@@ -4,6 +4,7 @@ import { clusterConfig } from "./config";
 import { cloudflareProvider, k8sProvider, kubeconfigPath } from "./providers";
 import { CloudflareTunnel } from "./components/cloudflareTunnel";
 import { FluxBootstrap } from "./components/fluxBootstrap";
+import { PulumiOperator } from "./components/pulumiOperator";
 
 const tunnel = new CloudflareTunnel("cloudflare", {
     cluster: clusterConfig,
@@ -12,6 +13,11 @@ const tunnel = new CloudflareTunnel("cloudflare", {
 });
 
 const flux = new FluxBootstrap("gitops", {
+    cluster: clusterConfig,
+    k8sProvider,
+});
+
+const pko = new PulumiOperator("pko", {
     cluster: clusterConfig,
     k8sProvider,
 });
@@ -25,4 +31,6 @@ export const outputs = {
     fluxNamespace: flux.namespace,
     gitRepository: clusterConfig.gitops.repositoryUrl,
     gitPath: clusterConfig.gitops.path,
+    pkoNamespace: pko.namespace,
+    pkoSecretName: pko.secretName,
 };

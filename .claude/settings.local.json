@@ -46,7 +46,9 @@
       "Bash(helm:*)",
       "Bash(chmod:*)",
       "Bash(gh repo view:*)",
-      "Bash(gh repo deploy-key add:*)"
+      "Bash(gh repo deploy-key add:*)",
+      "Bash(git reset:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
