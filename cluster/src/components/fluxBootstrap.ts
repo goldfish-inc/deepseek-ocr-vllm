@@ -45,6 +45,10 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 components: [
                     "source-controller",
                     "kustomize-controller",
+                    "helm-controller",
+                    "notification-controller",
+                    "image-automation-controller",
+                    "image-reflector-controller",
                 ],
             },
         }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined });

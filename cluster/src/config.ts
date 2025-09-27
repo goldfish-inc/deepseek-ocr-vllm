@@ -88,7 +88,7 @@ export const clusterConfig: ClusterConfig = {
             "https://kubernetes.default.svc.cluster.local:443",
         tunnelTarget:
             cfg.get("cloudflare_tunnel_target") ?? cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
-        image: cfg.get("cloudflared_image") ?? cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:2024.9.1",
+        image: cfg.get("cloudflared_image") ?? cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:latest",
         tunnelResources,
     },
     gitops: {

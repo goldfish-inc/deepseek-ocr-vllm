@@ -40,7 +40,8 @@
       "Bash(kubectl --kubeconfig /tmp/k3s-tunnel-kubeconfig.yaml get nodes)",
       "Read(//Users/rt/.ssh/**)",
       "Bash(kubectl:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
