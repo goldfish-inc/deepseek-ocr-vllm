@@ -1,0 +1,93 @@
+---
+# Monitor Cloudflared for new versions
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cloudflared
+  namespace: flux-system
+spec:
+  image: cloudflare/cloudflared
+  interval: 1h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cloudflared
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cloudflared
+  policy:
+    semver:
+      range: ">=2024.0.0"
+---
+# Monitor Cert-Manager for new versions
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  image: quay.io/jetstack/cert-manager-controller
+  interval: 1h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cert-manager
+  policy:
+    semver:
+      range: ">=1.0.0 <2.0.0"
+---
+# Monitor PKO for new versions
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: pulumi-operator
+  namespace: flux-system
+spec:
+  image: pulumi/pulumi-kubernetes-operator
+  interval: 1h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: pulumi-operator
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: pulumi-operator
+  policy:
+    semver:
+      range: ">=2.0.0 <3.0.0"
+---
+# Alert on new versions
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: version-updates
+  namespace: flux-system
+spec:
+  eventSeverity: info
+  eventSources:
+  - kind: ImageRepository
+    name: '*'
+  - kind: ImagePolicy
+    name: '*'
+  providerRef:
+    name: version-logger
+  summary: "New container versions available"
+---
+# Log provider for alerts (simple logging, no external deps)
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: version-logger
+  namespace: flux-system
+spec:
+  type: generic
+  address: http://notification-controller-webhook.flux-system.svc.cluster.local/

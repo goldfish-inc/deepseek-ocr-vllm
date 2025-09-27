@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ../base/pulumi-system
   - ../base/stacks
+  - version-monitoring.yaml
 
 patches:
   - target:
