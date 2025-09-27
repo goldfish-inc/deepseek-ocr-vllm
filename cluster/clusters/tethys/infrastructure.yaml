@@ -9,7 +9,7 @@ metadata:
   name: image-automation-markers
   namespace: flux-system
 data:
-  cert-manager-controller: "quay.io/jetstack/cert-manager-controller:v1.16.2" # {"$imagepolicy": "flux-system:cert-manager"}
-  cert-manager-webhook: "quay.io/jetstack/cert-manager-webhook:v1.16.2" # {"$imagepolicy": "flux-system:cert-manager-webhook"}
-  cert-manager-cainjector: "quay.io/jetstack/cert-manager-cainjector:v1.16.2" # {"$imagepolicy": "flux-system:cert-manager-cainjector"}
+  cert-manager-controller: "quay.io/jetstack/cert-manager-controller:v1.18.2" # {"$imagepolicy": "flux-system:cert-manager"}
+  cert-manager-webhook: "quay.io/jetstack/cert-manager-webhook:v1.18.2" # {"$imagepolicy": "flux-system:cert-manager-webhook"}
+  cert-manager-cainjector: "quay.io/jetstack/cert-manager-cainjector:v1.18.2" # {"$imagepolicy": "flux-system:cert-manager-cainjector"}
   cloudflared: "cloudflare/cloudflared:2025.9.1" # {"$imagepolicy": "flux-system:cloudflared"}
