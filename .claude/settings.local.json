@@ -49,7 +49,17 @@
       "Bash(gh repo deploy-key add:*)",
       "Bash(git reset:*)",
       "Bash(git rm:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(export KUBECONFIG=~/.kube/config)",
+      "Bash(lsof:*)",
+      "Read(//Users/rt/.kube/**)",
+      "Bash(export KUBECONFIG=~/.kube/k3s-tunnel.yaml)",
+      "Bash(pkill:*)",
+      "Read(//Users/rt/**)",
+      "Bash(export KUBECONFIG=~/.kube/k3s-config.yaml)",
+      "WebSearch",
+      "Bash(flux reconcile helmrelease:*)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml helm ls -n flux-system)"
     ],
     "deny": [],
     "ask": []

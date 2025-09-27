@@ -51,7 +51,7 @@ export class PulumiOperator extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
-        // Create HelmRepository
+        // Create OCI HelmRepository for PKO
         const helmRepo = new k8s.apiextensions.CustomResource(`${name}-helm-repo`, {
             apiVersion: "source.toolkit.fluxcd.io/v1beta2",
             kind: "HelmRepository",
@@ -61,7 +61,8 @@ export class PulumiOperator extends pulumi.ComponentResource {
             },
             spec: {
                 interval: "10m",
-                url: "https://pulumi.github.io/pulumi-kubernetes-operator",
+                type: "oci",
+                url: "oci://ghcr.io/pulumi/helm-charts",
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
@@ -78,7 +79,7 @@ export class PulumiOperator extends pulumi.ComponentResource {
                 chart: {
                     spec: {
                         chart: "pulumi-kubernetes-operator",
-                        version: "0.6.0",
+                        version: "2.2.0",
                         sourceRef: {
                             kind: "HelmRepository",
                             name: "pulumi",
@@ -87,31 +88,45 @@ export class PulumiOperator extends pulumi.ComponentResource {
                     },
                 },
                 values: {
-                    deploymentMode: "cluster",
-                    securityContext: {
-                        fsGroup: 1000,
-                    },
-                    resources: {
-                        requests: {
-                            cpu: "100m",
-                            memory: "128Mi",
+                    // PKO v2 requires cluster-wide installation
+                    installCRDs: true,
+                    controllerManager: {
+                        replicas: 1,
+                        resources: {
+                            requests: {
+                                cpu: "100m",
+                                memory: "128Mi",
+                            },
+                            limits: {
+                                cpu: "500m",
+                                memory: "512Mi",
+                            },
                         },
-                        limits: {
-                            cpu: "500m",
-                            memory: "512Mi",
-                        },
-                    },
-                    // Avoid scheduling on GPU nodes
-                    affinity: {
-                        nodeAffinity: {
-                            requiredDuringSchedulingIgnoredDuringExecution: {
-                                nodeSelectorTerms: [{
-                                    matchExpressions: [{
-                                        key: "workload-type",
-                                        operator: "NotIn",
-                                        values: ["gpu-compute"],
+                        // Avoid scheduling on GPU nodes
+                        affinity: {
+                            nodeAffinity: {
+                                requiredDuringSchedulingIgnoredDuringExecution: {
+                                    nodeSelectorTerms: [{
+                                        matchExpressions: [{
+                                            key: "workload-type",
+                                            operator: "NotIn",
+                                            values: ["gpu-compute"],
+                                        }],
                                     }],
-                                }],
+                                },
+                            },
+                        },
+                    },
+                    // For PKO v2 workspace pods
+                    workspaceTemplate: {
+                        resources: {
+                            requests: {
+                                cpu: "50m",
+                                memory: "64Mi",
+                            },
+                            limits: {
+                                cpu: "1000m",
+                                memory: "1Gi",
                             },
                         },
                     },

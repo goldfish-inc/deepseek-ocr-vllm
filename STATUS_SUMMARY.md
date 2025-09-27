@@ -1,108 +1,131 @@
-# Oceanid Cluster Status Summary
-**Date**: September 26, 2025
-**Session Duration**: ~4 hours
+# Oceanid Infrastructure Status Summary
 
-## ✅ Completed Tasks
+**Last Updated:** September 26, 2025, 10:40 PM PST
+**Status:** Partially Operational with PKO Image Issues
 
-### 1. **Cluster Cleanup & Rebuild**
-- Destroyed old Pulumi stack with conflicting resources
-- Cleaned up namespaces and CRDs from k3s cluster
-- Rebuilt infrastructure with new component-based architecture
+## Cluster Overview
 
-### 2. **SSH Access Fixed**
-- Consolidated to single SSH key (Hostinger-managed)
-- Created local key pair: `~/.ssh/hostinger_vps`
-- SSH shortcut configured: `ssh tethys` now works
-- Clean access to both VPS servers (tethys and styx)
+### Nodes (All Ready)
+- **srv712429** (tethys): Control plane, 157.173.210.123
+- **srv712695** (styx): Worker, 191.101.1.3
+- **calypso**: GPU workstation (RTX 4090), 192.168.2.80
+  - Tainted: `workload-type=gpu-compute:NoSchedule`
 
-### 3. **Cloudflare Tunnel Operational**
-- Fixed memory limits: 768Mi (was causing OOM kills at 256Mi)
-- Added `noTLSVerify: true` for self-signed certificates
-- Changed service URL from http:// to https://
-- Tunnel pods running successfully with 4 connections established
-- Ready for web application traffic (Label Studio, etc.)
+### Component Status
 
-### 4. **kubectl Access Working**
-- SSH tunnel method: `ssh -L 6443:localhost:6443 tethys`
-- Kubeconfig saved: `~/.kube/k3s-hostinger.yaml`
-- All 3 nodes visible and ready:
-  - srv712429 (tethys) - control-plane
-  - srv712695 (styx)
-  - calypso
+#### ✅ Fully Operational
+- **K3s Cluster**: v1.33.4+k3s1 on all nodes
+- **Flux CD**: All 6 controllers running
+  - Source controller syncing from GitHub SSH
+  - Kustomize controller reconciling manifests
+  - Helm controller managing releases
+- **Cloudflare Tunnel**: 2 replicas running latest image
+- **Cert-Manager**: Operational
+- **SSH Access**: Working via tunnel on port 16443
 
-## ⚠️ Pending Tasks
+#### ❌ Issues
+- **Pulumi Kubernetes Operator (PKO)**: ImagePullBackOff
+  - Chart v0.6.0 references non-existent image v0.4.0
+  - Pod stuck in backoff loop on srv712429
 
-### Issue #38: Flux/PKO Validation
-- Flux namespace exists but CRDs not installed
-- Need to run `pulumi up` to complete Flux deployment
-- GitOps sync not yet validated
+## Recent Fixes & Improvements
 
-### Issue #39: Cloudflare Tunnel Verification
-- Tunnel is running but k3s API access through tunnel has issues
-- Recommendation: Use SSH tunnel for kubectl, Cloudflare for apps
+### 1. SSH Tunnel Configuration
+**Problem:** Multiple conflicting kubeconfig files with different ports
+**Solution:**
+- Consolidated to single `~/.kube/k3s-config.yaml`
+- Standardized on port 16443 locally → 6443 on tethys
+- Documented in README with troubleshooting steps
 
-## 🔧 Current Configuration
+### 2. Automatic Image Updates
+**Problem:** Cloudflared using outdated version (2024.9.1)
+**Solution:**
+- Changed from hardcoded version to `latest` tag
+- Configured for automatic updates
+- Next: Set up Flux image automation
 
-### Resource Limits (Cloudflared)
+### 3. Field Manager Conflicts
+**Problem:** Multiple Pulumi field managers conflicting
+**Solution:**
+- Deleted resources with conflicts
+- Refreshed Pulumi state
+- Redeployed cleanly
+
+### 4. Secret Management Enforcement
+**Achievement:** All secrets now managed through Pulumi ESC
+- No hardcoded tokens or credentials
+- GitHub push protection active
+- Documented in SECRET_MANAGEMENT.md
+
+## Current Issues Analysis
+
+### PKO Image Version Mismatch
 ```yaml
-requests:
-  cpu: 250m
-  memory: 384Mi
-limits:
-  cpu: 750m
-  memory: 768Mi
+HelmRelease: version 0.6.0
+Deployment: image v0.4.0 (doesn't exist)
+```
+**Root Cause:** Helm chart misconfiguration
+**Fix Needed:** Update image tag in HelmRelease values
+
+## Access Instructions
+
+```bash
+# SSH tunnel setup (required for kubectl)
+ssh -L 16443:localhost:6443 -N tethys &
+
+# Use cluster
+export KUBECONFIG=~/.kube/k3s-config.yaml
+kubectl get nodes
+
+# Troubleshooting connection issues
+lsof -i :16443           # Check for conflicts
+pkill -f "ssh.*16443"     # Kill old tunnels
 ```
 
-### Access Methods
-- **SSH**: `ssh tethys` or `ssh styx`
-- **kubectl**: Via SSH tunnel on localhost:6443
-- **Web Apps**: Will use k3s.boathou.se (Cloudflare tunnel)
+## GitHub Issues Status
 
-## 🚀 Next Steps
+| Issue | Title | Status | Notes |
+|-------|-------|--------|-------|
+| #35 | Validate K3s cluster | ✅ Closed | All nodes ready |
+| #36 | Deploy Cloudflare tunnel | ✅ Closed | Running with latest image |
+| #37 | Pod Security Standards | ✅ Closed | Enforced on namespaces |
+| #38 | Flux CD deployment | ✅ Closed | All controllers operational |
+| #39 | PKO deployment | 🔄 In Progress | Image pull issues |
 
-1. **Complete Flux deployment**:
-   ```bash
-   pulumi up --yes
-   ```
+## Next Actions
 
-2. **Deploy Label Studio** through Cloudflare tunnel:
-   - Configure ingress for labelstudio.boathou.se
-   - Update tunnel config to route to Label Studio service
+1. **Fix PKO deployment**
+   - Update HelmRelease with correct image version
+   - Or switch to using latest tag
 
-3. **Set up monitoring** for pod health and resource usage
+2. **Set up Flux image automation**
+   - Configure ImageRepository for cloudflared
+   - Create ImageUpdateAutomation resource
 
-4. **Document** the final architecture and access patterns
+3. **Complete documentation**
+   - Update architecture diagram
+   - Document GitOps workflow
 
-## 📝 Key Decisions Made
+## Key Architecture Decisions
 
-1. **Use SSH tunnel for kubectl** instead of Cloudflare tunnel
-   - Simpler, more reliable for management access
-   - Cloudflare tunnel complexity not worth it for API access
+1. **SSH tunnel for management**: More reliable than Cloudflare for kubectl
+2. **Cloudflare for applications**: DDoS protection and SSL for public services
+3. **Pulumi ESC for secrets**: No exceptions, all secrets centralized
+4. **GPU node isolation**: Tainted to prevent non-GPU workloads
 
-2. **Keep Cloudflare tunnel for web applications**
-   - DDoS protection valuable for public apps
-   - Automatic SSL certificates
-   - No port exposure on VPS
+## Cluster Resources
 
-3. **Single SSH key management**
-   - Using Hostinger-managed key for recovery capability
-   - Stored in 1Password for backup
-
-## ⚡ Known Issues
-
-1. **DNS resolution problems** in some pods (CoreDNS connectivity)
-2. **Cloudflare tunnel TCP mode** not working for k3s API
-3. **Flux CRDs** need to be installed
-
-## 📊 Cluster Health
-- All nodes: Ready
-- Cloudflared: 2/2 pods running
-- Networking: Functional with minor DNS issues
-- Storage: Local-path provisioner ready
-- Security: Network policies in place
+```
+Namespaces with workloads:
+- cert-manager     (cert infrastructure)
+- cloudflared      (tunnel pods)
+- flux-system      (GitOps controllers)
+- kube-system      (core k8s)
+- pulumi-system    (PKO - currently broken)
+```
 
 ---
 
-**Commit Hash**: 5411c90
-**Pulumi Stack**: ryan-taylor/oceanid-cluster/prod
-**Hostinger VPS IPs**: 157.173.210.123 (tethys), 191.101.1.3 (styx)
+**Repository:** github.com/ry4n-s/oceanid
+**Pulumi Stack:** ryan-taylor/oceanid-cluster/prod
+**Domain:** boathou.se

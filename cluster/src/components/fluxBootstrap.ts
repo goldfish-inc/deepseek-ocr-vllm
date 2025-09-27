@@ -16,7 +16,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
     constructor(name: string, args: FluxBootstrapArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:gitops:FluxBootstrap", name, {}, opts);
 
-        const { cluster, k8sProvider, createNamespace = true, chartVersion = "2.12.0" } = args;
+        const { cluster, k8sProvider, createNamespace = true, chartVersion = "2.16.4" } = args;
         const namespaceName = "flux-system";
 
         const namespace = createNamespace

@@ -90,6 +90,48 @@ The `.github/workflows/infrastructure.yml` pipeline performs the following:
 
 Set the repository secret `PULUMI_CONFIG_PASSPHRASE` and ensure the Pulumi project is configured to trust the GitHub Actions OIDC provider before enabling automatic deploys.
 
+## Cluster Access
+
+### SSH Tunnel Setup
+
+To access the K3s cluster API, you need to establish an SSH tunnel to the control plane node (tethys):
+
+```bash
+# Set up SSH tunnel (port 16443 locally → 6443 on tethys)
+ssh -L 16443:localhost:6443 -N tethys &
+
+# Use the cluster with the pre-configured kubeconfig
+export KUBECONFIG=~/.kube/k3s-config.yaml
+kubectl get nodes
+```
+
+**Important Notes:**
+- The kubeconfig expects the API server at `https://localhost:16443`
+- The SSH tunnel forwards local port 16443 to the K3s API on tethys:6443
+- Kill any conflicting processes on port 16443 before establishing the tunnel
+- The tunnel must remain active for kubectl commands to work
+
+### Troubleshooting Connection Issues
+
+If you encounter "connection reset" or "connection refused" errors:
+
+1. Check for conflicting processes:
+   ```bash
+   lsof -i :16443
+   pkill -f "ssh.*16443"  # Kill existing tunnels
+   ```
+
+2. Re-establish the tunnel:
+   ```bash
+   ssh -L 16443:localhost:6443 -N tethys &
+   ```
+
+3. Verify the tunnel is working:
+   ```bash
+   export KUBECONFIG=~/.kube/k3s-config.yaml
+   kubectl get nodes
+   ```
+
 ## Operational Tips
 
 - `pnpm --filter @oceanid/cluster build` is the authoritative type-check for changes to the Pulumi program.
