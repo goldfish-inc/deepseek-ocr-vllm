@@ -48,7 +48,8 @@
       "Bash(gh repo view:*)",
       "Bash(gh repo deploy-key add:*)",
       "Bash(git reset:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

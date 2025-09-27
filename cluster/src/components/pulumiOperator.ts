@@ -26,10 +26,17 @@ export class PulumiOperator extends pulumi.ComponentResource {
 
         // Get Pulumi access token from config (managed by ESC)
         const cfg = new pulumi.Config();
-        const pulumiToken = cfg.getSecret("pulumi.access_token");
+        const pulumiConfig = cfg.getObject("pulumi") as any;
+
+        console.log("PKO: Checking for Pulumi token in config...");
+        console.log("PKO: pulumiConfig exists?", !!pulumiConfig);
+
+        const pulumiToken = pulumiConfig?.access_token ?
+            pulumi.secret(pulumiConfig.access_token) :
+            cfg.requireSecret("pulumi_access_token");
 
         // Create secret for PKO
-        const secret = pulumiToken ? new k8s.core.v1.Secret(`${name}-api-secret`, {
+        const secret = new k8s.core.v1.Secret(`${name}-api-secret`, {
             metadata: {
                 name: "pulumi-api-secret",
                 namespace: namespaceName,
@@ -42,7 +49,7 @@ export class PulumiOperator extends pulumi.ComponentResource {
             stringData: {
                 accessToken: pulumiToken,
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [namespace] }) : undefined;
+        }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
         // Create HelmRepository
         const helmRepo = new k8s.apiextensions.CustomResource(`${name}-helm-repo`, {
@@ -113,7 +120,7 @@ export class PulumiOperator extends pulumi.ComponentResource {
         }, { provider: k8sProvider, parent: this, dependsOn: [helmRepo] });
 
         this.namespace = pulumi.output(namespaceName);
-        this.secretName = secret ? secret.metadata.name : pulumi.output("pulumi-api-secret");
+        this.secretName = secret.metadata.name;
 
         this.registerOutputs({
             namespace: this.namespace,
