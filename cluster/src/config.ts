@@ -1,5 +1,20 @@
 import { Config, Output, getStack } from "@pulumi/pulumi";
 
+export interface ContainerResourceValues extends Record<string, string> {
+    cpu: string;
+    memory: string;
+}
+
+export interface ContainerResourceRequirements {
+    requests: ContainerResourceValues;
+    limits: ContainerResourceValues;
+}
+
+type ContainerResourceOverrides = Partial<{
+    requests: Partial<ContainerResourceValues>;
+    limits: Partial<ContainerResourceValues>;
+}>;
+
 export interface CloudflareConfig {
     accountId: string;
     zoneId: string;
@@ -10,6 +25,7 @@ export interface CloudflareConfig {
     tunnelServiceUrl: string;
     tunnelTarget: string;
     image: string;
+    tunnelResources: ContainerResourceRequirements;
 }
 
 export interface GitOpsConfig {
@@ -29,13 +45,30 @@ export interface ClusterConfig {
 }
 
 const cfg = new Config();
-
 const stack = getStack();
 
 const kubeconfigPath = cfg.get("kubeconfigPath") ?? process.env.KUBECONFIG ?? "./kubeconfig.yaml";
 const clusterName = cfg.get("clusterName") ?? `oceanid-${stack}`;
 
 const tunnelId = cfg.get("cloudflare_tunnel_id") ?? cfg.require("cloudflareTunnelId");
+
+const defaultTunnelResources: ContainerResourceRequirements = {
+    requests: {
+        cpu: "200m",
+        memory: "256Mi",
+    },
+    limits: {
+        cpu: "500m",
+        memory: "512Mi",
+    },
+};
+
+const tunnelResourceOverrides =
+    cfg.getObject<ContainerResourceOverrides>("cloudflareTunnelResources") ??
+    cfg.getObject<ContainerResourceOverrides>("cloudflare_tunnel_resources") ??
+    null;
+
+const tunnelResources = mergeResourceRequirements(defaultTunnelResources, tunnelResourceOverrides);
 
 export const clusterConfig: ClusterConfig = {
     name: clusterName,
@@ -47,10 +80,16 @@ export const clusterConfig: ClusterConfig = {
         apiToken: cfg.getSecret("cloudflare_api_token") ?? cfg.requireSecret("cloudflareApiToken"),
         tunnelId,
         tunnelToken: cfg.getSecret("cloudflare_tunnel_token") ?? cfg.requireSecret("cloudflareTunnelToken"),
-        tunnelHostname: cfg.get("cloudflare_tunnel_hostname") ?? cfg.get("cloudflareTunnelHostname") ?? "k3s.boathou.se",
-        tunnelServiceUrl: cfg.get("cloudflare_tunnel_service_url") ?? cfg.get("cloudflareTunnelServiceUrl") ?? "http://kubernetes.default.svc.cluster.local:443",
-        tunnelTarget: cfg.get("cloudflare_tunnel_target") ?? cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
+        tunnelHostname:
+            cfg.get("cloudflare_tunnel_hostname") ?? cfg.get("cloudflareTunnelHostname") ?? "k3s.boathou.se",
+        tunnelServiceUrl:
+            cfg.get("cloudflare_tunnel_service_url") ??
+            cfg.get("cloudflareTunnelServiceUrl") ??
+            "https://kubernetes.default.svc.cluster.local:443",
+        tunnelTarget:
+            cfg.get("cloudflare_tunnel_target") ?? cfg.get("cloudflareTunnelTarget") ?? `${tunnelId}.cfargotunnel.com`,
         image: cfg.get("cloudflared_image") ?? cfg.get("cloudflaredImage") ?? "cloudflare/cloudflared:2024.9.1",
+        tunnelResources,
     },
     gitops: {
         repositoryUrl: cfg.get("gitRepositoryUrl") ?? "https://github.com/goldfish-inc/oceanid",
@@ -60,3 +99,23 @@ export const clusterConfig: ClusterConfig = {
         reconciliationSeconds: cfg.getNumber("gitReconciliationSeconds") ?? 600,
     },
 };
+
+function mergeResourceRequirements(
+    defaults: ContainerResourceRequirements,
+    overrides?: ContainerResourceOverrides | null
+): ContainerResourceRequirements {
+    if (!overrides) {
+        return defaults;
+    }
+
+    return {
+        requests: {
+            cpu: overrides.requests?.cpu ?? defaults.requests.cpu,
+            memory: overrides.requests?.memory ?? defaults.requests.memory,
+        },
+        limits: {
+            cpu: overrides.limits?.cpu ?? defaults.limits.cpu,
+            memory: overrides.limits?.memory ?? defaults.limits.memory,
+        },
+    };
+}

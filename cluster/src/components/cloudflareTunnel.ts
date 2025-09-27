@@ -62,6 +62,8 @@ metrics: 0.0.0.0:${cluster.metricsPort}
 ingress:
   - hostname: ${cluster.cloudflare.tunnelHostname}
     service: ${cluster.cloudflare.tunnelServiceUrl}
+    originRequest:
+      noTLSVerify: true
   - service: http_status:404
 ` as pulumi.Output<string>,
             },
@@ -133,16 +135,7 @@ ingress:
                                     initialDelaySeconds: 15,
                                     periodSeconds: 20,
                                 },
-                                resources: {
-                                    requests: {
-                                        cpu: "100m",
-                                        memory: "128Mi",
-                                    },
-                                    limits: {
-                                        cpu: "250m",
-                                        memory: "256Mi",
-                                    },
-                                },
+                                resources: cluster.cloudflare.tunnelResources,
                                 securityContext: {
                                     runAsNonRoot: true,
                                     runAsUser: 65532,
@@ -182,7 +175,7 @@ ingress:
                     },
                 },
             },
-        }, { provider: k8sProvider, parent: this });
+        }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
         const service = new k8s.core.v1.Service(`${name}-svc`, {
             metadata: {

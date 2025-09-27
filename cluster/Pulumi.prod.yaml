@@ -1,9 +1,11 @@
 config:
-  pulumi:disable-default-providers:
-    - "*"
-    # All other configuration now comes from ESC (Pulumi Environments, Secrets, and Configuration)
-    # SSH keys, IPs, tokens, etc. are managed in ESC for secure rotation
   oceanid-cluster:cloudflare_zone_id: a81f75a1931dcac429c50f2ee5252955
+  oceanid-cluster:cloudflareTunnelResources:
+    requests:
+      memory: 384Mi
+      cpu: 250m
+    limits:
+      memory: 768Mi
+      cpu: 750m
 environment:
-  imports:
-    - default/oceanid-cluster
+  - default/oceanid-cluster
