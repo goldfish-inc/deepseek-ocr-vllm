@@ -39,7 +39,8 @@
       "Bash(kubectl --server=https://localhost:16443 --insecure-skip-tls-verify get nodes)",
       "Bash(kubectl --kubeconfig /tmp/k3s-tunnel-kubeconfig.yaml get nodes)",
       "Read(//Users/rt/.ssh/**)",
-      "Bash(kubectl:*)"
+      "Bash(kubectl:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []
