@@ -35,6 +35,12 @@ All sensitive values are expected to come from Pulumi ESC via `Pulumi.prod.yaml`
 | `cloudflareTunnelId` | Identifier of the cloudflared tunnel. |
 | `cloudflareTunnelToken` | Service token used by the cloudflared deployment. |
 | `cloudflareZoneId` | Cloudflare zone where records are created. |
+| `cloudflareNodeTunnelId` | Dedicated tunnel ID for node-level connectivity (Calypso, etc.). |
+| `cloudflareNodeTunnelToken` | Service token / credentials JSON for the node tunnel. |
+| `cloudflareNodeTunnelHostname` | Base domain for node tunnel routes (e.g. `boathou.se`). |
+| `cloudflareNodeTunnelTarget` | (Optional) override for the node tunnel CNAME target; defaults to `<tunnelId>.cfargotunnel.com`. |
+| `cloudflareNodeTunnelMetricsPort` | (Optional) metrics port for the node tunnel DaemonSet; defaults to `2200`. |
+| `cloudflareNodeTunnelResources` | (Optional) JSON overrides for node tunnel container resources. |
 | `tunnelHostname` | FQDN routed through the tunnel (e.g. `tethys.boathou.se`). |
 | `tunnelServiceUrl` | Internal endpoint reached behind the tunnel (e.g. `https://10.0.0.10:6443`). |
 | `cloudflareTunnelResources` | (Optional) JSON blob overriding tunnel container requests/limits; defaults to 200m/256Mi requests and 500m/512Mi limits. |
@@ -78,6 +84,46 @@ pulumi config set --path 'oceanid-cluster:cloudflareTunnelResources.limits.memor
 │   └── package.json
 ├── scripts/                       # Operational scripts (bootstrap, validation, etc.)
 └── pnpm-workspace.yaml
+```
+
+## Minimal Architecture (Recommended)
+
+- Kubernetes only on the primary VPS.
+- Label Studio runs in K8s and is exposed at `https://label.boathou.se` via the cluster tunnel.
+- Calypso (GPU workstation) runs a host-level cloudflared and Triton Inference Server, exposed at `https://gpu.boathou.se`.
+- An in-cluster adapter (`ls-triton-adapter`) bridges Label Studio’s ML backend API to Triton HTTP v2.
+- All secrets live in Pulumi ESC; infra is managed by Pulumi.
+
+Quick deploy (skip SSH-heavy steps while stabilizing):
+
+```bash
+make deploy-simple
+```
+
+Validate:
+
+```bash
+make smoke
+# Triton health
+curl -sk https://gpu.boathou.se/v2/health/ready
+# Adapter health (port-forward)
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+curl -s http://localhost:9090/healthz
+```
+
+Adapter config
+
+- Set NER labels (optional) via Pulumi config:
+  ```bash
+  pulumi -C cluster config set oceanid-cluster:nerLabels '["O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"]'
+  ```
+
+If kubectl cannot reach the API, start a resilient tunnel:
+
+```bash
+scripts/k3s-ssh-tunnel.sh tethys
+export KUBECONFIG=cluster/kubeconfig.yaml
+kubectl get nodes
 ```
 
 ## CI/CD Overview

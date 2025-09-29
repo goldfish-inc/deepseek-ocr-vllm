@@ -1,148 +1,77 @@
-# Oceanid Infrastructure Current State
-**Date**: September 26, 2025
-**Last Update**: Session completed with full infrastructure rebuild
+# Oceanid Infrastructure — Current State Snapshot
+Date: ${TODAY}
+Stack: ryan-taylor/oceanid-cluster/prod
 
-## ✅ Infrastructure Status: OPERATIONAL
+## Status
+- Access: Cloudflare ZeroTrust protects `label.<base>` via SMEReadiness.
+- Tunnels:
+  - Cluster tunnel: in‑cluster Cloudflared exposes `label.<base>` and optional UIs.
+  - Host tunnel (Calypso): systemd Cloudflared is connected with the correct node tunnel token; serves `gpu.<base>`.
+- NodeTunnels (K8s): Disabled by flag (`enableNodeTunnels=false`) to avoid CrashLoop while focusing on pre‑labels; host connector covers GPU.
+- Label Studio: deployed; ML backend points to the in‑cluster adapter.
+- Adapter: FastAPI in `apps` namespace; defaults to built‑in NER implementation; Sentry ready.
+- Triton: running on Calypso via systemd Docker; image pinned to `ghcr.io/triton-inference-server/server:2.60.0-py3`; model repo `/opt/triton/models`.
+- NER labels: ESC → Pulumi secret → K8s Secret → adapter env (no rebuilds).
 
-### Cluster Access
-- **kubectl via SSH tunnel**: ✅ Working
-  ```bash
-  ssh -L 6443:localhost:6443 tethys
-  export KUBECONFIG=~/.kube/k3s-hostinger.yaml
-  kubectl get nodes
-  ```
-- **Direct SSH**: ✅ Working (`ssh tethys` or `ssh styx`)
-- **Cloudflare Tunnel**: ✅ Running (2/2 pods healthy)
+## Key Endpoints
+- Label Studio: `https://label.<base>` (ZeroTrust)
+- Triton (Calypso): `https://gpu.<base>` (HTTP v2 `/v2/health/ready`)
+- Adapter (cluster): `svc/ls-triton-adapter.apps.svc:9090` (`/healthz`, `/predict`)
+- Optional UIs (if enabled): `https://airflow.<base>`, `https://minio.<base>` (ZeroTrust)
 
-### Node Status
-All 3 nodes online and ready:
-- **tethys** (157.173.210.123) - control-plane
-- **styx** (191.101.1.3) - worker
-- **calypso** - worker
+## Secrets / Config (ESC)
+- Cloudflare: account, api token, zone, cluster tunnel id/token/hostname/target; node tunnel id/token/hostname/target
+- NER labels (JSON, secret): `pulumiConfig.oceanid-cluster:nerLabels`
+- Calypso SSH key: `pulumiConfig.oceanid-cluster:calypso_ssh_key`
+- Optional: `sentry.dsn`, DB creds, MinIO creds, HF token
 
-### Key Components
-| Component | Status | Notes |
-|-----------|--------|-------|
-| K3s Cluster | ✅ Running | v1.29.5+k3s1 |
-| Cloudflare Tunnel | ✅ Running | 768Mi memory, stable |
-| CoreDNS | ⚠️ Running | Minor DNS issues in some pods |
-| Flux CD | ⏳ Pending | CRDs need installation |
-| PKO | ⏳ Pending | Awaiting Flux completion |
+## Deploy Flags
+- `enableNodeProvisioning` (default true) — set false to avoid SSH provisioning during troubleshooting
+- `enableCalypsoHostConnector` (default true) — host cloudflared + Triton
+- `enableNodeTunnels` (default true) — currently false to avoid CrashLoop; host tunnel serves `gpu.<base>`
+- `useExternalAdapter` (default false) — prefer built‑in adapter app for NER decode
+- `tritonImage` — override Triton image (defaults to 2.60.0 py3)
+- `enableAppsStack` (default false) — Postgres/MinIO/Airflow + Access
 
-## 🔑 Security Configuration
-
-### SSH Access
-- **Single SSH Key**: Ed25519 key stored in 1Password
-- **1Password Entry**: "Hostinger VPS SSH (Current)"
-- **ID**: fw4k46jbufjc7id3w3z2bs5egu
-- **Local Path**: `~/.ssh/hostinger_vps`
-
-### Secrets Management
-- All secrets in Pulumi ESC
-- No .env files
-- Runtime access via `op read`
-
-## 🏗️ Architecture Decisions
-
-### Access Pattern
-1. **Management**: SSH tunnel for kubectl (simple, reliable)
-2. **Applications**: Cloudflare tunnel for web apps (DDoS protection, SSL)
-3. **Rationale**: Separation of concerns, optimal for each use case
-
-### Resource Allocation (Cloudflared)
-```yaml
-requests:
-  cpu: 250m
-  memory: 384Mi
-limits:
-  cpu: 750m
-  memory: 768Mi
-```
-
-## 📋 GitHub Issues Status
-
-| Issue | Title | Status | Resolution |
-|-------|-------|--------|------------|
-| #35 | CI/CD Pipeline Validation | ✅ Closed | OPA policies fixed with Rego v1 |
-| #36 | ESC Environment Verification | ✅ Closed | All secrets configured |
-| #37 | Pulumi Preview Validation | ✅ Closed | Domain/Zone ID corrected |
-| #38 | Flux CD Deployment | ⏳ Open | CRDs pending installation |
-| #39 | PKO Deployment | ⏳ Open | Awaiting Flux |
-
-## 🚀 Next Actions
-
-1. **Complete Flux Deployment**
-   ```bash
-   cd cluster
-   pulumi up --yes
-   ```
-
-2. **Deploy Label Studio**
-   - Configure ingress for labelstudio.boathou.se
-   - Route through Cloudflare tunnel
-
-3. **Fix DNS Issues**
-   - Investigate CoreDNS connectivity
-   - May need to restart affected pods
-
-## 🔧 Useful Commands
-
-### Quick Access
+## Validation
 ```bash
-# SSH to nodes
-ssh tethys
-ssh styx
+# Triton
+curl -sk https://gpu.<base>/v2/health/ready
 
-# kubectl via tunnel
-ssh -L 6443:localhost:6443 tethys
-kubectl --kubeconfig ~/.kube/k3s-hostinger.yaml get nodes
-
-# Check cloudflared
-kubectl get pods -n cloudflare-tunnel
-kubectl logs -n cloudflare-tunnel cloudflare-deployment-xxx
+# Adapter
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+curl -s http://localhost:9090/healthz
+curl -s -X POST http://localhost:9090/predict -H 'Content-Type: application/json' \
+  -d '{"model":"bert-base-uncased","task":"ner","text":"MV Iconic…"}'
 ```
 
-### Pulumi Operations
+## What’s Left for SME Go‑Live
+1) Ensure NER labels secret (63‑label list) exists in ESC and adapter loads it
+2) Install BERT ONNX with 63 labels on Calypso; set dims to `[-1, -1, 63]`; restart Triton
+3) Validate pre‑labels flow LS → adapter → Triton (`/predict`)
+4) (Optional) Re‑enable NodeTunnels once stable (`enableNodeTunnels=true`)
+5) (Optional) Implement `docling_granite_python`; restart Triton
+6) (Optional) Enable app stack; configure secrets; wire export to Postgres
+
+## Runbook
 ```bash
-cd cluster
-pulumi stack select prod
-pulumi up --yes
+# Deploy minimal
+make deploy-simple
+# Enable Calypso + Triton
+make deploy-calypso
+# Restart adapter / Triton
+kubectl -n apps rollout restart deploy/ls-triton-adapter
+ssh calypso 'sudo systemctl restart tritonserver'
 ```
 
-## 📝 Configuration Files
+## Pointers
+- Adapter: `cluster/src/components/lsTritonAdapter.ts`
+- Triton service (systemd): `cluster/src/components/hostDockerService.ts`
+- SME readiness (ZeroTrust): `cluster/src/components/smeReadiness.ts`
+- Host cloudflared: `cluster/src/components/hostCloudflared.ts`
+- Label Studio: `cluster/src/components/labelStudio.ts`
+- Cluster tunnel: `cluster/src/components/cloudflareTunnel.ts`
+- NER module (mounted): `adapter/ner/...`
+- Model configs: `triton-models/bert-base-uncased/config.pbtxt`, `triton-models/dockling-granite-python/...`
 
-### Key Files Modified
-- `cluster/src/config.ts` - Resource limits, domain config
-- `cluster/src/components/cloudflareTunnel.ts` - noTLSVerify added
-- `cluster/Pulumi.prod.yaml` - Zone ID, resource overrides
-- `~/.ssh/config` - SSH shortcuts for tethys/styx
-
-### Environment
-- **Pulumi Stack**: ryan-taylor/oceanid-cluster/prod
-- **Domain**: boathou.se
-- **Cloudflare Zone**: a81f75a1931dcac429c50f2ee5252955
-- **Tunnel Hostname**: k3s.boathou.se
-
-## ⚠️ Known Issues
-
-1. **DNS Resolution**: Some pods have intermittent DNS issues
-2. **Flux CRDs**: Not yet installed, blocking GitOps
-3. **TCP Tunnel Mode**: Not working for k3s API (using SSH tunnel instead)
-
-## 📊 Resource Usage
-
-### Cluster Capacity
-- **Total**: 6 vCPUs, 24GB RAM, ~200GB storage
-- **Available**: ~4 vCPUs, ~18GB RAM after system overhead
-- **Cloudflared**: Using 384-768Mi RAM (well within limits)
-
-### Pod Distribution
-- **tethys**: Control plane + system pods
-- **styx**: Cloudflared replicas
-- **calypso**: Available for workloads
-
----
-
-**Last Commit**: 3bb885a - Updated Claude permissions
-**Session Duration**: ~5 hours
-**Major Achievement**: Complete infrastructure rebuild with clean architecture
+See also: `SME_READINESS.md` for a detailed onboarding guide.
