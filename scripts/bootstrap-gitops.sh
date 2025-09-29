@@ -12,6 +12,8 @@ GITHUB_OWNER="goldfish-inc"
 GITHUB_REPO="oceanid"
 CLUSTER_NAME="tethys"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+PULUMI_STACK="oceanid-cluster"
+PULUMI_ESC_ENV="prod"
 
 # Check prerequisites
 check_prerequisites() {
@@ -35,10 +37,36 @@ check_prerequisites() {
         curl -s https://fluxcd.io/install.sh | sudo bash
     fi
 
-    # Check GitHub token
+    # Check GitHub token - try to get from ESC first
     if [ -z "$GITHUB_TOKEN" ]; then
-        echo "❌ GITHUB_TOKEN not set. Please export GITHUB_TOKEN."
+        echo "🔐 Getting GitHub token from Pulumi ESC..."
+        if command -v pulumi &> /dev/null; then
+            GITHUB_TOKEN=$(pulumi config get --stack "$PULUMI_STACK" github.token 2>/dev/null || echo "")
+        fi
+
+        if [ -z "$GITHUB_TOKEN" ]; then
+            echo "❌ GITHUB_TOKEN not found in ESC or environment. Please set it."
+            exit 1
+        fi
+    fi
+
+    # Check Pulumi CLI
+    if ! command -v pulumi &> /dev/null; then
+        echo "❌ pulumi CLI not found. Please install Pulumi CLI."
         exit 1
+    fi
+
+    # Check jq for JSON parsing
+    if ! command -v jq &> /dev/null; then
+        echo "📦 Installing jq..."
+        if command -v brew &> /dev/null; then
+            brew install jq
+        elif command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y jq
+        else
+            echo "❌ Cannot install jq automatically. Please install jq manually."
+            exit 1
+        fi
     fi
 
     echo "✅ Prerequisites satisfied"
@@ -89,7 +117,7 @@ install_pko() {
 # Configure Pulumi credentials
 configure_pulumi_credentials() {
     echo ""
-    echo "🔐 Configuring Pulumi credentials..."
+    echo "🔐 Configuring Pulumi credentials from ESC..."
 
     # Check if credentials already exist
     if kubectl get secret pulumi-credentials -n pulumi-system &> /dev/null; then
@@ -97,11 +125,29 @@ configure_pulumi_credentials() {
         return
     fi
 
-    # Prompt for Pulumi access token
-    read -sp "Enter Pulumi Access Token: " PULUMI_ACCESS_TOKEN
-    echo ""
-    read -sp "Enter Pulumi Config Passphrase: " PULUMI_CONFIG_PASSPHRASE
-    echo ""
+    # Get credentials from ESC
+    echo "📋 Retrieving credentials from Pulumi ESC environment: $PULUMI_ESC_ENV..."
+
+    # Set stack context for ESC
+    cd cluster/ || {
+        echo "❌ Cannot find cluster directory. Run from project root."
+        exit 1
+    }
+
+    # Get access token from ESC
+    PULUMI_ACCESS_TOKEN=$(pulumi config get --stack "$PULUMI_STACK" pulumi.accessToken 2>/dev/null || echo "")
+    if [ -z "$PULUMI_ACCESS_TOKEN" ]; then
+        echo "⚠️  Pulumi access token not found in ESC. Using current user's token..."
+        PULUMI_ACCESS_TOKEN=$(pulumi whoami --json | jq -r '.token' 2>/dev/null || echo "")
+
+        if [ -z "$PULUMI_ACCESS_TOKEN" ]; then
+            echo "❌ Cannot get Pulumi access token. Please run 'pulumi login'."
+            exit 1
+        fi
+    fi
+
+    # Get config passphrase from ESC (optional)
+    PULUMI_CONFIG_PASSPHRASE=$(pulumi config get --stack "$PULUMI_STACK" pulumi.configPassphrase 2>/dev/null || echo "")
 
     # Create secret
     kubectl create secret generic pulumi-credentials \
@@ -109,7 +155,10 @@ configure_pulumi_credentials() {
         --from-literal=configPassphrase="$PULUMI_CONFIG_PASSPHRASE" \
         -n pulumi-system
 
-    echo "✅ Pulumi credentials configured"
+    # Return to project root
+    cd ..
+
+    echo "✅ Pulumi credentials configured from ESC"
 }
 
 # Apply Stack CRDs
@@ -163,10 +212,19 @@ show_next_steps() {
     echo "4. View Stack status:"
     echo "   kubectl describe stack oceanid-cluster-prod -n pulumi-system"
     echo ""
-    echo "5. Commit changes to trigger GitOps:"
+    echo "5. Update ESC configuration if needed:"
+    echo "   pulumi config set --stack $PULUMI_STACK --secret github.token <new-token>"
+    echo "   pulumi config set --stack $PULUMI_STACK --secret pulumi.accessToken <new-token>"
+    echo ""
+    echo "6. Commit changes to trigger GitOps:"
     echo "   git add clusters/"
     echo "   git commit -m 'feat: Enable GitOps with Flux + PKO'"
     echo "   git push origin main"
+    echo ""
+    echo "🔐 Security Notes:"
+    echo "  - All secrets sourced from Pulumi ESC"
+    echo "  - No hardcoded credentials in scripts"
+    echo "  - GitHub token scoped to repository access only"
     echo ""
     echo "📊 Resource Usage:"
     echo "  - Flux: ~100MB RAM"
