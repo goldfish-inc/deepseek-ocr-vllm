@@ -20,6 +20,9 @@ importers:
       '@pulumi/pulumi':
         specifier: ^3.197.0
         version: 3.198.0(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)
+      '@pulumi/random':
+        specifier: ^4.18.3
+        version: 4.18.3(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)
       '@pulumi/tls':
         specifier: ^5.2.2
         version: 5.2.2(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)
@@ -273,6 +276,9 @@ packages:
         optional: true
       typescript:
         optional: true
+
+  '@pulumi/random@4.18.3':
+    resolution: {integrity: sha512-2OKJPNTZu0YyxOMvxnHiUzh3qGm5EowIffAx9dKNUQRQLHOqm3TM2HQ0jYMQUrydrRbXopaiRavFFPD0QKyJEg==}
 
   '@pulumi/tls@5.2.2':
     resolution: {integrity: sha512-g/BWc9eIAaPEXP9rrUTqs09q/4cOxDNp0NoZwV9JdD2tVv/OqbpOHXRT3NU5yEFSdRngSvscuH/XHNmCLncE6Q==}
@@ -1573,6 +1579,15 @@ snapshots:
     transitivePeerDependencies:
       - bluebird
       - supports-color
+
+  '@pulumi/random@4.18.3(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)':
+    dependencies:
+      '@pulumi/pulumi': 3.198.0(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
 
   '@pulumi/tls@5.2.2(ts-node@10.9.2(@types/node@24.5.2)(typescript@5.9.2))(typescript@5.9.2)':
     dependencies:

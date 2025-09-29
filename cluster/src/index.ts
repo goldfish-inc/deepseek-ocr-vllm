@@ -1,4 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
+import * as cloudflare from "@pulumi/cloudflare";
+import * as k8s from "@pulumi/kubernetes";
 
 import { clusterConfig } from "./config";
 import { cloudflareProvider, k8sProvider, kubeconfigPath } from "./providers";
@@ -6,12 +8,225 @@ import { CloudflareTunnel } from "./components/cloudflareTunnel";
 import { FluxBootstrap } from "./components/fluxBootstrap";
 import { PulumiOperator } from "./components/pulumiOperator";
 import { ImageAutomation } from "./components/imageAutomation";
+import { LabelStudio } from "./components/labelStudio";
+import { HostCloudflared } from "./components/hostCloudflared";
+import { HostDockerService } from "./components/hostDockerService";
+import { LsTritonAdapter } from "./components/lsTritonAdapter";
+import { getSentrySettings, toEnvVars } from "./sentry-config";
+import { K3sCluster, NodeConfig } from "./components/k3sCluster";
+import { ControlPlaneLoadBalancer } from "./components/controlPlaneLoadBalancer";
+import { MigrationOrchestrator } from "./components/migrationOrchestrator";
+import { NodeTunnels } from "./components/nodeTunnels";
+import { SMEReadiness } from "./components/smeReadiness";
+
+// =============================================================================
+// CLUSTER PROVISIONING
+// =============================================================================
+
+const cfg = new pulumi.Config();
+const namespaceName = "apps";
+
+// Node configuration - Multi-control-plane for high availability
+const nodes: Record<string, NodeConfig> = {
+    tethys: {
+        hostname: "srv712429",
+        ip: cfg.require("tethysIp"),
+        role: "master",
+        labels: {
+            "node-role.kubernetes.io/control-plane": "true",
+            "oceanid.cluster/node": "tethys",
+            "oceanid.cluster/provider": "hostinger",
+            "oceanid.cluster/control-plane": "primary"
+        }
+    },
+    styx: {
+        hostname: "srv712695",
+        ip: cfg.require("styxIp"),
+        role: "master", // Convert to second control plane node
+        labels: {
+            "node-role.kubernetes.io/control-plane": "true",
+            "oceanid.cluster/node": "styx",
+            "oceanid.cluster/provider": "hostinger",
+            "oceanid.cluster/control-plane": "secondary"
+        }
+    },
+    calypso: {
+        hostname: "calypso",
+        ip: "192.168.2.80",
+        role: "worker",
+        gpu: "rtx4090",
+        labels: {
+            "node-role.kubernetes.io/worker": "true",
+            "node.kubernetes.io/instance-type": "gpu",
+            "oceanid.cluster/tunnel-enabled": "true",
+            "oceanid.cluster/node": "calypso",
+            "oceanid.cluster/gpu": "rtx4090",
+            "oceanid.cluster/provider": "local"
+        }
+    }
+};
+
+// SSH keys for node access
+const privateKeys = {
+    tethys: cfg.requireSecret("tethys_ssh_key"),
+    styx: cfg.requireSecret("styx_ssh_key"),
+    calypso: cfg.requireSecret("calypso_ssh_key"),
+};
+
+// Feature flags to avoid long SSH operations during troubleshooting
+const enableNodeProvisioning = cfg.getBoolean("enableNodeProvisioning") ?? true;
+const enableMigration = cfg.getBoolean("enableMigration") ?? true;
+
+// Create the K3s cluster with idempotent node provisioning (optional)
+let cluster: K3sCluster | undefined;
+if (enableNodeProvisioning) {
+    cluster = new K3sCluster("oceanid", {
+        nodes,
+        k3sToken: cfg.requireSecret("k3s_token"),
+        k3sVersion: cfg.get("k3s_version") || "v1.33.4+k3s1",
+        privateKeys,
+        enableEtcdBackups: true,
+        backupS3Bucket: cfg.get("etcd_backup_s3_bucket"),
+        s3Credentials: {
+            accessKey: cfg.requireSecret("s3_access_key"),
+            secretKey: cfg.requireSecret("s3_secret_key"),
+            region: cfg.get("s3_region") || "us-east-1",
+            endpoint: cfg.get("s3_endpoint"), // Optional for S3-compatible storage
+        },
+    });
+}
+
+// Create load balancer for multi-control-plane high availability
+const enableControlPlaneLB = cfg.getBoolean("enableControlPlaneLB") ?? true;
+const controlPlaneLB = enableControlPlaneLB
+    ? new ControlPlaneLoadBalancer("control-plane-lb", {
+        masterNodes: [
+            { name: "tethys", ip: cfg.require("tethysIp"), hostname: "srv712429" },
+            { name: "styx", ip: cfg.require("styxIp"), hostname: "srv712695" },
+        ],
+        k8sProvider,
+        enableHealthChecks: true,
+    }, { dependsOn: cluster ? [cluster] : [] })
+    : undefined;
+
+// =============================================================================
+// INFRASTRUCTURE COMPONENTS
+// =============================================================================
+
+const labelHostname = pulumi.interpolate`label.${clusterConfig.nodeTunnel.hostname}`;
+const gpuHostname = pulumi.interpolate`gpu.${clusterConfig.nodeTunnel.hostname}`;
+const airflowHostname = pulumi.interpolate`airflow.${clusterConfig.nodeTunnel.hostname}`;
+const minioHostname = pulumi.interpolate`minio.${clusterConfig.nodeTunnel.hostname}`;
+const enableAppsStack = cfg.getBoolean("enableAppsStack") ?? false;
+
+const extraIngressRules: Array<{ hostname: pulumi.Input<string>; service: pulumi.Input<string>; noTLSVerify?: pulumi.Input<boolean> }>= [
+    { hostname: labelHostname, service: pulumi.output("http://label-studio.apps.svc.cluster.local:8080"), noTLSVerify: false },
+    // Note: GPU service is handled by HostCloudflared on Calypso, not this tunnel
+];
+
+if (enableAppsStack) {
+    extraIngressRules.push(
+        { hostname: airflowHostname, service: pulumi.output("http://airflow-web.apps.svc.cluster.local:8080"), noTLSVerify: true },
+        { hostname: minioHostname, service: pulumi.output("http://minio-console.apps.svc.cluster.local:9001"), noTLSVerify: true },
+    );
+}
+
+// =============================================================================
+// Cloudflare Access for app UIs (optional, recommended)
+// =============================================================================
+
+const accessAllowedEmailDomain = cfg.get("accessAllowedEmailDomain");
+const accessAllowedEmails = cfg.getObject<string[]>("accessAllowedEmails");
+const enableLabelStudioAccess = cfg.getBoolean("enableLabelStudioAccess") ?? false;
+
+function accessForHost(host: pulumi.Input<string>, appName: string) {
+    const includes: pulumi.Input<any>[] = [];
+    if (accessAllowedEmailDomain) {
+        includes.push({ emailDomain: { domain: accessAllowedEmailDomain } });
+    }
+    if (accessAllowedEmails && accessAllowedEmails.length > 0) {
+        for (const e of accessAllowedEmails) {
+            includes.push({ email: { email: e } });
+        }
+    }
+
+    new cloudflare.ZeroTrustAccessApplication(`${appName}-access-app`, {
+        zoneId: clusterConfig.cloudflare.zoneId,
+        name: pulumi.interpolate`${appName}@${host}` as unknown as string,
+        domain: host as unknown as string,
+        sessionDuration: "24h",
+        policies: [
+            {
+                name: pulumi.interpolate`${appName}-allow` as unknown as string,
+                precedence: 1,
+                decision: "allow",
+                includes: includes as any,
+            },
+        ],
+    }, { provider: cloudflareProvider, deleteBeforeReplace: true });
+}
+
+// Apply Access to Label Studio if enabled and rules provided
+if (enableLabelStudioAccess && (accessAllowedEmailDomain || (accessAllowedEmails && accessAllowedEmails.length > 0))) {
+    accessForHost(labelHostname, "label-studio");
+}
+
+// Apply Access to optional app UIs when enabled
+if (enableAppsStack && (accessAllowedEmailDomain || (accessAllowedEmails && accessAllowedEmails.length > 0))) {
+    accessForHost(airflowHostname, "airflow");
+    accessForHost(minioHostname, "minio");
+}
 
 const tunnel = new CloudflareTunnel("cloudflare", {
     cluster: clusterConfig,
     k8sProvider,
     cloudflareProvider,
+    extraIngress: extraIngressRules,
 });
+
+// Optional: Core apps on k8s with private Services; UIs exposed via Cloudflare tunnel
+if (enableAppsStack) {
+    const pgPassword = cfg.getSecret("postgres_password");
+    if (pgPassword) {
+        new k8s.helm.v3.Release("postgres", {
+            chart: "postgresql",
+            version: "15.5.0",
+            repositoryOpts: { repo: "https://charts.bitnami.com/bitnami" },
+            name: "postgres",
+            namespace: namespaceName,
+            values: {
+                auth: { postgresPassword: pgPassword },
+                primary: { persistence: { enabled: true, size: "50Gi" } },
+                service: { type: "ClusterIP" },
+            },
+        }, { provider: k8sProvider });
+    }
+
+    new k8s.helm.v3.Release("minio", {
+        chart: "minio",
+        version: "5.2.0",
+        repositoryOpts: { repo: "https://charts.min.io" },
+        name: "minio",
+        namespace: namespaceName,
+        values: {
+            persistence: { enabled: true, size: "200Gi" },
+            service: { type: "ClusterIP" },
+            consoleService: { type: "ClusterIP", port: 9001 },
+        },
+    }, { provider: k8sProvider });
+
+    new k8s.helm.v3.Release("airflow", {
+        chart: "airflow",
+        version: "1.12.0",
+        repositoryOpts: { repo: "https://airflow.apache.org" },
+        name: "airflow",
+        namespace: namespaceName,
+        values: {
+            executor: "KubernetesExecutor",
+            service: { type: "ClusterIP" },
+        },
+    }, { provider: k8sProvider });
+}
 
 const flux = new FluxBootstrap("gitops", {
     cluster: clusterConfig,
@@ -29,15 +244,201 @@ const imageAutomation = new ImageAutomation("version-monitor", {
     fluxNamespace: "flux-system",
 }, { dependsOn: [flux] });
 
+// Deploy node tunnels for bidirectional pod networking (especially for Calypso GPU node)
+const enableNodeTunnels = cfg.getBoolean("enableNodeTunnels") ?? true;
+let nodeTunnels: NodeTunnels | undefined;
+if (enableNodeTunnels) {
+    nodeTunnels = new NodeTunnels("node-tunnels", {
+        cluster: clusterConfig,
+        k8sProvider,
+        cloudflareProvider,
+    });
+}
+
+// Deploy Label Studio on the control-plane VPS (Kubernetes)
+// Triton adapter (in-cluster) bridging LS -> Triton HTTP v2
+const tritonBaseUrl = pulumi.interpolate`https://${clusterConfig.nodeTunnel.hostnames.gpu}`;
+const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
+    k8sProvider,
+    tritonBaseUrl,
+});
+
+const labelStudio = new LabelStudio("label-studio", {
+    k8sProvider,
+    mlBackendUrl: lsAdapter.serviceUrl,
+});
+
+// SME Readiness - Configure boathou.se domain with Cloudflare Access
+const enableSMEAccess = cfg.getBoolean("enableLabelStudioAccess") ?? true;
+const smeEmailDomain = cfg.get("accessAllowedEmailDomain") ?? "boathou.se";
+
+const smeReadiness = new SMEReadiness("sme-ready", {
+    cloudflareProvider,
+    zoneId: clusterConfig.cloudflare.zoneId,
+    tunnelId: clusterConfig.cloudflare.tunnelId,
+    nodeTunnelId: clusterConfig.nodeTunnel.tunnelId,
+    emailDomain: smeEmailDomain,
+    enableLabelStudioAccess: enableSMEAccess,
+});
+
+// Optional: host-level Cloudflared connector on Calypso for GPU access
+const enableCalypsoHostConnector = cfg.getBoolean("enableCalypsoHostConnector") ?? true;
+let calypsoConnector: HostCloudflared | undefined;
+let calypsoTriton: HostDockerService | undefined;
+if (enableCalypsoHostConnector) {
+    calypsoConnector = new HostCloudflared("calypso-connector", {
+        host: "192.168.2.80",
+        user: "oceanid",
+        privateKey: cfg.requireSecret("calypso_ssh_key"),
+        tunnelId: clusterConfig.nodeTunnel.tunnelId,
+        tunnelToken: clusterConfig.nodeTunnel.tunnelToken,
+        hostnameBase: clusterConfig.nodeTunnel.hostname,
+        gpuPort: 8000,  // Triton HTTP port
+    });
+
+    // Start Triton Inference Server on Calypso via generic HostDockerService
+    const sentry = getSentrySettings();
+    const tritonEnv = toEnvVars(sentry);
+    const tritonImage = cfg.get("tritonImage") || "ghcr.io/triton-inference-server/server:2.60.0-py3";
+    calypsoTriton = new HostDockerService("calypso-triton", {
+        host: "192.168.2.80",
+        user: "oceanid",
+        privateKey: cfg.requireSecret("calypso_ssh_key"),
+        serviceName: "tritonserver",
+        image: tritonImage,
+        name: "tritonserver",
+        ports: [
+            { host: 8000, container: 8000 },
+            { host: 8001, container: 8001 },
+            { host: 8002, container: 8002 },
+        ],
+        volumes: [
+            { hostPath: "/opt/triton/models", containerPath: "/models" },
+        ],
+        env: tritonEnv,
+        gpus: true,
+        args: ["tritonserver", "--model-repository=/models", "--strict-model-config=false"],
+    }, { dependsOn: [calypsoConnector] });
+
+    // Ensure gpu.<base> DNS exists when NodeTunnels are disabled
+    if (!enableNodeTunnels) {
+        new cloudflare.DnsRecord("host-gpu-cname", {
+            zoneId: clusterConfig.cloudflare.zoneId,
+            name: clusterConfig.nodeTunnel.hostnames.gpu,
+            type: "CNAME",
+            content: clusterConfig.nodeTunnel.target,
+            proxied: true,
+            ttl: 1,
+            comment: pulumi.interpolate`GPU access for ${clusterConfig.name} host connector`,
+        }, { provider: cloudflareProvider });
+    }
+}
+
+// =============================================================================
+// EXPORTS FOR SME READINESS
+// =============================================================================
+
+export const smeUrls = {
+    labelStudio: smeReadiness.labelStudioUrl,
+    gpuServices: smeReadiness.gpuServiceUrl,
+    adapterHealth: pulumi.interpolate`${lsAdapter.serviceUrl}/healthz`,
+};
+
+export const smeAccess = {
+    emailDomain: smeEmailDomain,
+    accessEnabled: enableSMEAccess,
+    accessPolicyId: smeReadiness.accessPolicyId,
+};
+
+export const modelConfiguration = {
+    nerLabels: cfg.getSecret("nerLabels") ?? pulumi.secret(JSON.stringify([
+        "O","VESSEL","VESSEL_NAME","IMO","IRCS","MMSI","FLAG","PORT",
+        "ORGANIZATION","PERSON","COMPANY","BENEFICIAL_OWNER","OPERATOR",
+        "CHARTERER","VESSEL_MASTER","CREW_MEMBER","GEAR_TYPE","VESSEL_TYPE",
+        "COMMODITY","HS_CODE","SPECIES","RISK_LEVEL","SANCTION","DATE",
+        "LOCATION","COUNTRY","RFMO","LICENSE","TONNAGE","LENGTH","ENGINE_POWER"
+    ])),
+    nerLabelCount: 31,
+    bertModelDimensions: "[batch_size, sequence_length, 63]",
+};
+
+// =============================================================================
+// SCRIPT RETIREMENT MIGRATION
+// =============================================================================
+
+// Create migration orchestrator to manage script retirement
+const migration = enableMigration
+    ? new MigrationOrchestrator("script-retirement", {
+        cluster: clusterConfig,
+        k8sProvider,
+        escEnvironment: "default/oceanid-cluster",
+        migrationPhase: cfg.get("migration_phase") as any || "preparation",
+        enableSSHRotation: true,
+        enableK3sRotation: true,
+        enableSecurityHardening: true,
+        enableCredentialSync: true,
+        enableFluxSelfInstall: true,
+        nodes: {
+            tethys: {
+                ip: cfg.require("tethysIp"),
+                hostname: "srv712429",
+                user: "root",
+                privateKey: cfg.requireSecret("tethys_ssh_key"),
+                onePasswordItemId: "c5s7qr6dvpzqpluqok2a7gfmzu",
+            },
+            styx: {
+                ip: cfg.require("styxIp"),
+                hostname: "srv712695",
+                user: "root",
+                privateKey: cfg.requireSecret("styx_ssh_key"),
+                onePasswordItemId: "6c75oaaly7mgfdme35gwwpakhq",
+            },
+            calypso: {
+                ip: "192.168.2.80",
+                hostname: "calypso",
+                user: "oceanid",
+                privateKey: cfg.requireSecret("calypso_ssh_key"),
+            },
+        },
+    }, { dependsOn: ((() => { const deps: pulumi.Resource[] = [flux, pko, imageAutomation]; if (controlPlaneLB) deps.unshift(controlPlaneLB); return deps; })()) })
+    : undefined;
+
 export const outputs = {
+    // Cluster provisioning
+    clusterReady: cluster ? cluster.outputs.clusterReady : pulumi.output(false),
+    masterEndpoint: cluster ? cluster.outputs.masterEndpoint : pulumi.output(""),
+    nodeProvisioningStatus: cluster ? cluster.outputs.provisioningStatus : pulumi.output({}),
+
+    // High availability
+    controlPlaneLB: controlPlaneLB ? controlPlaneLB.outputs.loadBalancerIP : pulumi.output(""),
+    controlPlaneHealthStatus: controlPlaneLB ? controlPlaneLB.outputs.healthStatus : pulumi.output({}),
+
+    // Infrastructure
     kubeconfigPath,
     cloudflareNamespace: tunnel.outputs.namespace,
     cloudflareDeployment: tunnel.outputs.deploymentName,
     cloudflareMetricsService: tunnel.outputs.metricsServiceName,
     cloudflareDnsRecord: tunnel.outputs.dnsRecordName,
+    labelStudioHostname: labelHostname,
+    calypsoTritonReady: calypsoTriton ? calypsoTriton.serviceReady : pulumi.output(false),
+    nodeTunnelNamespace: nodeTunnels ? nodeTunnels.outputs.namespace : pulumi.output(""),
+    nodeTunnelDaemonSet: nodeTunnels ? nodeTunnels.outputs.daemonSetName : pulumi.output(""),
+    nodeTunnelMetricsService: nodeTunnels ? nodeTunnels.outputs.metricsServiceName : pulumi.output(""),
+    nodeTunnelDnsRecords: nodeTunnels ? nodeTunnels.outputs.dnsRecords : pulumi.output({}),
+    lsMlBackendUrl: lsAdapter.serviceUrl,
     fluxNamespace: flux.namespace,
     gitRepository: clusterConfig.gitops.repositoryUrl,
     gitPath: clusterConfig.gitops.path,
     pkoNamespace: pko.namespace,
     pkoSecretName: pko.secretName,
+
+    // Migration status
+    migrationStatus: migration ? migration.outputs.migrationStatus : pulumi.output({
+        phase: cfg.get("migration_phase") || "preparation",
+        completedComponents: [],
+        activeComponents: [],
+        nextSteps: ["Enable migration components"],
+    }),
+    componentHealth: migration ? migration.outputs.componentHealth : pulumi.output({}),
+    scriptRetirementReady: migration ? migration.outputs.scriptRetirementReady : pulumi.output(false),
 };
