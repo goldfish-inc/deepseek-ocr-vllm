@@ -1,0 +1,179 @@
+{
+  "test_fixtures": [
+    {
+      "id": "vessel_basic_01",
+      "text": "The vessel OCEAN WARRIOR with IMO 9876543 and call sign V2AB3 is flagged in Panama.",
+      "expected_entities": [
+        {"text": "OCEAN WARRIOR", "label": "VESSEL_NAME", "start": 11, "end": 24},
+        {"text": "9876543", "label": "IMO", "start": 34, "end": 41},
+        {"text": "V2AB3", "label": "IRCS", "start": 57, "end": 62},
+        {"text": "Panama", "label": "FLAG", "start": 77, "end": 83}
+      ]
+    },
+    {
+      "id": "vessel_ownership_01",
+      "text": "MV Pacific Dream (IMO 1234567) is operated by Blue Ocean Shipping Company and owned by Maritime Holdings Ltd as beneficial owner.",
+      "expected_entities": [
+        {"text": "Pacific Dream", "label": "VESSEL_NAME", "start": 3, "end": 16},
+        {"text": "1234567", "label": "IMO", "start": 22, "end": 29},
+        {"text": "Blue Ocean Shipping Company", "label": "OPERATOR", "start": 47, "end": 75},
+        {"text": "Maritime Holdings Ltd", "label": "COMPANY", "start": 89, "end": 110},
+        {"text": "Maritime Holdings Ltd", "label": "BENEFICIAL_OWNER", "start": 89, "end": 110}
+      ]
+    },
+    {
+      "id": "vessel_metrics_01",
+      "text": "The fishing vessel has a length of 85.5 meters, gross tonnage of 2,450 GT, and engine power of 3,600 HP.",
+      "expected_entities": [
+        {"text": "85.5 meters", "label": "LENGTH", "start": 36, "end": 47},
+        {"text": "2,450 GT", "label": "TONNAGE", "start": 66, "end": 74},
+        {"text": "3,600 HP", "label": "ENGINE_POWER", "start": 96, "end": 104}
+      ]
+    },
+    {
+      "id": "vessel_rfmo_01",
+      "text": "The vessel is registered with ICCAT and IOTC, operating with purse seine gear targeting skipjack tuna.",
+      "expected_entities": [
+        {"text": "ICCAT", "label": "RFMO", "start": 31, "end": 36},
+        {"text": "IOTC", "label": "RFMO", "start": 41, "end": 45},
+        {"text": "purse seine", "label": "GEAR_TYPE", "start": 62, "end": 73},
+        {"text": "skipjack tuna", "label": "SPECIES", "start": 89, "end": 102}
+      ]
+    },
+    {
+      "id": "crew_personnel_01",
+      "text": "Captain John Smith serves as vessel master with Chief Engineer Roberto Garcia and 18 crew members.",
+      "expected_entities": [
+        {"text": "John Smith", "label": "PERSON", "start": 8, "end": 18},
+        {"text": "John Smith", "label": "VESSEL_MASTER", "start": 8, "end": 18},
+        {"text": "Roberto Garcia", "label": "PERSON", "start": 64, "end": 78},
+        {"text": "Roberto Garcia", "label": "CREW_MEMBER", "start": 64, "end": 78}
+      ]
+    },
+    {
+      "id": "port_registration_01",
+      "text": "F/V Northern Star, registered in Dutch Harbor, Alaska with MMSI 367123456 and home port of Seattle.",
+      "expected_entities": [
+        {"text": "Northern Star", "label": "VESSEL_NAME", "start": 4, "end": 17},
+        {"text": "Dutch Harbor", "label": "PORT", "start": 34, "end": 46},
+        {"text": "Alaska", "label": "LOCATION", "start": 48, "end": 54},
+        {"text": "367123456", "label": "MMSI", "start": 65, "end": 74},
+        {"text": "Seattle", "label": "PORT", "start": 93, "end": 100}
+      ]
+    },
+    {
+      "id": "sanctions_iuu_01",
+      "text": "The vessel DARK WATERS was added to the EU IUU list and US SDN sanctions for illegal fishing activities.",
+      "expected_entities": [
+        {"text": "DARK WATERS", "label": "VESSEL_NAME", "start": 11, "end": 22},
+        {"text": "EU IUU list", "label": "SANCTION", "start": 41, "end": 52},
+        {"text": "US SDN sanctions", "label": "SANCTION", "start": 57, "end": 73}
+      ]
+    },
+    {
+      "id": "complex_vessel_01",
+      "text": "ICCAT reports that FV ATLANTICO (IMO 7654321, IRCS EA2B4, EU CFR ESP000012345) flagged in Spain, owned by Pescados del Mar S.A., was authorized for bluefin tuna fishing with license AT-2023-0456 using longline gear, LOA 42m, GT 850.",
+      "expected_entities": [
+        {"text": "ICCAT", "label": "RFMO", "start": 0, "end": 5},
+        {"text": "ATLANTICO", "label": "VESSEL_NAME", "start": 22, "end": 31},
+        {"text": "7654321", "label": "IMO", "start": 37, "end": 44},
+        {"text": "EA2B4", "label": "IRCS", "start": 51, "end": 56},
+        {"text": "ESP000012345", "label": "EU_CFR", "start": 65, "end": 77},
+        {"text": "Spain", "label": "FLAG", "start": 90, "end": 95},
+        {"text": "Pescados del Mar S.A.", "label": "COMPANY", "start": 106, "end": 127},
+        {"text": "bluefin tuna", "label": "SPECIES", "start": 149, "end": 161},
+        {"text": "AT-2023-0456", "label": "LICENSE", "start": 185, "end": 197},
+        {"text": "longline", "label": "GEAR_TYPE", "start": 204, "end": 212},
+        {"text": "42m", "label": "LENGTH", "start": 224, "end": 227},
+        {"text": "850", "label": "TONNAGE", "start": 232, "end": 235}
+      ]
+    },
+    {
+      "id": "transshipment_01",
+      "text": "Carrier vessel PACIFIC CARRIER received transshipment from fishing vessels TUNA HUNTER and BLUE MARLIN in WCPFC waters on 2024-03-15.",
+      "expected_entities": [
+        {"text": "PACIFIC CARRIER", "label": "VESSEL_NAME", "start": 15, "end": 30},
+        {"text": "TUNA HUNTER", "label": "VESSEL_NAME", "start": 76, "end": 87},
+        {"text": "BLUE MARLIN", "label": "VESSEL_NAME", "start": 92, "end": 103},
+        {"text": "WCPFC", "label": "RFMO", "start": 107, "end": 112},
+        {"text": "2024-03-15", "label": "DATE", "start": 123, "end": 133}
+      ]
+    },
+    {
+      "id": "vessel_type_01",
+      "text": "The factory trawler processes catch onboard, while the support vessel provides fuel and supplies to the purse seiners.",
+      "expected_entities": [
+        {"text": "factory trawler", "label": "VESSEL_TYPE", "start": 4, "end": 19},
+        {"text": "support vessel", "label": "VESSEL_TYPE", "start": 56, "end": 70},
+        {"text": "purse seiners", "label": "VESSEL_TYPE", "start": 104, "end": 117}
+      ]
+    }
+  ],
+
+  "validation_rules": {
+    "IMO": {
+      "format": "7 digits",
+      "validation": "Luhn checksum"
+    },
+    "MMSI": {
+      "format": "9 digits",
+      "prefix_validation": {
+        "2xx": "Europe",
+        "3xx": "North America",
+        "4xx": "Asia",
+        "5xx": "Oceania",
+        "6xx": "Africa",
+        "7xx": "South America"
+      }
+    },
+    "EU_CFR": {
+      "format": "XXX000000000",
+      "description": "3 letters (country) + 9 digits"
+    },
+    "IRCS": {
+      "format": "4-8 alphanumeric",
+      "case": "uppercase"
+    }
+  },
+
+  "edge_cases": [
+    {
+      "id": "edge_imo_01",
+      "text": "The vessel reports IMO APPLIED NOT YET RECEIVED status.",
+      "expected_entities": [
+        {"text": "APPLIED NOT YET RECEIVED", "label": "O", "note": "Special status, not an IMO number"}
+      ]
+    },
+    {
+      "id": "edge_multiple_names_01",
+      "text": "The vessel OCEAN STAR formerly known as SEA EAGLE (ex-WAVE RIDER)",
+      "expected_entities": [
+        {"text": "OCEAN STAR", "label": "VESSEL_NAME", "start": 11, "end": 21},
+        {"text": "SEA EAGLE", "label": "VESSEL_NAME", "start": 41, "end": 50},
+        {"text": "WAVE RIDER", "label": "VESSEL_NAME", "start": 55, "end": 65}
+      ]
+    },
+    {
+      "id": "edge_flag_change_01",
+      "text": "The vessel changed flag from Liberia to Panama in March 2024.",
+      "expected_entities": [
+        {"text": "Liberia", "label": "FLAG", "start": 30, "end": 37},
+        {"text": "Panama", "label": "FLAG", "start": 41, "end": 47},
+        {"text": "March 2024", "label": "DATE", "start": 51, "end": 61}
+      ]
+    }
+  ],
+
+  "evaluation_metrics": {
+    "exact_match": "Entity boundaries must match exactly",
+    "partial_match": "At least 50% overlap with ground truth",
+    "label_accuracy": "Correct entity type classification",
+    "metrics_to_track": [
+      "precision",
+      "recall",
+      "f1_score",
+      "entity_level_accuracy",
+      "token_level_accuracy"
+    ]
+  }
+}

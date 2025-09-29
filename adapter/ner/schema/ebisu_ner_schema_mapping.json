@@ -1,0 +1,318 @@
+{
+  "schema_version": "1.0.0",
+  "database": "ebisu",
+  "description": "NER Label to Database Schema Mapping for Maritime Intelligence Platform",
+
+  "ner_labels": [
+    "O",
+    "VESSEL",
+    "VESSEL_NAME",
+    "IMO",
+    "IRCS",
+    "MMSI",
+    "FLAG",
+    "PORT",
+    "ORGANIZATION",
+    "PERSON",
+    "COMPANY",
+    "BENEFICIAL_OWNER",
+    "OPERATOR",
+    "CHARTERER",
+    "VESSEL_MASTER",
+    "CREW_MEMBER",
+    "GEAR_TYPE",
+    "VESSEL_TYPE",
+    "COMMODITY",
+    "HS_CODE",
+    "SPECIES",
+    "RISK_LEVEL",
+    "SANCTION",
+    "DATE",
+    "LOCATION",
+    "COUNTRY",
+    "RFMO",
+    "LICENSE",
+    "TONNAGE",
+    "LENGTH",
+    "ENGINE_POWER"
+  ],
+
+  "entity_mappings": {
+    "VESSEL": {
+      "table": "vessels",
+      "primary_key": "vessel_uuid",
+      "fields": {
+        "vessel_name": "TEXT",
+        "vessel_name_other": "TEXT",
+        "imo": "CHAR(7)",
+        "ircs": "VARCHAR(15)",
+        "mmsi": "CHAR(9)",
+        "national_registry": "VARCHAR(50)",
+        "eu_cfr": "CHAR(12)"
+      },
+      "related_tables": [
+        "vessel_info",
+        "vessel_sources",
+        "vessel_metrics",
+        "vessel_associates"
+      ]
+    },
+
+    "VESSEL_NAME": {
+      "table": "vessels",
+      "field": "vessel_name",
+      "type": "TEXT",
+      "description": "Primary vessel name"
+    },
+
+    "IMO": {
+      "table": "vessels",
+      "field": "imo",
+      "type": "CHAR(7)",
+      "validation": "^[0-9]{7}$",
+      "description": "International Maritime Organization number"
+    },
+
+    "IRCS": {
+      "table": "vessels",
+      "field": "ircs",
+      "type": "VARCHAR(15)",
+      "description": "International Radio Call Sign"
+    },
+
+    "MMSI": {
+      "table": "vessels",
+      "field": "mmsi",
+      "type": "CHAR(9)",
+      "validation": "^[0-9]{9}$",
+      "description": "Maritime Mobile Service Identity"
+    },
+
+    "FLAG": {
+      "table": "vessels",
+      "field": "vessel_flag",
+      "type": "UUID",
+      "foreign_key": "country_iso(id)",
+      "description": "Flag state of vessel registration"
+    },
+
+    "PORT": {
+      "tables": [
+        {
+          "table": "vessel_info",
+          "field": "port_registry",
+          "type": "VARCHAR(100)"
+        },
+        {
+          "table": "vessel_info",
+          "field": "home_port",
+          "type": "VARCHAR(100)"
+        }
+      ],
+      "description": "Port of registry or home port"
+    },
+
+    "ORGANIZATION": {
+      "table": "entity_organizations",
+      "primary_key": "entity_id",
+      "fields": {
+        "organization_name": "TEXT",
+        "organization_type": "organization_type_enum",
+        "registration_country": "TEXT",
+        "imo_company_number": "TEXT"
+      },
+      "related_tables": ["entities", "entity_aliases"]
+    },
+
+    "PERSON": {
+      "table": "entity_persons",
+      "primary_key": "entity_id",
+      "fields": {
+        "full_name_primary": "TEXT",
+        "given_names": "TEXT[]",
+        "family_names": "TEXT[]",
+        "seafarer_id": "TEXT",
+        "imo_crew_id": "TEXT"
+      },
+      "related_tables": ["entities", "entity_aliases"]
+    },
+
+    "COMPANY": {
+      "table": "entity_organizations",
+      "field": "organization_name",
+      "type": "TEXT",
+      "where_clause": "organization_type IN ('COMPANY', 'PARTNERSHIP', 'JOINT_VENTURE')"
+    },
+
+    "BENEFICIAL_OWNER": {
+      "table": "vessel_associates",
+      "fields": {
+        "associate_name": "TEXT",
+        "associate_type": "associate_type_enum"
+      },
+      "where_clause": "associate_type = 'BENEFICIAL_OWNER'"
+    },
+
+    "OPERATOR": {
+      "table": "vessel_associates",
+      "fields": {
+        "associate_name": "TEXT",
+        "associate_type": "associate_type_enum"
+      },
+      "where_clause": "associate_type IN ('OPERATOR', 'OPERATING_COMPANY')"
+    },
+
+    "VESSEL_MASTER": {
+      "table": "vessel_associates",
+      "fields": {
+        "associate_name": "TEXT",
+        "associate_type": "associate_type_enum"
+      },
+      "where_clause": "associate_type = 'VESSEL_MASTER'"
+    },
+
+    "GEAR_TYPE": {
+      "table": "gear_types_fao",
+      "primary_key": "id",
+      "fields": {
+        "fao_isscfg_code": "VARCHAR(10)",
+        "fao_isscfg_alpha": "VARCHAR(10)",
+        "fao_isscfg_name": "TEXT"
+      },
+      "related_table": "vessel_gear_types"
+    },
+
+    "VESSEL_TYPE": {
+      "table": "vessel_types",
+      "primary_key": "id",
+      "fields": {
+        "vessel_type_isscfv_code": "VARCHAR(10)",
+        "vessel_type_name": "TEXT"
+      },
+      "related_table": "vessel_vessel_types"
+    },
+
+    "SPECIES": {
+      "table": "harmonized_species",
+      "primary_key": "species_id",
+      "fields": {
+        "scientific_name": "TEXT",
+        "common_name": "TEXT",
+        "fao_3alpha_code": "VARCHAR(3)"
+      }
+    },
+
+    "SANCTION": {
+      "table": "vessel_sanctions",
+      "fields": {
+        "sanction_type": "sanction_type_enum",
+        "listing_name": "TEXT",
+        "program_name": "TEXT"
+      }
+    },
+
+    "COUNTRY": {
+      "table": "country_iso",
+      "primary_key": "id",
+      "fields": {
+        "country_name": "TEXT",
+        "country_iso2": "CHAR(2)",
+        "country_iso3": "CHAR(3)"
+      }
+    },
+
+    "RFMO": {
+      "table": "rfmos",
+      "primary_key": "id",
+      "fields": {
+        "rfmo_code": "VARCHAR(10)",
+        "rfmo_name": "TEXT"
+      }
+    },
+
+    "LICENSE": {
+      "table": "vessel_authorizations",
+      "fields": {
+        "authorization_number": "TEXT",
+        "authorization_type": "authorization_type_enum",
+        "issued_by": "TEXT"
+      }
+    },
+
+    "TONNAGE": {
+      "table": "vessel_metrics",
+      "field": "value",
+      "where_clause": "metric_type IN ('tonnage', 'gross_tonnage', 'net_tonnage')",
+      "unit_field": "unit"
+    },
+
+    "LENGTH": {
+      "table": "vessel_metrics",
+      "field": "value",
+      "where_clause": "metric_type IN ('length', 'length_loa', 'length_lbp')",
+      "unit_field": "unit"
+    },
+
+    "ENGINE_POWER": {
+      "table": "vessel_metrics",
+      "field": "value",
+      "where_clause": "metric_type IN ('engine_power', 'aux_engine_power')",
+      "unit_field": "unit"
+    }
+  },
+
+  "extraction_rules": {
+    "IMO": {
+      "pattern": "\\bIMO[\\s#:]?([0-9]{7})\\b",
+      "validation": "Luhn algorithm check"
+    },
+    "MMSI": {
+      "pattern": "\\bMMSI[\\s#:]?([0-9]{9})\\b"
+    },
+    "IRCS": {
+      "pattern": "\\b([A-Z0-9]{4,8})\\b",
+      "context_required": ["call sign", "IRCS", "radio"]
+    },
+    "EU_CFR": {
+      "pattern": "\\b[A-Z]{3}[0-9]{9}\\b"
+    }
+  },
+
+  "postprocessing": {
+    "vessel_matching": {
+      "priority": ["IMO", "EU_CFR", "MMSI", "IRCS", "vessel_name+flag"],
+      "confidence_thresholds": {
+        "IMO": 0.99,
+        "EU_CFR": 0.95,
+        "MMSI": 0.90,
+        "IRCS": 0.85,
+        "name_only": 0.70
+      }
+    },
+    "entity_resolution": {
+      "use_aliases": true,
+      "fuzzy_matching": true,
+      "similarity_threshold": 0.85
+    },
+    "validation": {
+      "IMO": "validate_imo_checksum",
+      "country_codes": "validate_iso_country",
+      "dates": "parse_maritime_date_formats"
+    }
+  },
+
+  "intelligence_tracking": {
+    "conflicts": {
+      "table": "vessel_data_conflicts",
+      "track": ["flag_changes", "name_changes", "ownership_changes"]
+    },
+    "confirmations": {
+      "table": "vessel_source_confirmations",
+      "increase_trust_on": "multiple_sources_same_data"
+    },
+    "history": {
+      "table": "vessel_reported_history",
+      "types": ["VESSEL_NAME_CHANGE", "FLAG_CHANGE", "OWNERSHIP_CHANGE"]
+    }
+  }
+}

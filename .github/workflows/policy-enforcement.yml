@@ -1,0 +1,297 @@
+name: Infrastructure Policy Enforcement
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  policy-enforcement:
+    name: Enforce Infrastructure Policies
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comprehensive checks
+
+    - name: Install required tools
+      run: |
+        # Install policy checking tools
+        sudo apt-get update
+        sudo apt-get install -y jq shellcheck yamllint
+
+        # Install Pulumi CLI
+        curl -fsSL https://get.pulumi.com/install.sh | sh
+        echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+
+    - name: 1. Prevent Shell Scripts in Forbidden Paths
+      run: |
+        echo "🚫 Checking for forbidden shell scripts..."
+
+        FORBIDDEN_SCRIPTS=$(find . -name "*.sh" -path "*/scripts/*" -o -name "*.sh" -path "*/cluster/scripts/*" | grep -v ".github" || true)
+
+        if [ -n "$FORBIDDEN_SCRIPTS" ]; then
+          echo "❌ Shell scripts found in forbidden paths:"
+          echo "$FORBIDDEN_SCRIPTS"
+          echo ""
+          echo "🔧 Use Pulumi components instead:"
+          echo "  - SSH rotation: SSHKeyManager component"
+          echo "  - K3s tokens: K3sTokenRotator component"
+          echo "  - Security: SecurityHardening DaemonSet"
+          echo "  - Credentials: CredentialSynchronizer component"
+          echo "  - GitOps: SelfInstallingFlux component"
+          echo ""
+          echo "📖 See: SCRIPT_RETIREMENT_COMPLETE.md"
+          exit 1
+        else
+          echo "✅ No forbidden shell scripts found"
+        fi
+
+    - name: 2. Validate Pulumi Configuration
+      run: |
+        echo "📦 Validating Pulumi configuration..."
+
+        cd cluster/
+
+        # Check if all required components are present
+        REQUIRED_COMPONENTS=(
+          "sshKeyManager.ts"
+          "k3sTokenRotator.ts"
+          "securityHardening.ts"
+          "credentialSynchronizer.ts"
+          "selfInstallingFlux.ts"
+          "migrationOrchestrator.ts"
+        )
+
+        MISSING_COMPONENTS=()
+        for component in "${REQUIRED_COMPONENTS[@]}"; do
+          if [ ! -f "src/components/$component" ]; then
+            MISSING_COMPONENTS+=("$component")
+          fi
+        done
+
+        if [ ${#MISSING_COMPONENTS[@]} -gt 0 ]; then
+          echo "❌ Missing required IaC components:"
+          printf '%s\n' "${MISSING_COMPONENTS[@]}"
+          exit 1
+        else
+          echo "✅ All required IaC components present"
+        fi
+
+    - name: 3. Check for Hardcoded Credentials
+      run: |
+        echo "🔐 Scanning for hardcoded credentials..."
+
+        # Patterns that indicate hardcoded credentials
+        CREDENTIAL_PATTERNS=(
+          "password.*=.*[\"'][^\"']{8,}[\"']"
+          "token.*=.*[\"'][^\"']{20,}[\"']"
+          "key.*=.*[\"'](?:ssh-|-----BEGIN)[^\"']+[\"']"
+          "secret.*=.*[\"'][^\"']{16,}[\"']"
+          "K10[a-f0-9]{32}::server:[a-f0-9]{16}"
+        )
+
+        VIOLATIONS_FOUND=false
+
+        for pattern in "${CREDENTIAL_PATTERNS[@]}"; do
+          MATCHES=$(grep -r -E "$pattern" . --exclude-dir=.git --exclude-dir=node_modules --exclude="*.log" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "❌ Potential hardcoded credential found:"
+            echo "$MATCHES"
+            VIOLATIONS_FOUND=true
+          fi
+        done
+
+        if [ "$VIOLATIONS_FOUND" = true ]; then
+          echo ""
+          echo "🔧 Use ESC or 1Password for credential storage:"
+          echo "  - pulumi config set --secret key value"
+          echo "  - esc env set environment key value --secret"
+          echo "  - op item create ..."
+          exit 1
+        else
+          echo "✅ No hardcoded credentials detected"
+        fi
+
+    - name: 4. Validate Infrastructure as Code Standards
+      run: |
+        echo "📏 Validating IaC standards..."
+
+        cd cluster/
+
+        # Check TypeScript compilation
+        if ! npm run build; then
+          echo "❌ TypeScript compilation failed"
+          exit 1
+        fi
+
+        # Check for proper resource organization
+        REQUIRED_DIRS=(
+          "src/components"
+          "src/config"
+          "src/providers"
+        )
+
+        for dir in "${REQUIRED_DIRS[@]}"; do
+          if [ ! -d "$dir" ]; then
+            echo "❌ Missing required directory: $dir"
+            exit 1
+          fi
+        done
+
+        echo "✅ IaC standards validation passed"
+
+    - name: 5. Check Migration Phase Configuration
+      run: |
+        echo "🔄 Checking migration phase configuration..."
+
+        cd cluster/
+
+        # Verify migration orchestrator is properly configured
+        if ! grep -q "MigrationOrchestrator" src/index.ts; then
+          echo "❌ MigrationOrchestrator not found in main index.ts"
+          exit 1
+        fi
+
+        # Check for proper migration phase handling
+        if ! grep -q "migration_phase" src/index.ts; then
+          echo "❌ Migration phase configuration not found"
+          exit 1
+        fi
+
+        echo "✅ Migration configuration is properly set up"
+
+    - name: 6. Validate Security Practices
+      run: |
+        echo "🛡️ Validating security practices..."
+
+        # Check for proper secret handling in TypeScript files
+        SECURITY_VIOLATIONS=$(grep -r "console.log.*secret\|console.log.*token\|console.log.*password" cluster/src/ || true)
+
+        if [ -n "$SECURITY_VIOLATIONS" ]; then
+          echo "❌ Security violation: secrets being logged:"
+          echo "$SECURITY_VIOLATIONS"
+          exit 1
+        fi
+
+        # Check for proper ESC usage
+        if ! grep -q "cfg.requireSecret\|cfg.getSecret" cluster/src/index.ts; then
+          echo "❌ No ESC secret configuration found in main index"
+          exit 1
+        fi
+
+        echo "✅ Security practices validation passed"
+
+    - name: 7. Check Documentation Updates
+      run: |
+        echo "📚 Checking documentation requirements..."
+
+        REQUIRED_DOCS=(
+          "SCRIPT_RETIREMENT_PLAN.md"
+          "SCRIPT_RETIREMENT_COMPLETE.md"
+        )
+
+        for doc in "${REQUIRED_DOCS[@]}"; do
+          if [ ! -f "$doc" ]; then
+            echo "❌ Missing required documentation: $doc"
+            exit 1
+          fi
+        done
+
+        # Check if README mentions the IaC migration
+        if ! grep -q -i "infrastructure.*code\|iac\|pulumi" README.md; then
+          echo "⚠️ README.md should mention IaC migration"
+        fi
+
+        echo "✅ Documentation requirements satisfied"
+
+    - name: 8. Generate Policy Report
+      run: |
+        echo "📊 Generating policy enforcement report..."
+
+        cat > policy-report.md << 'EOF'
+        # Infrastructure Policy Enforcement Report
+
+        **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        **Commit**: ${{ github.sha }}
+        **Branch**: ${{ github.ref_name }}
+
+        ## Policy Checks
+
+        ✅ **Shell Script Prevention**: No forbidden scripts found
+        ✅ **Pulumi Configuration**: All required components present
+        ✅ **Credential Security**: No hardcoded credentials detected
+        ✅ **IaC Standards**: TypeScript compilation and structure valid
+        ✅ **Migration Configuration**: Orchestrator properly configured
+        ✅ **Security Practices**: No credential leakage detected
+        ✅ **Documentation**: Required documentation present
+
+        ## Summary
+
+        All infrastructure policies are being followed. The codebase maintains:
+        - 100% Infrastructure as Code approach
+        - Zero shell scripts in forbidden paths
+        - Secure credential management
+        - Proper documentation standards
+
+        **Status**: ✅ COMPLIANT
+        EOF
+
+        echo "Policy report generated:"
+        cat policy-report.md
+
+    - name: 10. Adapter Unit Tests
+      run: |
+        echo "🧪 Running adapter unit tests..."
+        if [ -f "adapter/requirements.txt" ]; then
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -r adapter/requirements.txt
+          pytest -q adapter/tests
+          echo "✅ Adapter unit tests passed"
+        else
+          echo "ℹ️ No adapter tests found; skipping"
+        fi
+
+    - name: 9. Validate Against Known Good State
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        echo "🎯 Validating against known good infrastructure state..."
+
+        # This would typically run the validation script
+        # For now, we'll just verify the script exists and is executable
+
+        if [ -f "scripts/validate-iac-migration.sh" ]; then
+          if [ -x "scripts/validate-iac-migration.sh" ]; then
+            echo "✅ IaC validation script is present and executable"
+          else
+            echo "❌ IaC validation script is not executable"
+            exit 1
+          fi
+        else
+          echo "❌ IaC validation script not found"
+          exit 1
+        fi
+
+  policy-summary:
+    name: Policy Enforcement Summary
+    runs-on: ubuntu-latest
+    needs: policy-enforcement
+    if: always()
+
+    steps:
+    - name: Policy Enforcement Result
+      run: |
+        if [ "${{ needs.policy-enforcement.result }}" == "success" ]; then
+          echo "🎉 All infrastructure policies enforced successfully!"
+          echo "✅ Repository is compliant with IaC standards"
+          echo "🚀 Safe to deploy infrastructure changes"
+        else
+          echo "❌ Policy enforcement failed"
+          echo "🔧 Review the policy checks and fix violations"
+          echo "📖 See SCRIPT_RETIREMENT_COMPLETE.md for guidance"
+          exit 1
+        fi

@@ -1,0 +1,39 @@
+name: "bert-base-uncased"
+platform: "onnxruntime_onnx"
+max_batch_size: 32
+
+input: [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+  }
+]
+
+output: [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [ -1, -1, 63 ]  # batch, seq_len, num_labels (63 labels for Ebisu NER)
+  }
+]
+
+optimization {
+  execution_accelerators {
+    gpu_execution_accelerator: [ { name: "tensorrt" } ]
+  }
+}
+
+dynamic_batching {
+  preferred_batch_size: [ 8, 16, 32 ]
+  max_queue_delay_microseconds: 100
+}
+
+instance_group: [
+  { kind: KIND_GPU, count: 1, gpus: [0, 1] }
+]
