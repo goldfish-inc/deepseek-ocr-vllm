@@ -87,6 +87,11 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined });
 
+        // Determine URL and authentication method
+        const gitRepoUrl = sshSecret && cluster.gitops.repositoryUrl.startsWith("https://")
+            ? cluster.gitops.repositoryUrl.replace("https://", "ssh://git@")
+            : cluster.gitops.repositoryUrl;
+
         const gitRepository = new k8s.apiextensions.CustomResource(`${name}-git-repo`, {
             apiVersion: "source.toolkit.fluxcd.io/v1",
             kind: "GitRepository",
@@ -96,7 +101,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
             spec: {
                 interval: `${cluster.gitops.intervalSeconds}s`,
-                url: cluster.gitops.repositoryUrl.replace("https://", "ssh://git@"),
+                url: gitRepoUrl,
                 ref: {
                     branch: cluster.gitops.branch,
                 },

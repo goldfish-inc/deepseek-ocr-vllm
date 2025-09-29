@@ -8,6 +8,12 @@ export interface CloudflareTunnelArgs {
     cluster: ClusterConfig;
     k8sProvider: k8s.Provider;
     cloudflareProvider: cloudflare.Provider;
+    extraIngress?: Array<{
+        hostname: pulumi.Input<string>;
+        service: pulumi.Input<string>;
+        noTLSVerify?: pulumi.Input<boolean>;
+    }>;
+    extraDns?: pulumi.Input<string>[];
 }
 
 export interface CloudflareTunnelOutputs {
@@ -23,7 +29,7 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
     constructor(name: string, args: CloudflareTunnelArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:core:CloudflareTunnel", name, {}, opts);
 
-        const { cluster, k8sProvider, cloudflareProvider } = args;
+        const { cluster, k8sProvider, cloudflareProvider, extraIngress = [], extraDns = [] } = args;
         const namespaceName = "cloudflared";
 
         const namespace = new k8s.core.v1.Namespace(`${name}-ns`, {
@@ -55,7 +61,11 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
                 namespace: namespace.metadata.name,
             },
             data: {
-                "config.yaml": pulumi.interpolate`tunnel: ${cluster.cloudflare.tunnelId}
+                "config.yaml": pulumi.output(extraIngress).apply((rules) => {
+                    const extras = rules.map(r => `  - hostname: ${r.hostname}
+    service: ${r.service}
+    originRequest:\n      noTLSVerify: ${r.noTLSVerify ? "true" : "false"}\n`).join("");
+                    return `tunnel: ${cluster.cloudflare.tunnelId}
 credentials-file: /etc/cloudflared/token/token
 no-autoupdate: true
 metrics: 0.0.0.0:${cluster.metricsPort}
@@ -63,9 +73,11 @@ ingress:
   - hostname: ${cluster.cloudflare.tunnelHostname}
     service: ${cluster.cloudflare.tunnelServiceUrl}
     originRequest:
-      noTLSVerify: true
-  - service: http_status:404
-` as pulumi.Output<string>,
+      noTLSVerify: false
+      caPool: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+${extras}  - service: http_status:404
+` as string;
+                }),
             },
         }, { provider: k8sProvider, parent: this });
 
@@ -210,7 +222,7 @@ ingress:
             },
         }, { provider: k8sProvider, parent: this });
 
-        const dnsRecord = new cloudflare.Record(`${name}-record`, {
+        const dnsRecord = new cloudflare.DnsRecord(`${name}-record`, {
             zoneId: cluster.cloudflare.zoneId,
             name: cluster.cloudflare.tunnelHostname,
             type: "CNAME",
@@ -219,6 +231,19 @@ ingress:
             ttl: 1,
             comment: pulumi.interpolate`Managed by Pulumi for cluster ${cluster.name}`,
         }, { provider: cloudflareProvider, parent: this });
+
+        // Optional extra DNS hostnames
+        extraDns.forEach((host, idx) => {
+            new cloudflare.DnsRecord(`${name}-extra-${idx}`, {
+                zoneId: cluster.cloudflare.zoneId,
+                name: host,
+                type: "CNAME",
+                content: cluster.cloudflare.tunnelTarget,
+                proxied: true,
+                ttl: 1,
+                comment: pulumi.interpolate`Extra hostname for ${cluster.name}`,
+            }, { provider: cloudflareProvider, parent: this });
+        });
 
         this.outputs = {
             namespace: namespace.metadata.name,
