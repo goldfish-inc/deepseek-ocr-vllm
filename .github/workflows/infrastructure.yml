@@ -61,7 +61,7 @@ jobs:
         run: pnpm --filter @oceanid/cluster build
 
       - name: Set up OPA CLI
-        uses: open-policy-agent/setup-opa@v3
+        uses: open-policy-agent/setup-opa@v2.2.0
         with:
           version: latest
 
