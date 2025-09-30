@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "database": "ebisu",
-  "description": "NER Label to Database Schema Mapping for Maritime Intelligence Platform",
+  "database": "curated",
+  "description": "NER Label to Database Schema Mapping for Oceanid Maritime Intelligence Platform",
 
   "ner_labels": [
     "O",
