@@ -23,6 +23,7 @@ import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
 import { DatabaseMigrations } from "./components/databaseMigrations";
+import { CrunchyBridgeCluster } from "./components/crunchyBridgeCluster";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -214,11 +215,34 @@ if (enableAppsStack) {
 }
 
 // =============================================================================
-// CRUNCHYBRIDGE DATABASE MIGRATIONS (V3-V6)
+// CRUNCHYBRIDGE DATABASE PROVISIONING + MIGRATIONS
 // =============================================================================
 
-// Use CrunchyBridge managed PostgreSQL for production database
-const crunchyDbUrl = cfg.requireSecret("postgres_url");
+// Provision CrunchyBridge managed PostgreSQL cluster via IaC
+const enableCrunchyBridgeProvisioning = cfg.getBoolean("enableCrunchyBridgeProvisioning") ?? false;
+let crunchyCluster: CrunchyBridgeCluster | undefined;
+let crunchyDbUrl: pulumi.Output<string>;
+
+if (enableCrunchyBridgeProvisioning) {
+    crunchyCluster = new CrunchyBridgeCluster("ebisu", {
+        applicationId: cfg.requireSecret("crunchybridge_app_id"),
+        applicationSecret: cfg.requireSecret("crunchybridge_app_secret"),
+        teamId: cfg.requireSecret("crunchybridge_team_id"),
+        name: "ebisu",
+        provider: "aws",
+        region: "us-east-2",
+        planId: "hobby-2", // 4GB RAM, 1 vCPU, 50GB storage
+        majorVersion: 17,
+        storage: 50,
+        isHa: false,
+    });
+    crunchyDbUrl = crunchyCluster.outputs.connectionUrl;
+} else {
+    // Use existing database URL from config (manual provisioning)
+    crunchyDbUrl = cfg.requireSecret("postgres_url");
+}
+
+// Apply database migrations (V3-V6) via Kubernetes Jobs
 const enableDatabaseMigrations = cfg.getBoolean("enableDatabaseMigrations") ?? true;
 
 if (enableDatabaseMigrations) {
@@ -228,7 +252,7 @@ if (enableDatabaseMigrations) {
         dbUrl: crunchyDbUrl,
         migrationsPath: "../../../sql/migrations", // Relative to compiled dist/src/components/
         enableSeedData: true,
-    });
+    }, { dependsOn: crunchyCluster ? [crunchyCluster] : [] });
 }
 
 const flux = new FluxBootstrap("gitops", {

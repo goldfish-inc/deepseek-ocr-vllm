@@ -4,3 +4,9 @@ runtime:
   options:
     typescript: true
 description: Oceanid Cluster - Talos + k3s + Vault + Cloudflare Infrastructure
+packages:
+  crunchybridge:
+    source: terraform-provider
+    version: 0.14.0
+    parameters:
+      - CrunchyData/crunchybridge
