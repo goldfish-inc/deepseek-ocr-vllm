@@ -55,7 +55,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Type-check cluster program
         run: pnpm --filter @oceanid/cluster build
@@ -97,7 +97,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
@@ -150,7 +150,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
