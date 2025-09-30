@@ -25,7 +25,30 @@ if SENTRY_DSN:
 
 TRITON_BASE = os.getenv("TRITON_BASE_URL", "http://localhost:8000")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "bert-base-uncased")
-NER_LABELS = json.loads(os.getenv("NER_LABELS", "[\"O\",\"VESSEL\",\"HS_CODE\",\"PORT\",\"COMMODITY\",\"IMO\",\"FLAG\",\"RISK_LEVEL\",\"DATE\"]"))
+
+# Load NER labels from labels.json or environment variable
+# CRITICAL: No silent fallback - fail fast if labels missing to prevent mislabeling
+NER_LABELS_ENV = os.getenv("NER_LABELS")
+if NER_LABELS_ENV:
+    try:
+        NER_LABELS = json.loads(NER_LABELS_ENV)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Failed to parse NER_LABELS environment variable: {e}")
+else:
+    # Load from labels.json file
+    labels_path = os.path.join(os.path.dirname(__file__), "..", "labels.json")
+    try:
+        with open(labels_path, "r") as f:
+            labels_data = json.load(f)
+            NER_LABELS = [label["label"] for label in labels_data["labels"]]
+    except FileNotFoundError:
+        raise RuntimeError(
+            "labels.json not found and NER_LABELS environment variable not set. "
+            "Cannot start adapter without label taxonomy. "
+            "Set NER_LABELS env var or ensure labels.json exists at project root."
+        )
+    except (json.JSONDecodeError, KeyError) as e:
+        raise RuntimeError(f"Failed to load labels from labels.json: {e}")
 
 app = FastAPI()
 
@@ -43,9 +66,51 @@ def _bytes_tensor(name: str, value: bytes):
 def _int64_tensor(name: str, arr: np.ndarray):
     return {"name": name, "shape": list(arr.shape), "datatype": "INT64", "data": arr.astype(np.int64).tolist()}
 
+@app.on_event("startup")
+async def validate_labels():
+    """Validate NER labels match Triton model output shape on startup"""
+    try:
+        # Query Triton model metadata to get expected number of classes
+        metadata_url = f"{TRITON_BASE}/v2/models/{DEFAULT_MODEL}/config"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(metadata_url)
+            response.raise_for_status()
+            model_config = response.json()
+
+            # Extract num_labels from model output shape
+            # Expected: output shape [-1, -1, num_labels] for token classification
+            outputs = model_config.get("output", [])
+            if outputs and len(outputs) > 0:
+                output_shape = outputs[0].get("dims", [])
+                if len(output_shape) >= 3:
+                    model_num_labels = output_shape[2]  # Third dimension is num_labels
+
+                    if model_num_labels != len(NER_LABELS):
+                        raise RuntimeError(
+                            f"CRITICAL: Label count mismatch! "
+                            f"Model '{DEFAULT_MODEL}' outputs {model_num_labels} classes, "
+                            f"but adapter has {len(NER_LABELS)} labels loaded. "
+                            f"This will cause mislabeling. "
+                            f"Check labels.json or NER_LABELS environment variable."
+                        )
+
+                    print(f"✅ Label validation passed: {len(NER_LABELS)} labels match model output shape")
+    except httpx.HTTPError as e:
+        print(f"⚠️  Warning: Could not validate labels against Triton model: {e}")
+        print(f"   Proceeding with {len(NER_LABELS)} labels loaded from configuration")
+    except Exception as e:
+        print(f"⚠️  Warning: Label validation error: {e}")
+
 @app.get("/healthz")
 def healthz():
-    return {"ok": True}
+    return {
+        "ok": True,
+        "labels": {
+            "count": len(NER_LABELS),
+            "version": "1.0.0",  # From labels.json
+            "source": "labels.json" if not os.getenv("NER_LABELS") else "NER_LABELS env var"
+        }
+    }
 
 @app.post("/predict")
 async def predict(req: PredictRequest):

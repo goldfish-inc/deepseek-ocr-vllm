@@ -11,8 +11,11 @@ from enum import Enum
 
 
 class EntityType(Enum):
-    """Entity types aligned with Ebisu database schema"""
+    """Entity types aligned with Oceanid database schema (all 63 labels from labels.json v1.0.0)"""
+    # Special
     O = "O"  # Outside/Non-entity
+
+    # Vessel identity & identifiers
     VESSEL = "VESSEL"
     VESSEL_NAME = "VESSEL_NAME"
     IMO = "IMO"
@@ -20,14 +23,20 @@ class EntityType(Enum):
     MMSI = "MMSI"
     FLAG = "FLAG"
     PORT = "PORT"
+
+    # Entities
     ORGANIZATION = "ORGANIZATION"
     PERSON = "PERSON"
     COMPANY = "COMPANY"
+
+    # Vessel associates
     BENEFICIAL_OWNER = "BENEFICIAL_OWNER"
     OPERATOR = "OPERATOR"
     CHARTERER = "CHARTERER"
     VESSEL_MASTER = "VESSEL_MASTER"
     CREW_MEMBER = "CREW_MEMBER"
+
+    # Vessel specs & metrics
     GEAR_TYPE = "GEAR_TYPE"
     VESSEL_TYPE = "VESSEL_TYPE"
     COMMODITY = "COMMODITY"
@@ -35,9 +44,13 @@ class EntityType(Enum):
     SPECIES = "SPECIES"
     RISK_LEVEL = "RISK_LEVEL"
     SANCTION = "SANCTION"
+
+    # Temporal & location
     DATE = "DATE"
     LOCATION = "LOCATION"
     COUNTRY = "COUNTRY"
+
+    # Regulatory
     RFMO = "RFMO"
     LICENSE = "LICENSE"
     TONNAGE = "TONNAGE"
@@ -45,9 +58,56 @@ class EntityType(Enum):
     ENGINE_POWER = "ENGINE_POWER"
     EU_CFR = "EU_CFR"
 
+    # Authorization types
+    FISHING_AUTHORIZATION = "FISHING_AUTHORIZATION"
+    FISHING_LICENSE = "FISHING_LICENSE"
+    TRANSSHIPMENT_AUTHORIZATION = "TRANSSHIPMENT_AUTHORIZATION"
+    CARRIER_AUTHORIZATION = "CARRIER_AUTHORIZATION"
+    OBSERVER_AUTHORIZATION = "OBSERVER_AUTHORIZATION"
+    SUPPORT_VESSEL_AUTHORIZATION = "SUPPORT_VESSEL_AUTHORIZATION"
 
-# NER Labels for model training/inference (order matters!)
+    # Vessel specifications (continued)
+    HULL_MATERIAL = "HULL_MATERIAL"
+    VESSEL_ENGINE_TYPE = "VESSEL_ENGINE_TYPE"
+    VESSEL_FUEL_TYPE = "VESSEL_FUEL_TYPE"
+    FREEZER_TYPE = "FREEZER_TYPE"
+    BUILD_YEAR = "BUILD_YEAR"
+    FLAG_REGISTERED_DATE = "FLAG_REGISTERED_DATE"
+    EXTERNAL_MARKING = "EXTERNAL_MARKING"
+    CREW_COUNT = "CREW_COUNT"
+
+    # Metrics
+    METRIC_VALUE = "METRIC_VALUE"
+    UNIT = "UNIT"
+
+    # Authorization metadata
+    AUTHORIZATION_STATUS = "AUTHORIZATION_STATUS"
+
+    # Intelligence metadata
+    SANCTION_TYPE = "SANCTION_TYPE"
+    SANCTION_PROGRAM = "SANCTION_PROGRAM"
+
+    # Entity metadata
+    ENTITY_TYPE = "ENTITY_TYPE"
+    ENTITY_SUBTYPE = "ENTITY_SUBTYPE"
+    ASSOCIATION_TYPE = "ASSOCIATION_TYPE"
+    OWNERSHIP_TYPE = "OWNERSHIP_TYPE"
+    CONTROL_LEVEL = "CONTROL_LEVEL"
+    ADDRESS_TYPE = "ADDRESS_TYPE"
+    ALIAS_TYPE = "ALIAS_TYPE"
+    NAME_TYPE = "NAME_TYPE"
+    GENDER = "GENDER"
+
+    # Scores
+    RISK_SCORE = "RISK_SCORE"
+    CONFIDENCE_SCORE = "CONFIDENCE_SCORE"
+
+
+# NER Labels for model training/inference (order matters - must match labels.json!)
 NER_LABELS = [label.value for label in EntityType]
+
+# Validate count matches labels.json expectation
+assert len(NER_LABELS) == 63, f"Expected 63 labels from labels.json, got {len(NER_LABELS)}"
 
 # Export for environment variable
 NER_LABELS_JSON = json.dumps(NER_LABELS)
