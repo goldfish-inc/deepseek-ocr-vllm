@@ -107,8 +107,7 @@ jobs:
         uses: pulumi/auth-actions@v1
         with:
           organization: ${{ env.PULUMI_ORGANIZATION }}
-          project: ${{ env.PULUMI_PROJECT }}
-          requested-token-type: urn:pulumi:token-type:access_token:project
+          requested-token-type: urn:pulumi:token-type:access_token:organization
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -160,8 +159,7 @@ jobs:
         uses: pulumi/auth-actions@v1
         with:
           organization: ${{ env.PULUMI_ORGANIZATION }}
-          project: ${{ env.PULUMI_PROJECT }}
-          requested-token-type: urn:pulumi:token-type:access_token:project
+          requested-token-type: urn:pulumi:token-type:access_token:organization
 
       - name: Pulumi up
         uses: pulumi/actions@v5
