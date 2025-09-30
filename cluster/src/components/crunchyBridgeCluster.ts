@@ -3,14 +3,10 @@ import * as crunchybridge from "@pulumi/crunchybridge";
 
 export interface CrunchyBridgeClusterArgs {
   /**
-   * CrunchyBridge application ID for API authentication
+   * CrunchyBridge API key (cbkey_...) for authentication
+   * Will be used as applicationSecret in provider
    */
-  applicationId: pulumi.Input<string>;
-
-  /**
-   * CrunchyBridge application secret for API authentication
-   */
-  applicationSecret: pulumi.Input<string>;
+  apiKey: pulumi.Input<string>;
 
   /**
    * Cluster name (e.g., "ebisu")
@@ -92,12 +88,12 @@ export class CrunchyBridgeCluster extends pulumi.ComponentResource {
   ) {
     super("oceanid:db:CrunchyBridgeCluster", name, {}, opts);
 
-    // Create CrunchyBridge provider with API credentials
+    // Create CrunchyBridge provider with API key
+    // The cbkey_ format is used directly as the applicationSecret
     const cbProvider = new crunchybridge.Provider(
       `${name}-provider`,
       {
-        applicationId: args.applicationId,
-        applicationSecret: args.applicationSecret,
+        applicationSecret: args.apiKey,
       },
       { parent: this }
     );

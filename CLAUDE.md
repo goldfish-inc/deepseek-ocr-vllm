@@ -2,6 +2,23 @@
 
 This file contains specific instructions for AI assistants working with the Oceanid K3s infrastructure.
 
+## ⚠️ CRITICAL: NO MANUAL PULUMI OPERATIONS
+
+**NEVER run Pulumi commands manually (`pulumi up`, `pulumi preview`, `pulumi destroy`, etc.)**
+
+All infrastructure changes MUST go through GitHub Actions to prevent drift:
+1. Commit code changes to git
+2. Push to `main` branch
+3. GitHub Actions workflow automatically runs `pulumi up`
+4. Monitor via `gh run watch`
+
+**Manual Pulumi operations create state drift and break GitOps workflow!**
+
+The ONLY allowed local Pulumi commands:
+- `pulumi config set` - for configuration (gets committed to git)
+- `pulumi config get` - for reading config
+- `pulumi stack output` - for viewing outputs (read-only)
+
 ## Critical Connection Setup
 
 ### K3s Cluster Access

@@ -225,13 +225,12 @@ let crunchyDbUrl: pulumi.Output<string>;
 
 if (enableCrunchyBridgeProvisioning) {
     crunchyCluster = new CrunchyBridgeCluster("ebisu", {
-        applicationId: cfg.requireSecret("crunchybridge_app_id"),
-        applicationSecret: cfg.requireSecret("crunchybridge_app_secret"),
+        apiKey: cfg.requireSecret("crunchybridge_api_key"),
         teamId: cfg.requireSecret("crunchybridge_team_id"),
         name: "ebisu",
         provider: "aws",
         region: "us-east-2",
-        planId: "hobby-2", // 4GB RAM, 1 vCPU, 50GB storage
+        planId: "standard-4", // 4GB RAM, 1 vCPU, 50GB storage (matches existing)
         majorVersion: 17,
         storage: 50,
         isHa: false,
