@@ -22,6 +22,7 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
+import { DatabaseMigrations } from "./components/databaseMigrations";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -210,6 +211,24 @@ if (enableAppsStack) {
         new DbBootstrap("db-bootstrap", { k8sProvider, namespace: namespaceName, dbUrl }, { dependsOn: [pg] });
     }
     // MinIO/Airflow intentionally skipped per ops decision; add flags later if needed.
+}
+
+// =============================================================================
+// CRUNCHYBRIDGE DATABASE MIGRATIONS (V3-V6)
+// =============================================================================
+
+// Use CrunchyBridge managed PostgreSQL for production database
+const crunchyDbUrl = cfg.requireSecret("postgres_url");
+const enableDatabaseMigrations = cfg.getBoolean("enableDatabaseMigrations") ?? true;
+
+if (enableDatabaseMigrations) {
+    new DatabaseMigrations("crunchybridge-migrations", {
+        k8sProvider,
+        namespace: namespaceName,
+        dbUrl: crunchyDbUrl,
+        migrationsPath: "../../../sql/migrations", // Relative to compiled dist/src/components/
+        enableSeedData: true,
+    });
 }
 
 const flux = new FluxBootstrap("gitops", {
