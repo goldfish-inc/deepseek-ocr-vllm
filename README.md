@@ -126,6 +126,121 @@ export KUBECONFIG=cluster/kubeconfig.yaml
 kubectl get nodes
 ```
 
+## GPU Access via Calypso (Contract)
+
+This is the standardized path to the GPU workstation — do not reinvent this.
+
+- DNS: `gpu.<base>` (e.g., `gpu.boathou.se`) is a CNAME to the Cloudflare Node Tunnel target `TUNNEL_ID.cfargotunnel.com`.
+- Host tunnel on Calypso: Pulumi `HostCloudflared` renders `/etc/cloudflared/config.yaml` and a systemd unit `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
+- Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds `/opt/triton/models`.
+- Adapter in cluster: `ls-triton-adapter` calls `TRITON_BASE_URL=https://gpu.<base>`.
+- Pulumi flags/keys: `enableCalypsoHostConnector=true`, `cloudflareNodeTunnelId|Token|Hostname`, optional `tritonImage`.
+
+Mermaid (request flow):
+
+```mermaid
+sequenceDiagram
+  participant SME as SME Browser
+  participant LS as Label Studio (K8s)
+  participant AD as Adapter (K8s)
+  participant CF as Cloudflare Edge
+  participant CL as cloudflared (Calypso)
+  participant TR as Triton (Calypso)
+
+  SME->>LS: Upload doc / open task
+  LS->>AD: ML backend /predict
+  AD->>CF: HTTPS https://gpu.<base>
+  CF->>CL: Tunnel request
+  CL->>TR: http://localhost:8000/v2/models/.../infer
+  TR-->>CL: logits
+  CL-->>CF: response
+  CF-->>AD: 200 + logits
+  AD-->>LS: pre-labels
+  ```
+
+  Admin commands (Calypso):
+  - Restart Triton: `sudo systemctl restart tritonserver`
+  - Restart tunnel: `sudo systemctl restart cloudflared-node`
+  - Model repo: `/opt/triton/models/<model>/1/model.onnx` (config.pbtxt in model dir)
+
+### PDF Support (Docling‑Granite via Triton Python)
+
+- Copy the provided Triton Python model to Calypso:
+  - `scp -r triton-models/docling_granite_python calypso:/tmp/`
+  - `ssh calypso "sudo mv /tmp/docling_granite_python /opt/triton/models/ && sudo systemctl restart tritonserver"`
+- Call through the adapter with `model: "docling_granite_python"` and `pdf_base64`.
+
+Example:
+
+```bash
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+PDF64=$(base64 -w0 sample.pdf)
+curl -s -X POST http://localhost:9090/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"docling_granite_python","pdf_base64":"'"$PDF64"'","prompt":"Extract vessel info"}'
+```
+
+Alternatively, if you have an accessible document URL, you can pass `pdf_url` and skip base64:
+
+```bash
+curl -s -X POST http://localhost:9090/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"docling_granite_python","pdf_url":"https://example.com/doc.pdf","prompt":"Extract vessel info"}'
+```
+
+Label Studio integration
+- For automatic PDF pre‑labels from tasks, set the ML Model URL to the adapter's LS endpoint:
+  - `http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls`
+  The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.
+
+## Model Training Loop (DistilBERT NER)
+
+- Train a NER model from your HF JSONL annotations, export to ONNX, and deploy to Triton.
+  This is automated via GitHub Actions and a host-side puller.
+
+Steps
+- Prepare labels JSON (ESC `nerLabels` order is the ground truth).
+- Train locally (requires Python, transformers, datasets):
+  - `python scripts/ner_train.py --labels labels.json --data-dir ./local_annotations --out ./models/ner-distilbert`
+- Export ONNX with Optimum:
+  - `bash scripts/export_onnx.sh ./models/ner-distilbert distilbert_onnx 63`
+- Deploy to Calypso:
+  - `scp distilbert_onnx/model.onnx calypso:/tmp && ssh calypso 'sudo mkdir -p /opt/triton/models/distilbert-base-uncased/1 && sudo mv /tmp/model.onnx /opt/triton/models/distilbert-base-uncased/1/ && sudo systemctl restart tritonserver'`
+
+Notes
+- Keep `triton-models/distilbert-base-uncased/config.pbtxt` in sync with label count.
+- CI: `.github/workflows/train-ner.yml` runs nightly (or on demand) to train and publish `onnx/model.onnx` to `HF_MODEL_REPO` (set via GitHub Variables).
+- Calypso: a `model-puller` systemd timer fetches the latest ONNX from HF and drops a new version under `/opt/triton/models/distilbert-base-uncased/<n>/`.
+- Triton runs with `--model-control-mode=poll` and auto-loads new versions.
+
+## SME Workflow (CSV/Text/PDF/Images)
+
+For SMEs working with multi-format data:
+
+- v1 (current): Pre-labels for Text and PDFs. CSVs work when a row has a `text` column or a `pdf`/`url` column. Images require conversion to PDF or OCR to enable pre-labels.
+- v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically in-cluster and import clean tasks into Label Studio.
+
+See the detailed guide with diagrams: `docs/SME_WORKFLOW.md`.
+
+## External Postgres (CrunchyBridge)
+
+- Preferred for staging. Provide the connection URI via Pulumi config, then apply SQL migrations locally.
+
+Steps
+- Set the DB URL (secret):
+  - `pulumi -C cluster config set --secret oceanid-cluster:postgres_url 'postgresql://<user>:<pass>@<host>:5432/<db>'`
+- Deploy the sink (reads `DATABASE_URL` from config):
+  - `make up`
+- Apply schema migrations from your workstation:
+  - `export DATABASE_URL='postgresql://<user>:<pass>@<host>:5432/<db>'`
+  - `make db:migrate`
+- Check connectivity:
+  - `make db:psql`
+
+Notes
+- Migrations live under `sql/migrations/`; see `sql/README.md`.
+- If `postgres_url` is not set, the sink falls back to in-cluster Postgres when `postgres_password` is configured.
+
 ## CI/CD Overview
 
 The `.github/workflows/infrastructure.yml` pipeline performs the following:
