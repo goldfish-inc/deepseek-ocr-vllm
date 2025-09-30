@@ -108,6 +108,7 @@ jobs:
         with:
           organization: ${{ env.PULUMI_ORGANIZATION }}
           requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -160,6 +161,7 @@ jobs:
         with:
           organization: ${{ env.PULUMI_ORGANIZATION }}
           requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
 
       - name: Pulumi up
         uses: pulumi/actions@v5
