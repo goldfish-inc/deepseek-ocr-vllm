@@ -338,10 +338,13 @@ if (enableCalypsoHostConnector) {
         }, { provider: cloudflareProvider });
     }
 
-    // Host-side model puller to fetch latest ONNX from HF and drop new versions for Triton
-    const hfModelRepo = cfg.get("hfModelRepo") || "goldfish-inc/oceanid-ner-distilbert";
+    // Host-side model pullers to fetch latest models from HF and drop new versions for Triton
+    const hfModelRepo = cfg.get("hfModelRepo") || "distilbert/distilbert-base-uncased";
+    const graniteModelRepo = cfg.get("graniteModelRepo") || "ibm-granite/granite-docling-258M";
+
     if (hfToken) {
-        new HostModelPuller("calypso-model-puller", {
+        // DistilBERT NER model (PyTorch - will be converted to ONNX later)
+        new HostModelPuller("calypso-distilbert-puller", {
             host: "192.168.2.80",
             user: "oceanid",
             privateKey: cfg.requireSecret("calypso_ssh_key"),
@@ -349,6 +352,19 @@ if (enableCalypsoHostConnector) {
             hfModelRepo: hfModelRepo,
             targetDir: "/opt/triton/models/distilbert-base-uncased",
             interval: "15min",
+            modelType: "pytorch",
+        }, { dependsOn: [calypsoTriton!] });
+
+        // Granite Docling model (PyTorch/MLX)
+        new HostModelPuller("calypso-granite-puller", {
+            host: "192.168.2.80",
+            user: "oceanid",
+            privateKey: cfg.requireSecret("calypso_ssh_key"),
+            hfToken: hfToken,
+            hfModelRepo: graniteModelRepo,
+            targetDir: "/opt/triton/models/docling_granite_python",
+            interval: "15min",
+            modelType: "pytorch",
         }, { dependsOn: [calypsoTriton!] });
     }
 
