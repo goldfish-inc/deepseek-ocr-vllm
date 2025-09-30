@@ -72,6 +72,29 @@ psql $DATABASE_URL -c "\dx" | grep -E '(pgcrypto|postgis|btree_gist)'
 
 ### Step 1: Enable Extensions
 
+#### Option A: CrunchyBridge (Recommended)
+
+```bash
+# Get database URL from Pulumi ESC (all secrets stored in ESC)
+export DATABASE_URL=$(pulumi -C cluster config get postgres_url --plaintext)
+
+# CrunchyBridge automatically has extensions available - just enable them
+psql $DATABASE_URL <<'SQL'
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+SQL
+```
+
+**CrunchyBridge advantages:**
+- Extensions pre-installed (no package installation needed)
+- Superuser privileges available
+- Managed backups (WAL-based, point-in-time recovery)
+- High availability built-in
+- Connection string stored securely in Pulumi ESC
+
+#### Option B: Self-Hosted PostgreSQL
+
 ```bash
 # Production database
 export DATABASE_URL="postgresql://user:password@host:5432/oceanid_staging"
