@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as cloudflare from "@pulumi/cloudflare";
 import * as k8s from "@pulumi/kubernetes";
+import * as command from "@pulumi/command";
 
 import { clusterConfig } from "./config";
 import { cloudflareProvider, k8sProvider, kubeconfigPath } from "./providers";
@@ -11,6 +12,7 @@ import { ImageAutomation } from "./components/imageAutomation";
 import { LabelStudio } from "./components/labelStudio";
 import { HostCloudflared } from "./components/hostCloudflared";
 import { HostDockerService } from "./components/hostDockerService";
+import { HostModelPuller } from "./components/hostModelPuller";
 import { LsTritonAdapter } from "./components/lsTritonAdapter";
 import { getSentrySettings, toEnvVars } from "./sentry-config";
 import { K3sCluster, NodeConfig } from "./components/k3sCluster";
@@ -18,6 +20,8 @@ import { ControlPlaneLoadBalancer } from "./components/controlPlaneLoadBalancer"
 import { MigrationOrchestrator } from "./components/migrationOrchestrator";
 import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
+import { AnnotationsSink } from "./components/annotationsSink";
+import { DbBootstrap } from "./components/dbBootstrap";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -188,7 +192,7 @@ const tunnel = new CloudflareTunnel("cloudflare", {
 if (enableAppsStack) {
     const pgPassword = cfg.getSecret("postgres_password");
     if (pgPassword) {
-        new k8s.helm.v3.Release("postgres", {
+        const pg = new k8s.helm.v3.Release("postgres", {
             chart: "postgresql",
             version: "15.5.0",
             repositoryOpts: { repo: "https://charts.bitnami.com/bitnami" },
@@ -200,32 +204,12 @@ if (enableAppsStack) {
                 service: { type: "ClusterIP" },
             },
         }, { provider: k8sProvider });
+
+        // Bootstrap schemas/tables for control/raw/stage/label/curated
+        const dbUrl = pulumi.interpolate`postgresql://postgres:${pgPassword}@postgres.${namespaceName}.svc.cluster.local:5432/postgres`;
+        new DbBootstrap("db-bootstrap", { k8sProvider, namespace: namespaceName, dbUrl }, { dependsOn: [pg] });
     }
-
-    new k8s.helm.v3.Release("minio", {
-        chart: "minio",
-        version: "5.2.0",
-        repositoryOpts: { repo: "https://charts.min.io" },
-        name: "minio",
-        namespace: namespaceName,
-        values: {
-            persistence: { enabled: true, size: "200Gi" },
-            service: { type: "ClusterIP" },
-            consoleService: { type: "ClusterIP", port: 9001 },
-        },
-    }, { provider: k8sProvider });
-
-    new k8s.helm.v3.Release("airflow", {
-        chart: "airflow",
-        version: "1.12.0",
-        repositoryOpts: { repo: "https://airflow.apache.org" },
-        name: "airflow",
-        namespace: namespaceName,
-        values: {
-            executor: "KubernetesExecutor",
-            service: { type: "ClusterIP" },
-        },
-    }, { provider: k8sProvider });
+    // MinIO/Airflow intentionally skipped per ops decision; add flags later if needed.
 }
 
 const flux = new FluxBootstrap("gitops", {
@@ -265,7 +249,7 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
 
 const labelStudio = new LabelStudio("label-studio", {
     k8sProvider,
-    mlBackendUrl: lsAdapter.serviceUrl,
+    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}/predict_ls`,
 });
 
 // SME Readiness - Configure boathou.se domain with Cloudflare Access
@@ -279,6 +263,21 @@ const smeReadiness = new SMEReadiness("sme-ready", {
     nodeTunnelId: clusterConfig.nodeTunnel.tunnelId,
     emailDomain: smeEmailDomain,
     enableLabelStudioAccess: enableSMEAccess,
+});
+
+// Annotations sink: receives LS webhooks, appends JSONL to HF dataset and upserts into Postgres
+const hfRepo = cfg.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
+const hfToken = cfg.getSecret("hfAccessToken");
+const pgPassword = cfg.getSecret("postgres_password");
+const postgresUrl = cfg.getSecret("postgres_url"); // External (e.g., CrunchyBridge)
+const dbUrl = (postgresUrl as any) || (pgPassword ? pulumi.interpolate`postgresql://postgres:${pgPassword}@postgres.apps.svc.cluster.local:5432/postgres` : undefined as any);
+const schemaVersion = cfg.get("schemaVersion") || "1.0.0";
+const annotationsSink = new AnnotationsSink("annotations-sink", {
+    k8sProvider,
+    hfRepo,
+    hfToken,
+    dbUrl,
+    schemaVersion,
 });
 
 // Optional: host-level Cloudflared connector on Calypso for GPU access
@@ -317,7 +316,13 @@ if (enableCalypsoHostConnector) {
         ],
         env: tritonEnv,
         gpus: true,
-        args: ["tritonserver", "--model-repository=/models", "--strict-model-config=false"],
+        args: [
+            "tritonserver",
+            "--model-repository=/models",
+            "--strict-model-config=false",
+            "--model-control-mode=poll",
+            "--repository-poll-secs=60",
+        ],
     }, { dependsOn: [calypsoConnector] });
 
     // Ensure gpu.<base> DNS exists when NodeTunnels are disabled
@@ -332,6 +337,47 @@ if (enableCalypsoHostConnector) {
             comment: pulumi.interpolate`GPU access for ${clusterConfig.name} host connector`,
         }, { provider: cloudflareProvider });
     }
+
+    // Host-side model puller to fetch latest ONNX from HF and drop new versions for Triton
+    const hfModelRepo = cfg.get("hfModelRepo") || "goldfish-inc/oceanid-ner-distilbert";
+    if (hfToken) {
+        new HostModelPuller("calypso-model-puller", {
+            host: "192.168.2.80",
+            user: "oceanid",
+            privateKey: cfg.requireSecret("calypso_ssh_key"),
+            hfToken: hfToken,
+            hfModelRepo: hfModelRepo,
+            targetDir: "/opt/triton/models/distilbert-base-uncased",
+            interval: "15min",
+        }, { dependsOn: [calypsoTriton!] });
+    }
+
+    // Sync Triton model configs from repo to Calypso and restart Triton
+    try {
+        const fs = require("fs");
+        const path = require("path");
+        const distilCfg = fs.readFileSync(path.resolve(process.cwd(), "..", "triton-models/distilbert-base-uncased/config.pbtxt"), "utf8");
+        const doclingCfg = fs.readFileSync(path.resolve(process.cwd(), "..", "triton-models/docling_granite_python/config.pbtxt"), "utf8");
+        new command.remote.Command("calypso-sync-triton-configs", {
+            connection: { host: "192.168.2.80", user: "oceanid", privateKey: cfg.requireSecret("calypso_ssh_key") },
+            create: `
+set -euo pipefail
+SUDO=""; if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; fi
+$SUDO mkdir -p /opt/triton/models/distilbert-base-uncased /opt/triton/models/docling_granite_python
+cat > /tmp/distilbert_config.pbtxt <<'CFG'
+${distilCfg}
+CFG
+cat > /tmp/docling_config.pbtxt <<'CFG'
+${doclingCfg}
+CFG
+$SUDO mv /tmp/distilbert_config.pbtxt /opt/triton/models/distilbert-base-uncased/config.pbtxt
+$SUDO mv /tmp/docling_config.pbtxt /opt/triton/models/docling_granite_python/config.pbtxt
+$SUDO systemctl restart tritonserver
+            `,
+        }, { dependsOn: [calypsoTriton!] });
+    } catch (e) {
+        // Ignore local read errors during preview
+    }
 }
 
 // =============================================================================
@@ -342,6 +388,7 @@ export const smeUrls = {
     labelStudio: smeReadiness.labelStudioUrl,
     gpuServices: smeReadiness.gpuServiceUrl,
     adapterHealth: pulumi.interpolate`${lsAdapter.serviceUrl}/healthz`,
+    annotationsWebhook: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
 };
 
 export const smeAccess = {
@@ -358,7 +405,7 @@ export const modelConfiguration = {
         "COMMODITY","HS_CODE","SPECIES","RISK_LEVEL","SANCTION","DATE",
         "LOCATION","COUNTRY","RFMO","LICENSE","TONNAGE","LENGTH","ENGINE_POWER"
     ])),
-    nerLabelCount: 31,
+    nerLabelCount: 63,
     bertModelDimensions: "[batch_size, sequence_length, 63]",
 };
 
