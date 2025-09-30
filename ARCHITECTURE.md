@@ -110,6 +110,32 @@ graph TB
     style Sentry fill:#9b59b6
 ```
 
+## Calypso Access Path (GPU)
+
+```mermaid
+sequenceDiagram
+  participant LS as Label Studio (K8s)
+  participant AD as Adapter (K8s)
+  participant CF as Cloudflare Edge
+  participant CL as cloudflared (Calypso)
+  participant TR as Triton (Calypso)
+
+  LS->>AD: ML backend /predict (JSON)
+  AD->>CF: HTTPS https://gpu.<base>
+  CF->>CL: Node Tunnel connection (auth via credentials.json/token)
+  CL->>TR: http://localhost:8000/v2/... (HTTP v2)
+  TR-->>CL: logits
+  CL-->>CF: response
+  CF-->>AD: 200 + logits
+  AD-->>LS: pre-labels
+```
+
+Component ownership:
+- Pulumi `HostCloudflared` ensures systemd unit + config on Calypso.
+- Pulumi `HostDockerService` ensures `tritonserver.service` with GPU flags.
+- DNS `gpu.<base>` CNAME is created when NodeTunnels are disabled (host connector path) or by NodeTunnels component otherwise.
+
+
 ## Traffic Flow
 
 ```mermaid

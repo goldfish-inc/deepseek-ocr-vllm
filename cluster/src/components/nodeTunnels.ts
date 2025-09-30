@@ -102,7 +102,7 @@ ingress:
       caPool: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
   - hostname: ${nodeTunnel.hostnames.gpu}
-    service: http://localhost:9400
+    service: http://localhost:8000
     originRequest:
       noTLSVerify: true
 

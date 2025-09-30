@@ -6,7 +6,7 @@ export interface HostTritonArgs {
     user: string;
     privateKey: pulumi.Input<string>;
     modelRepoPath?: string; // default /opt/triton/models
-    image?: string; // default nvcr.io/nvidia/tritonserver:24.09-py3
+    image?: string; // default ghcr.io/triton-inference-server/server:2.60.0-py3
     httpPort?: number; // default 8000
     grpcPort?: number; // default 8001
     metricsPort?: number; // default 8002
@@ -23,7 +23,7 @@ export class HostTriton extends pulumi.ComponentResource {
             user,
             privateKey,
             modelRepoPath = "/opt/triton/models",
-            image = "nvcr.io/nvidia/tritonserver:24.09-py3",
+            image = "ghcr.io/triton-inference-server/server:2.60.0-py3",
             httpPort = 8000,
             grpcPort = 8001,
             metricsPort = 8002,
@@ -93,4 +93,3 @@ $SUDO systemctl is-active --quiet tritonserver
         this.registerOutputs({ serviceReady: this.serviceReady });
     }
 }
-

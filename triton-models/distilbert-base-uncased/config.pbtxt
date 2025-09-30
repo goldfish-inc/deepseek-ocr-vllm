@@ -14,4 +14,4 @@ output: [
 dynamic_batching { preferred_batch_size: [ 4, 8, 16 ] max_queue_delay_microseconds: 200 }
 
 # Prefer GPU if present; Triton falls back if unavailable
-instance_group: [ { kind: KIND_GPU, count: 1 } ]
+instance_group: [ { kind: KIND_GPU, gpus: [0] } ]

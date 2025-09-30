@@ -1,7 +1,7 @@
 # Oceanid Infrastructure Status Summary
 
-**Last Updated:** September 26, 2025, 10:40 PM PST
-**Status:** Partially Operational with PKO Image Issues
+**Last Updated:** September 30, 2025
+**Status:** Pre-labels pipeline operational (GPU via Calypso). PKO not in scope.
 
 ## Cluster Overview
 
@@ -15,18 +15,17 @@
 
 #### ✅ Fully Operational
 - **K3s Cluster**: v1.33.4+k3s1 on all nodes
-- **Flux CD**: All 6 controllers running
-  - Source controller syncing from GitHub SSH
-  - Kustomize controller reconciling manifests
-  - Helm controller managing releases
-- **Cloudflare Tunnel**: 2 replicas running latest image
-- **Cert-Manager**: Operational
+- **Cloudflare Tunnels**:
+  - Cluster tunnel: `label.<base>` (Zero Trust)
+  - Node tunnel (Calypso): `gpu.<base>` → Triton 8000
+- **Adapter**: ls-triton-adapter healthy (FastAPI)
+- **Triton (Calypso)**: GHCR 2.60.0, DistilBERT ONNX served on GPU
 - **SSH Access**: Working via tunnel on port 16443
 
-#### ❌ Issues
-- **Pulumi Kubernetes Operator (PKO)**: ImagePullBackOff
-  - Chart v0.6.0 references non-existent image v0.4.0
-  - Pod stuck in backoff loop on srv712429
+#### ℹ️ Notes
+- **Apps stack**: Postgres only (MinIO/Airflow deferred)
+- **Postgres**: CrunchyBridge external DB used for staging (sink writes via DATABASE_URL)
+- **Annotations Sink**: deployed; writes HF JSONL and cleaned extractions to Postgres stage when enabled
 
 ## Recent Fixes & Improvements
 
@@ -37,12 +36,11 @@
 - Standardized on port 16443 locally → 6443 on tethys
 - Documented in README with troubleshooting steps
 
-### 2. Automatic Image Updates
-**Problem:** Cloudflared using outdated version (2024.9.1)
-**Solution:**
-- Changed from hardcoded version to `latest` tag
-- Configured for automatic updates
-- Next: Set up Flux image automation
+### 2. Calypso GPU Path Stabilized
+**Done:**
+- Host cloudflared systemd unit (`cloudflared-node`)
+- DNS `gpu.<base>` → node tunnel target
+- Triton 2.60.0 (GHCR) w/ GPU + DistilBERT ONNX
 
 ### 3. Field Manager Conflicts
 **Problem:** Multiple Pulumi field managers conflicting
@@ -59,13 +57,20 @@
 
 ## Current Issues Analysis
 
-### PKO Image Version Mismatch
-```yaml
-HelmRelease: version 0.6.0
-Deployment: image v0.4.0 (doesn't exist)
+### Calypso Contract (Mermaid)
+```mermaid
+sequenceDiagram
+  participant LS as Label Studio
+  participant AD as Adapter
+  participant CF as Cloudflare
+  participant CL as cloudflared (Calypso)
+  participant TR as Triton (Calypso)
+  LS->>AD: /predict
+  AD->>CF: https://gpu.<base>
+  CF->>CL: tunnel
+  CL->>TR: http://localhost:8000
+  TR-->>AD: logits
 ```
-**Root Cause:** Helm chart misconfiguration
-**Fix Needed:** Update image tag in HelmRelease values
 
 ## Access Instructions
 
@@ -103,8 +108,8 @@ pkill -f "ssh.*16443"     # Kill old tunnels
    - Create ImageUpdateAutomation resource
 
 3. **Complete documentation**
-   - Update architecture diagram
-   - Document GitOps workflow
+   - Update architecture diagrams (Calypso contract)
+   - Document Calypso path in README/Architecture/Operations
 
 ## Key Architecture Decisions
 

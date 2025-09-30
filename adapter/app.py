@@ -56,7 +56,7 @@ async def predict(req: PredictRequest):
         payload = {"inputs": req.inputs if isinstance(req.inputs, list) else [req.inputs]}
     else:
         inputs = []
-        if model.startswith("bert") and req.text:
+        if (model.startswith("bert") or model.startswith("distilbert")) and req.text:
             if _tok is None:
                 raise HTTPException(status_code=500, detail="Tokenizer not available")
             enc = _tok(req.text, return_tensors="np", max_length=512, truncation=True)
@@ -82,7 +82,7 @@ async def predict(req: PredictRequest):
             r = await client.post(url, json=payload)
             r.raise_for_status()
             out = r.json()
-            if model.startswith("bert") and req.task == "classification":
+            if (model.startswith("bert") or model.startswith("distilbert")) and req.task == "classification":
                 outputs = out.get("outputs", [])
                 logits = None
                 for o in outputs:

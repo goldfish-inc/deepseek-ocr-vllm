@@ -61,7 +61,7 @@ import json
 import base64
 import httpx
 import sentry_sdk
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 import numpy as np
 from typing import Optional
@@ -74,8 +74,27 @@ try:
         _tok = AutoTokenizer.from_pretrained(TOKENIZER_DIR, local_files_only=True)
     else:
         _tok = AutoTokenizer.from_pretrained("bert-base-uncased")
+    _tok_cache = {"bert-base-uncased": _tok}
+    def get_tokenizer(name: str):
+        name = (name or "bert-base-uncased").strip()
+        if name in _tok_cache:
+            return _tok_cache[name]
+        try:
+            if os.path.isdir(TOKENIZER_DIR) and os.path.basename(TOKENIZER_DIR) == name:
+                tok = AutoTokenizer.from_pretrained(TOKENIZER_DIR, local_files_only=True)
+            else:
+                tok = AutoTokenizer.from_pretrained(name)
+            _tok_cache[name] = tok
+            return tok
+        except Exception:
+            return _tok
 except Exception:
     _tok = None
+    _tok_cache = {}
+    def get_tokenizer(name: str):
+        if _tok is not None:
+            return _tok
+        raise RuntimeError("Tokenizer not available")
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")
 SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", "dev")
@@ -97,6 +116,7 @@ app = FastAPI()
 class PredictRequest(BaseModel):
     text: Optional[str] = None
     pdf_base64: Optional[str] = None
+    pdf_url: Optional[str] = None
     prompt: Optional[str] = None
     model: Optional[str] = None
     task: Optional[str] = None  # "classification" | "ner"
@@ -126,10 +146,13 @@ async def predict(req: PredictRequest):
     else:
         # Convenience mode
         inputs = []
-        if model.startswith("bert") and req.text:
-            if _tok is None:
+        is_bert_like = model.startswith("bert") or model.startswith("distilbert")
+        if is_bert_like and req.text:
+            try:
+                tok = get_tokenizer(model)
+            except Exception:
                 raise HTTPException(status_code=500, detail="Tokenizer not available")
-            enc = _tok(req.text, return_tensors="np", max_length=512, truncation=True)
+            enc = tok(req.text, return_tensors="np", max_length=512, truncation=True)
             input_ids = enc["input_ids"]
             attention_mask = enc["attention_mask"]
             inputs.append(_int64_tensor("input_ids", input_ids))
@@ -137,12 +160,22 @@ async def predict(req: PredictRequest):
         else:
             if req.text:
                 inputs.append(_bytes_tensor("text", req.text.encode("utf-8")))
+            # Prefer explicit base64 if provided
             if req.pdf_base64:
                 try:
                     raw = base64.b64decode(req.pdf_base64)
                 except Exception as e:
                     raise HTTPException(status_code=400, detail=f"Invalid pdf_base64: {e}")
                 inputs.append(_bytes_tensor("pdf_data", raw))
+            # Fallback to fetching via URL if provided
+            elif req.pdf_url:
+                try:
+                    async with httpx.AsyncClient(timeout=30.0, verify=True) as client:
+                        r = await client.get(req.pdf_url)
+                        r.raise_for_status()
+                        inputs.append(_bytes_tensor("pdf_data", r.content))
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"Failed to fetch pdf_url: {e}")
             if req.prompt:
                 inputs.append(_bytes_tensor("prompt", req.prompt.encode("utf-8")))
         if not inputs:
@@ -155,8 +188,9 @@ async def predict(req: PredictRequest):
             if r.status_code >= 400:
                 raise HTTPException(status_code=502, detail=f"Triton error: {r.status_code} {r.text}")
             out = r.json()
-            # Optional postprocessing for BERT classification
-            if model.startswith("bert") and req.task == "classification":
+            # Optional postprocessing for BERT-family classification
+            is_bert_like = model.startswith("bert") or model.startswith("distilbert")
+            if is_bert_like and req.task == "classification":
                 try:
                     outputs = out.get("outputs", [])
                     logits = None
@@ -174,7 +208,7 @@ async def predict(req: PredictRequest):
                 except Exception:
                     # Fallback to raw
                     return out
-            if model.startswith("bert") and req.task == "ner":
+            if is_bert_like and req.task == "ner":
                 try:
                     outputs = out.get("outputs", [])
                     logits = None
@@ -189,9 +223,13 @@ async def predict(req: PredictRequest):
                     probs = probs / np.sum(probs, axis=-1, keepdims=True)
                     pred = np.argmax(probs, axis=-1)[0]
                     # Token offsets for grouping entities
-                    if _tok is None or req.text is None:
+                    if req.text is None:
                         return {"entities": []}
-                    enc_offsets = _tok(req.text, return_offsets_mapping=True)
+                    try:
+                        tok = get_tokenizer(model)
+                    except Exception:
+                        return {"entities": []}
+                    enc_offsets = tok(req.text, return_offsets_mapping=True)
                     offsets = enc_offsets["offset_mapping"]
                     entities = []
                     current = None
@@ -228,6 +266,45 @@ async def predict(req: PredictRequest):
     except Exception as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
+
+# Label Studio task-aware endpoint: fetch PDF/URL from task payload
+@app.post("/predict_ls")
+async def predict_ls(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    tasks = body if isinstance(body, list) else body.get("tasks") or body.get("data") or []
+    if not isinstance(tasks, list):
+        tasks = [tasks]
+    if not tasks:
+        raise HTTPException(status_code=400, detail="No tasks provided")
+
+    # Try first task
+    t = tasks[0] or {}
+    data = t.get("data", t)
+    pdf_url = None
+    text = None
+    if isinstance(data, dict):
+        text = data.get("text")
+        for k in ["pdf", "file", "document", "url"]:
+            v = data.get(k)
+            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")) and v.lower().endswith(".pdf"):
+                pdf_url = v
+                break
+        if not pdf_url:
+            for v in data.values():
+                if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")) and ".pdf" in v.lower():
+                    pdf_url = v
+                    break
+
+    if pdf_url:
+        return await predict(PredictRequest(pdf_url=pdf_url, model="docling_granite_python"))
+    if text:
+        return await predict(PredictRequest(text=text, model="distilbert-base-uncased", task="ner"))
+
+    raise HTTPException(status_code=400, detail="No PDF URL or text found in task data")
 `;
 
         const externalReq = readFirstExisting("adapter/requirements.txt");
@@ -274,7 +351,7 @@ async def predict(req: PredictRequest):
 
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
-            DEFAULT_MODEL: "bert-base-uncased",
+            DEFAULT_MODEL: "distilbert-base-uncased",
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 

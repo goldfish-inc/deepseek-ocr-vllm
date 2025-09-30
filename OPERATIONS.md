@@ -7,6 +7,13 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 - Calypso (GPU workstation) runs a host‑level cloudflared connector and a simple GPU HTTP service at `https://gpu.boathou.se`.
 - All secrets and tokens are stored in Pulumi ESC (`default/oceanid-cluster`).
 
+### Calypso Contract
+- DNS: `gpu.<base>` CNAME points to the Node Tunnel target `<TUNNEL_ID>.cfargotunnel.com`.
+- Host tunnel: systemd `cloudflared-node.service`, config under `/etc/cloudflared/config.yaml` routing `gpu.<base>` → `http://localhost:8000`.
+- Triton: systemd `tritonserver.service` (Docker), ports 8000/8001/8002; models mounted from `/opt/triton/models`.
+- Adapter: calls `TRITON_BASE_URL=https://gpu.<base>`.
+- Pulumi ownership: `HostCloudflared` and `HostDockerService` components render/update these units.
+
 ## Deploy
 - Minimal, non‑disruptive deploy:
   - `make deploy-simple`
@@ -24,7 +31,36 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
   - Triton HTTP V2 live:
     - `curl -s https://gpu.boathou.se/v2/health/ready`
     - `curl -s https://gpu.boathou.se/v2/models`
+  - Docling model present:
+    - `curl -s https://gpu.<base>/v2/models/docling_granite_python`
+
+## Hands-off Training and Deployment
+
+- GitHub Actions (`.github/workflows/train-ner.yml`) trains nightly from the HF dataset and publishes an updated ONNX to a private HF model repo.
+- Calypso runs a `model-puller` systemd timer that fetches the latest ONNX into `/opt/triton/models/distilbert-base-uncased/<n>/`.
+- Triton is started with repository polling, so new versions load automatically.
+
+Configure once:
+- GitHub Secrets:
+  - `HF_TOKEN` (write access)
+  - `NER_LABELS_JSON` (JSON array matching adapter’s NER_LABELS)
+- GitHub Variables (optional):
+  - `HF_DATASET_REPO` (default `goldfish-inc/oceanid-annotations`)
+  - `HF_MODEL_REPO` (default `goldfish-inc/oceanid-ner-distilbert`)
+- ESC / Pulumi:
+  - `oceanid-cluster:hfAccessToken` (for sink + model puller)
+  - `oceanid-cluster:postgres_url` for CrunchyBridge
 - Check connector health in Cloudflare Zero Trust → Tunnels.
+
+Mermaid (GPU path):
+
+```mermaid
+flowchart LR
+  LS[Label Studio] --> AD[Adapter]
+  AD --> CF[Cloudflare Edge]
+  CF --> CL[cloudflared (Calypso)]
+  CL --> TR[Triton 8000]
+```
 
 ## Secrets & Config
 - ESC keys to verify:
@@ -45,6 +81,24 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 - Calypso sudo:
   - `oceanid` must have passwordless sudo for apt/systemd.
 
+### Calypso quick checks
+```bash
+ssh calypso 'systemctl status cloudflared-node --no-pager; systemctl status tritonserver --no-pager'
+ssh calypso 'curl -sf http://localhost:8000/v2/health/ready && echo OK'
+curl -sk https://gpu.<base>/v2/health/ready
+```
+
+### CrunchyBridge Postgres
+- Configure sink to use external DB:
+  - `pulumi -C cluster config set --secret oceanid-cluster:postgres_url 'postgresql://<user>:<pass>@<host>:5432/<db>'`
+  - `make up`
+- Apply schema migrations locally:
+  - `export DATABASE_URL='postgresql://<user>:<pass>@<host>:5432/<db>'`
+  - `make db:migrate`
+- Quick checks:
+  - `make db:psql`
+  - `psql "$DATABASE_URL" -c "select * from stage.v_documents_freshness;"`
+
 ## Add a new GPU host (host‑level)
 1. Provision SSH user + key; add to ESC.
 2. Add a `HostCloudflared` + optional `HostGpuService` for the host.
@@ -52,14 +106,27 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 
 ## Using Triton with Docling/Granite
 - If you have a ready Docker image (e.g., a Docling‑Granite HTTP server), you can run it instead of Triton. Ask and we’ll switch the host service to that container and route `gpu.<base>` to its HTTP port.
-- To use a model with Triton, place it under `/opt/triton/models/<model>/1/` on Calypso and add a `config.pbtxt`. Triton supports TensorRT, ONNX, PyTorch, TensorFlow and Python backends.
-- If your “docling‑granite” asset is a Python or Torch model, we can wrap it via Triton’s Python backend. This repo includes a skeleton at `triton-models/dockling-granite-python/`. Copy it to Calypso and customize model loading in `model.py`.
+- To use a model with Triton, place it under `/opt/triton/models/<model_name>/1/` on Calypso and add a `config.pbtxt`. Triton supports TensorRT, ONNX, PyTorch, TensorFlow and Python backends.
+- For Docling‑Granite via Python backend, this repo includes a skeleton at `triton-models/docling_granite_python/`. Copy it to Calypso and customize `model.py` as needed.
 
 Example (on Calypso):
 
 ```bash
 sudo mkdir -p /opt/triton/models
-scp -r triton-models/dockling-granite-python calypso:/tmp/
-ssh calypso "sudo mv /tmp/dockling-granite-python /opt/triton/models/dockling_granite && sudo systemctl restart tritonserver"
+scp -r triton-models/docling_granite_python calypso:/tmp/
+ssh calypso "sudo mv /tmp/docling_granite_python /opt/triton/models/ && sudo systemctl restart tritonserver"
 curl -s https://gpu.<base>/v2/models
+
+GPU pinning
+- `distilbert-base-uncased` is pinned to GPU0; `docling_granite_python` is pinned to GPU1 (see `instance_group.gpus` in each `config.pbtxt`). Adjust if hardware layout changes.
+```
+
+Adapter usage (PDF):
+
+```bash
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+PDF64=$(base64 -w0 sample.pdf)
+curl -s -X POST http://localhost:9090/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"docling_granite_python","pdf_base64":"'"$PDF64"'","prompt":"Extract vessel summary"}' | jq .
 ```

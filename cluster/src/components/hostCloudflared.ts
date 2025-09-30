@@ -8,7 +8,7 @@ export interface HostCloudflaredArgs {
     tunnelId: pulumi.Input<string>;
     tunnelToken: pulumi.Input<string>;
     hostnameBase: pulumi.Input<string>; // e.g., boathou.se
-    gpuPort?: number; // default 9400 (set 8000 for Triton)
+    gpuPort?: number; // default 8000 (Triton HTTP v2)
 }
 
 export class HostCloudflared extends pulumi.ComponentResource {
@@ -17,7 +17,7 @@ export class HostCloudflared extends pulumi.ComponentResource {
     constructor(name: string, args: HostCloudflaredArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:networking:HostCloudflared", name, {}, opts);
 
-        const { host, user, privateKey, tunnelId, tunnelToken, hostnameBase, gpuPort = 9400 } = args;
+        const { host, user, privateKey, tunnelId, tunnelToken, hostnameBase, gpuPort = 8000 } = args;
 
         const install = new command.remote.Command(`${name}-install`, {
             connection: { host, user, privateKey },
@@ -49,7 +49,6 @@ cat > /tmp/cloudflared-config.yaml <<'CFG'
 tunnel: ${id}
 no-autoupdate: true
 protocol: auto
-edge-ip-version: "4"
 edge-ip-version: "4"
 metrics: 0.0.0.0:2200
 

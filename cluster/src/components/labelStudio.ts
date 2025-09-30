@@ -29,6 +29,10 @@ export class LabelStudio extends pulumi.ComponentResource {
 
         const labels = { app: "label-studio" };
 
+        const cfg = new pulumi.Config();
+        const adminEmail = cfg.get("labelStudioAdminEmail") || cfg.get("labelStudioEmail") || cfg.get("labelStudioUsername");
+        const adminPassword = cfg.getSecret("labelStudioAdminPassword") || cfg.getSecret("labelStudioPassword");
+
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: "label-studio", namespace },
             spec: {
@@ -45,7 +49,9 @@ export class LabelStudio extends pulumi.ComponentResource {
                                 env: [
                                     { name: "LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED", value: "true" },
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
-                                ],
+                                    ...(adminEmail ? [{ name: "LABEL_STUDIO_USERNAME", value: adminEmail as any }] : []),
+                                    ...(adminPassword ? [{ name: "LABEL_STUDIO_PASSWORD", value: adminPassword as any }] : []),
+                                ] as any,
                                 resources: {
                                     requests: { cpu: "100m", memory: "256Mi" },
                                     limits: { cpu: "500m", memory: "512Mi" },

@@ -67,3 +67,38 @@ deploy-calypso:
 .PHONY: smoke
 smoke:
 	bash scripts/smoke.sh
+
+# Database (CrunchyBridge or any Postgres)
+.PHONY: db:migrate db:psql db:status
+
+MIG_DIR ?= sql/migrations
+DB_URL ?= $(DATABASE_URL)
+
+db:migrate:
+	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
+	@command -v psql >/dev/null 2>&1 || { echo "psql is required"; exit 1; }
+	@for f in $(MIG_DIR)/*.sql; do \
+		echo "==> applying $$f"; \
+		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f "$$f"; \
+	done
+
+db:psql:
+	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
+	psql "$(DB_URL)"
+
+db:status:
+	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
+	psql "$(DB_URL)" -c "select now() as connected_at, current_user, current_database();" -c "select * from control.schema_versions order by applied_at desc limit 10;" || true
+
+# NER training helpers (requires Python with transformers & datasets)
+.PHONY: ner:train ner:export
+
+NER_LABELS ?= labels.json
+NER_DATA_DIR ?= ./local_annotations
+NER_OUT ?= ./models/ner-distilbert
+
+ner:train:
+	python3 scripts/ner_train.py --labels $(NER_LABELS) --data-dir $(NER_DATA_DIR) --out $(NER_OUT)
+
+ner:export:
+	bash scripts/export_onnx.sh $(NER_OUT) distilbert_onnx 63

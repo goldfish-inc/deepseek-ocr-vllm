@@ -47,3 +47,44 @@
 ## Architecture Notes
 - Start with `ARCHITECTURE.md` and `README.md` for context.
 - GitOps entrypoint: Flux watches `clusters/` via `FluxBootstrap`; changes there drive reconciliations.
+
+## GitHub Issues & Progress Management
+
+Goal: Never lose context, ideas, steps, or progress. Treat GitHub Issues as the system of record for work — from ideas to delivery.
+
+When to create/update issues
+- New idea, bug, or scope emerges during implementation.
+- Before starting a medium/large task, create/update an issue with a short plan and acceptance criteria.
+- When you pause/finish a session, leave a final comment summarizing what changed and the next steps.
+
+Issue structure (use templates if present; otherwise follow this skeleton)
+- Title: concise, actionable (e.g., "Docling PDF pre-labels via Triton Python backend").
+- Body sections:
+  - Background: why this matters, current blockers.
+  - Goal/Scope: 2–3 bullets of what will be delivered.
+  - Checklist: task list with verifiable items (use [ ] / [x]).
+  - Validation: commands, endpoints, or screenshots to prove done.
+  - Risks/Rollback: brief note when applicable.
+  - Links: PRs, files, lines (e.g., `cluster/src/components/lsTritonAdapter.ts:1`).
+
+Labels (apply as appropriate)
+- type: feat, fix, docs, chore, refactor
+- area: gpu, adapter, sink, calypso, cloudflared, triton, label-studio, db, policy, infra, ops
+- priority: p0, p1, p2
+- status: blocked, needs-info, ready
+
+Working conventions
+- Reference issues from commits/PRs: include `Refs #<id>` or `Closes #<id>`.
+- Maintain the issue checklist as you progress; check items off as they are completed.
+- For multi-PR work, link each PR in the issue and keep a running "Progress" section.
+- If GitHub is unavailable, mirror updates in `STATUS_SUMMARY.md` or `ISSUES_SUMMARY.md` with the same checklist format, then backfill the issue later.
+
+CLI helpers (optional)
+- Use GitHub CLI when convenient:
+  - `gh issue create -t "Title" -b "Body..." -l feat,adapter`
+  - `gh issue comment <id> -b "Update: ..."`
+  - `gh issue close <id> --comment "Fixed via #<PR>"`
+
+Quality bar for “done”
+- Issue has: clear scope, validation steps, and is linked to the merged PR(s).
+- Any follow-ups are split into new issues and linked in a "Next steps" section.

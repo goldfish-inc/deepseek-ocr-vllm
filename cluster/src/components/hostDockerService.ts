@@ -36,7 +36,14 @@ export class HostDockerService extends pulumi.ComponentResource {
 set -euo pipefail
 SUDO=""; if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; fi
 
-# Install Docker if missing
+# Remove snap Docker if present to avoid confinement issues with bind mounts
+if command -v snap >/dev/null 2>&1 && snap list docker >/dev/null 2>&1; then
+  echo "==> Removing snap docker"
+  $SUDO snap stop docker || true
+  $SUDO snap remove docker || true
+fi
+
+# Install Docker (apt) if missing
 if ! command -v docker >/dev/null 2>&1; then
   $SUDO apt-get update -y >/dev/null 2>&1 || true
   $SUDO apt-get install -y ca-certificates curl gnupg >/dev/null 2>&1 || true
@@ -46,6 +53,13 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | $SUDO tee /etc/apt/sources.list.d/docker.list >/dev/null
   $SUDO apt-get update -y >/dev/null 2>&1 || true
   $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1 || true
+else
+  # Ensure we are using the apt-managed daemon, not snap
+  if systemctl is-active --quiet snap.docker.dockerd; then
+    echo "==> Stopping snap docker daemon"
+    $SUDO systemctl stop snap.docker.dockerd || true
+  fi
+  $SUDO systemctl enable --now docker || true
 fi
 
 echo "==> Pulling image ${img} (best-effort)"
@@ -53,9 +67,22 @@ $SUDO docker pull ${img} >/dev/null 2>&1 || true
 
 GPU_FLAG=""
 if ${gpus ? "true" : "false"}; then
-  # Probe GPU availability for this image; fall back if not available
-  if docker run --rm --gpus all --entrypoint /bin/sh ${img} -c 'exit 0' >/dev/null 2>&1; then
-    GPU_FLAG="--gpus all"
+  # Choose GPU flag based on NVIDIA runtime mode (CSV requires --runtime=nvidia)
+  RUNTIME_EXTRA=""
+  USE_CSV=false
+  if [ -f /etc/nvidia-container-runtime/config.toml ] && grep -q 'mode = "csv"' /etc/nvidia-container-runtime/config.toml; then
+    USE_CSV=true
+    RUNTIME_EXTRA="--runtime=nvidia"
+  fi
+  # Probe GPU availability for this image; choose flags accordingly
+  if [ "$USE_CSV" = true ]; then
+    if docker run --rm $RUNTIME_EXTRA --entrypoint /bin/sh ${img} -c 'exit 0' >/dev/null 2>&1; then
+      GPU_FLAG="$RUNTIME_EXTRA"
+    fi
+  else
+    if docker run --rm --gpus all --entrypoint /bin/sh ${img} -c 'exit 0' >/dev/null 2>&1; then
+      GPU_FLAG="--gpus all"
+    fi
   fi
 fi
 
