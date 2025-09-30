@@ -250,6 +250,58 @@ kubectl annotate gitrepository flux-system -n flux-system \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
+## Project Management
+
+### GitHub Issues for Feature Tracking
+
+**IMPORTANT**: All features, bugs, and enhancements MUST be tracked via GitHub issues.
+
+#### Creating Issues:
+```bash
+# Use gh CLI for consistent formatting
+gh issue create --title "🔧 Feature title" --body "Description" --label "enhancement" --assignee "@me"
+
+# Standard emoji prefixes:
+# 🗄️ Database/storage
+# 🧠 ML/AI features
+# ⚙️ Workers/services
+# 📊 Dashboards/reporting
+# 🔧 Infrastructure
+# 🐛 Bugs
+# 📝 Documentation
+```
+
+#### Issue Workflow:
+1. **Plan first**: Create issue before implementing
+2. **Reference in commits**: Use `#issue-number` in commit messages
+3. **Link PRs**: Use `Closes #issue-number` in PR descriptions
+4. **Update status**: Comment progress, blockers, decisions
+5. **Close when complete**: Only after verification/testing
+
+#### Current Active Projects:
+- **Staging DB Pipeline** (#46-#50): ML-powered CSV cleaning with human-in-loop
+- **Infrastructure Validation** (#40): Cluster health monitoring
+- **GitOps Pattern** (#23): Flux + PKO implementation
+
+#### Issue Labels:
+- `enhancement`: New features
+- `bug`: Something broken
+- `documentation`: Docs updates
+- `question`: Needs clarification
+- `help wanted`: External input needed
+
+#### Finding Issues:
+```bash
+# List open issues
+gh issue list --label enhancement
+
+# View specific issue
+gh issue view 46
+
+# Search issues
+gh issue list --search "staging database"
+```
+
 ---
 
 ## Key Reminders for AI Assistants
@@ -261,5 +313,7 @@ kubectl annotate gitrepository flux-system -n flux-system \
 5. **ALWAYS** use proper error handling for connection issues
 6. **NEVER** assume standard kubeconfig paths work
 7. **ALWAYS** verify tunnel is active before kubectl operations
+8. **ALWAYS** create GitHub issues before starting implementation work
+9. **ALWAYS** reference issue numbers in commits and PRs
 
 This infrastructure follows Infrastructure as Code principles with GitOps deployment, automated dependency management, and comprehensive security controls.

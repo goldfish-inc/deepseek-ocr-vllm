@@ -5,7 +5,43 @@ Pulumi-powered GitOps stack for operating the Oceanid k3s fleet behind Cloudflar
 - `@oceanid/cluster` – the Pulumi program that bootstraps Cloudflare tunnels, Flux, and any supporting workloads on the k3s control plane.
 - `@oceanid/policy` – lightweight TypeScript helpers plus OPA policies that run during CI to keep baseline security controls in place.
 
-> **Status:** The infrastructure compiles and previews successfully, but deployment still depends on Pulumi ESC secrets being populated with real credentials. Treat the manifests as production-ready templates that require verification in your environment.
+> **Status:** Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. New staging database pipeline in development (see [CURRENT_STATE.md](CURRENT_STATE.md) and issues #46-#50).
+
+## Architecture Overview
+
+**Oceanid** serves as the **data processing + ML pipeline layer** that cleans and validates data before promotion to the **@ebisu globalDB** (maritime intelligence platform).
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ @oceanid: ETL + ML Pipeline (Staging)                       │
+│                                                              │
+│  Raw CSV/PDF → Docling-Granite → ML Cleaning → Human Review│
+│      ↓              ↓                ↓             ↓        │
+│  Label Studio   Structure      csv-repair     Corrections  │
+│                 Extraction       -bert                      │
+│                                                              │
+│  Components:                                                 │
+│  - Triton Inference (Calypso GPU): Models                   │
+│  - Label Studio: Annotation + review UI                     │
+│  - Staging DB: Document versions + cleaning audit           │
+│  - Ingestion Worker: Automated CSV processing               │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ Promotion (audited)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│ @ebisu: GlobalDB (Production)                               │
+│                                                              │
+│  Intelligence Platform: Vessel entities, cross-source       │
+│  confirmations, conflict tracking, trust scoring            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Principle: Separation of Concerns
+
+- **@oceanid**: "How was this document cleaned?" (ETL metadata, ML model versions, human corrections)
+- **@ebisu**: "What do we know about this vessel?" (domain intelligence, entity relationships, temporal changes)
+
+See [CURRENT_STATE.md](CURRENT_STATE.md) for detailed component status and [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 
 ## Getting Started
 
