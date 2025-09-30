@@ -86,6 +86,42 @@ class PandasPatternExtractor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call):
         """Extract function calls like re.sub(), str.replace(), etc."""
 
+        # Pattern 0: open(file, encoding='...') - Extract encoding strategies
+        if (isinstance(node.func, ast.Name) and
+            node.func.id == 'open'):
+
+            encoding = None
+            errors_mode = None
+
+            for keyword in node.keywords:
+                if keyword.arg == 'encoding':
+                    try:
+                        encoding = ast.literal_eval(keyword.value)
+                    except:
+                        pass
+                elif keyword.arg == 'errors':
+                    try:
+                        errors_mode = ast.literal_eval(keyword.value)
+                    except:
+                        pass
+
+            if encoding or errors_mode:
+                comment = self.get_comment_for_line(node.lineno)
+                pattern = f"encoding={encoding}" if encoding else ""
+                if errors_mode:
+                    pattern += f",errors={errors_mode}"
+
+                self.rules.append(CleaningRule(
+                    script_name=self.script_path.name,
+                    line_number=node.lineno,
+                    rule_type='encoding_strategy',
+                    pattern=pattern,
+                    replacement=None,
+                    comment=comment or 'File encoding configuration',
+                    source_type=self.source_type,
+                    source_name=self.source_name
+                ))
+
         # Pattern 1: re.sub(pattern, replacement, text)
         if (isinstance(node.func, ast.Attribute) and
             node.func.attr == 'sub' and
@@ -163,6 +199,82 @@ class PandasPatternExtractor(ast.NodeVisitor):
             except (ValueError, SyntaxError):
                 pass
 
+        # Pattern 4: str.split() with delimiter detection
+        if (isinstance(node.func, ast.Attribute) and
+            node.func.attr == 'split' and
+            len(node.args) >= 1):
+
+            try:
+                delimiter = ast.literal_eval(node.args[0])
+                comment = self.get_comment_for_line(node.lineno)
+
+                self.rules.append(CleaningRule(
+                    script_name=self.script_path.name,
+                    line_number=node.lineno,
+                    rule_type='delimiter_detection',
+                    pattern=delimiter,
+                    replacement=None,
+                    comment=comment,
+                    source_type=self.source_type,
+                    source_name=self.source_name
+                ))
+            except (ValueError, SyntaxError):
+                pass
+
+        # Pattern 5: str.join() with delimiter specification
+        if (isinstance(node.func, ast.Attribute) and
+            node.func.attr == 'join' and
+            isinstance(node.func.value, ast.Constant)):
+
+            try:
+                delimiter = node.func.value.value
+                comment = self.get_comment_for_line(node.lineno)
+
+                self.rules.append(CleaningRule(
+                    script_name=self.script_path.name,
+                    line_number=node.lineno,
+                    rule_type='field_merger',
+                    pattern=delimiter,
+                    replacement=None,
+                    comment=comment,
+                    source_type=self.source_type,
+                    source_name=self.source_name
+                ))
+            except (ValueError, SyntaxError, AttributeError):
+                pass
+
+        self.generic_visit(node)
+
+    def visit_Compare(self, node: ast.Compare):
+        """Extract field count validation patterns."""
+        # Pattern: if field_count < expected_fields:
+        if (isinstance(node.left, ast.Name) and
+            'field' in node.left.id.lower() and
+            'count' in node.left.id.lower()):
+
+            comment = self.get_comment_for_line(node.lineno)
+
+            # Determine comparison type
+            if any(isinstance(op, ast.Lt) for op in node.ops):
+                rule_type = 'field_count_too_few'
+            elif any(isinstance(op, ast.Gt) for op in node.ops):
+                rule_type = 'field_count_too_many'
+            elif any(isinstance(op, (ast.NotEq, ast.Eq)) for op in node.ops):
+                rule_type = 'field_count_mismatch'
+            else:
+                rule_type = 'field_count_validation'
+
+            self.rules.append(CleaningRule(
+                script_name=self.script_path.name,
+                line_number=node.lineno,
+                rule_type=rule_type,
+                pattern='field_count_validation',
+                replacement=None,
+                comment=comment or 'Field count validation logic',
+                source_type=self.source_type,
+                source_name=self.source_name
+            ))
+
         self.generic_visit(node)
 
 
@@ -220,9 +332,11 @@ def generate_sql(rules: List[CleaningRule]) -> str:
             rule_name = f"{rule.source_type.lower()}_{rule.source_name or 'all'}_{rule.rule_type}_{idx}"
             rule_name = rule_name.replace('_', '_').lower()
 
-            # Escape SQL strings
-            pattern_escaped = rule.pattern.replace("'", "''")
-            replacement_escaped = (rule.replacement or '').replace("'", "''")
+            # Escape SQL strings (handle cases where pattern might be a list or complex type)
+            pattern_str = str(rule.pattern) if rule.pattern else ''
+            pattern_escaped = pattern_str.replace("'", "''")
+            replacement_str = str(rule.replacement) if rule.replacement else ''
+            replacement_escaped = replacement_str.replace("'", "''")
             comment_escaped = (rule.comment or 'Auto-extracted from legacy script').replace("'", "''")
 
             # Determine priority (higher = more specific)
