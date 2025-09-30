@@ -5,8 +5,7 @@
     "repository": "https://github.com/crunchydata/terraform-provider-crunchybridge",
     "main": "bin/index.js",
     "scripts": {
-        "build": "tsc",
-        "postinstall": "node ./scripts/postinstall.js"
+        "build": "tsc"
     },
     "dependencies": {
         "@pulumi/pulumi": "^3.142.0",
