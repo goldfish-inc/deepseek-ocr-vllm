@@ -1,0 +1,548 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "Single source of truth for NER labels in Oceanid maritime intelligence platform. This taxonomy MUST match model output shape, adapter configuration, and database schema mappings.",
+  "lastUpdated": "2025-09-30",
+  "modelOutputShape": {
+    "batch": -1,
+    "sequenceLength": -1,
+    "numLabels": 63
+  },
+  "labels": [
+    {
+      "index": 0,
+      "label": "O",
+      "description": "Outside entity (non-entity token)",
+      "category": "special",
+      "dbMapping": null
+    },
+    {
+      "index": 1,
+      "label": "VESSEL",
+      "description": "Vessel entity reference",
+      "category": "vessel_identity",
+      "dbMapping": "curated.vessels"
+    },
+    {
+      "index": 2,
+      "label": "VESSEL_NAME",
+      "description": "Primary vessel name",
+      "category": "vessel_identity",
+      "dbMapping": "curated.vessels.vessel_name"
+    },
+    {
+      "index": 3,
+      "label": "IMO",
+      "description": "International Maritime Organization number (7 digits)",
+      "category": "vessel_identifier",
+      "dbMapping": "curated.vessels.imo",
+      "validator": "validate_imo",
+      "format": "^[0-9]{7}$"
+    },
+    {
+      "index": 4,
+      "label": "IRCS",
+      "description": "International Radio Call Sign",
+      "category": "vessel_identifier",
+      "dbMapping": "curated.vessels.ircs",
+      "validator": "validate_ircs",
+      "format": "^[A-Z0-9]{3,15}$"
+    },
+    {
+      "index": 5,
+      "label": "MMSI",
+      "description": "Maritime Mobile Service Identity (9 digits)",
+      "category": "vessel_identifier",
+      "dbMapping": "curated.vessels.mmsi",
+      "validator": "validate_mmsi",
+      "format": "^[0-9]{9}$"
+    },
+    {
+      "index": 6,
+      "label": "FLAG",
+      "description": "Flag state of vessel registration",
+      "category": "vessel_registration",
+      "dbMapping": "curated.vessels.vessel_flag",
+      "referenceTable": "curated.country_iso",
+      "validator": "validate_iso3166"
+    },
+    {
+      "index": 7,
+      "label": "PORT",
+      "description": "Port of registry or call",
+      "category": "location",
+      "dbMapping": "curated.ports"
+    },
+    {
+      "index": 8,
+      "label": "ORGANIZATION",
+      "description": "Generic organization entity",
+      "category": "entity",
+      "dbMapping": "curated.entity_organizations"
+    },
+    {
+      "index": 9,
+      "label": "PERSON",
+      "description": "Generic person entity",
+      "category": "entity",
+      "dbMapping": "curated.entity_persons"
+    },
+    {
+      "index": 10,
+      "label": "COMPANY",
+      "description": "Company or corporate entity",
+      "category": "entity",
+      "dbMapping": "curated.entity_organizations",
+      "subtype": "COMPANY"
+    },
+    {
+      "index": 11,
+      "label": "BENEFICIAL_OWNER",
+      "description": "Ultimate beneficial owner of vessel",
+      "category": "vessel_associate",
+      "dbMapping": "curated.vessel_associates",
+      "associateType": "BENEFICIAL_OWNER"
+    },
+    {
+      "index": 12,
+      "label": "OPERATOR",
+      "description": "Vessel operator",
+      "category": "vessel_associate",
+      "dbMapping": "curated.vessel_associates",
+      "associateType": "OPERATOR"
+    },
+    {
+      "index": 13,
+      "label": "CHARTERER",
+      "description": "Vessel charterer",
+      "category": "vessel_associate",
+      "dbMapping": "curated.vessel_associates",
+      "associateType": "CHARTERER"
+    },
+    {
+      "index": 14,
+      "label": "VESSEL_MASTER",
+      "description": "Ship captain/master",
+      "category": "vessel_crew",
+      "dbMapping": "curated.vessel_associates",
+      "associateType": "MASTER"
+    },
+    {
+      "index": 15,
+      "label": "CREW_MEMBER",
+      "description": "Crew member",
+      "category": "vessel_crew",
+      "dbMapping": "curated.vessel_associates",
+      "associateType": "CREW"
+    },
+    {
+      "index": 16,
+      "label": "GEAR_TYPE",
+      "description": "Fishing gear type",
+      "category": "fishing_specs",
+      "dbMapping": "curated.vessel_info",
+      "referenceTable": "curated.gear_types_fao",
+      "validator": "validate_fao_gear"
+    },
+    {
+      "index": 17,
+      "label": "VESSEL_TYPE",
+      "description": "Type of vessel (fishing, carrier, support)",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info.vessel_type"
+    },
+    {
+      "index": 18,
+      "label": "COMMODITY",
+      "description": "Traded commodity or cargo",
+      "category": "cargo",
+      "dbMapping": "curated.vessel_metrics"
+    },
+    {
+      "index": 19,
+      "label": "HS_CODE",
+      "description": "Harmonized System commodity code",
+      "category": "cargo",
+      "dbMapping": "curated.vessel_metrics",
+      "validator": "validate_hs_code",
+      "format": "^[0-9]{4,10}$"
+    },
+    {
+      "index": 20,
+      "label": "SPECIES",
+      "description": "Fish or marine species",
+      "category": "fishing_specs",
+      "dbMapping": "curated.vessel_metrics",
+      "referenceTable": "curated.harmonized_species",
+      "validator": "validate_asfis_code"
+    },
+    {
+      "index": 21,
+      "label": "RISK_LEVEL",
+      "description": "Risk assessment level",
+      "category": "intelligence",
+      "dbMapping": "curated.vessel_info.risk_level"
+    },
+    {
+      "index": 22,
+      "label": "SANCTION",
+      "description": "Sanction entity reference",
+      "category": "intelligence",
+      "dbMapping": "curated.vessel_sanctions"
+    },
+    {
+      "index": 23,
+      "label": "DATE",
+      "description": "Temporal date reference",
+      "category": "temporal",
+      "dbMapping": null
+    },
+    {
+      "index": 24,
+      "label": "LOCATION",
+      "description": "Geographic location",
+      "category": "location",
+      "dbMapping": null
+    },
+    {
+      "index": 25,
+      "label": "COUNTRY",
+      "description": "Country name or code",
+      "category": "location",
+      "dbMapping": "curated.country_iso",
+      "validator": "validate_iso3166"
+    },
+    {
+      "index": 26,
+      "label": "RFMO",
+      "description": "Regional Fisheries Management Organization",
+      "category": "regulatory",
+      "dbMapping": "curated.rfmos",
+      "validator": "validate_rfmo_code",
+      "validCodes": ["CCAMLR", "CCSBT", "GFCM", "IATTC", "ICCAT", "IOTC", "NAFO", "NEAFC", "NPFC", "SEAFO", "SIOFA", "SPRFMO", "WCPFC"]
+    },
+    {
+      "index": 27,
+      "label": "LICENSE",
+      "description": "License or permit number",
+      "category": "regulatory",
+      "dbMapping": "curated.vessel_authorizations"
+    },
+    {
+      "index": 28,
+      "label": "TONNAGE",
+      "description": "Vessel tonnage measurement",
+      "category": "vessel_metrics",
+      "dbMapping": "curated.vessel_metrics",
+      "unit": "metric_tons"
+    },
+    {
+      "index": 29,
+      "label": "LENGTH",
+      "description": "Vessel length",
+      "category": "vessel_metrics",
+      "dbMapping": "curated.vessel_metrics",
+      "unit": "meters"
+    },
+    {
+      "index": 30,
+      "label": "ENGINE_POWER",
+      "description": "Engine power",
+      "category": "vessel_metrics",
+      "dbMapping": "curated.vessel_metrics",
+      "unit": "kilowatts"
+    },
+    {
+      "index": 31,
+      "label": "EU_CFR",
+      "description": "EU Community Fishing Fleet Register number",
+      "category": "vessel_identifier",
+      "dbMapping": "curated.vessels.eu_cfr",
+      "validator": "validate_eu_cfr",
+      "format": "^[A-Z]{3}[0-9]{9}$"
+    },
+    {
+      "index": 32,
+      "label": "FISHING_AUTHORIZATION",
+      "description": "Fishing authorization record",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "FISHING"
+    },
+    {
+      "index": 33,
+      "label": "FISHING_LICENSE",
+      "description": "Fishing license number",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "FISHING_LICENSE"
+    },
+    {
+      "index": 34,
+      "label": "TRANSSHIPMENT_AUTHORIZATION",
+      "description": "Transshipment authorization",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "TRANSSHIPMENT"
+    },
+    {
+      "index": 35,
+      "label": "CARRIER_AUTHORIZATION",
+      "description": "Carrier vessel authorization",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "CARRIER"
+    },
+    {
+      "index": 36,
+      "label": "OBSERVER_AUTHORIZATION",
+      "description": "Observer program authorization",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "OBSERVER"
+    },
+    {
+      "index": 37,
+      "label": "SUPPORT_VESSEL_AUTHORIZATION",
+      "description": "Support vessel authorization",
+      "category": "authorization",
+      "dbMapping": "curated.vessel_authorizations",
+      "authorizationType": "SUPPORT_VESSEL"
+    },
+    {
+      "index": 38,
+      "label": "HULL_MATERIAL",
+      "description": "Vessel hull construction material",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info"
+    },
+    {
+      "index": 39,
+      "label": "VESSEL_ENGINE_TYPE",
+      "description": "Type of vessel engine",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info"
+    },
+    {
+      "index": 40,
+      "label": "VESSEL_FUEL_TYPE",
+      "description": "Fuel type used by vessel",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info"
+    },
+    {
+      "index": 41,
+      "label": "FREEZER_TYPE",
+      "description": "Type of freezer system",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info"
+    },
+    {
+      "index": 42,
+      "label": "BUILD_YEAR",
+      "description": "Year vessel was built",
+      "category": "vessel_specs",
+      "dbMapping": "curated.vessel_info.build_year",
+      "validator": "validate_year",
+      "format": "^(19|20)[0-9]{2}$"
+    },
+    {
+      "index": 43,
+      "label": "FLAG_REGISTERED_DATE",
+      "description": "Date vessel registered with flag state",
+      "category": "temporal",
+      "dbMapping": "curated.vessel_info.flag_registered_date"
+    },
+    {
+      "index": 44,
+      "label": "EXTERNAL_MARKING",
+      "description": "External vessel markings/identifiers",
+      "category": "vessel_identifier",
+      "dbMapping": "curated.vessel_info.external_marking"
+    },
+    {
+      "index": 45,
+      "label": "CREW_COUNT",
+      "description": "Number of crew members",
+      "category": "vessel_metrics",
+      "dbMapping": "curated.vessel_metrics",
+      "unit": "persons"
+    },
+    {
+      "index": 46,
+      "label": "METRIC_VALUE",
+      "description": "Generic metric value",
+      "category": "metric",
+      "dbMapping": "curated.vessel_metrics.value"
+    },
+    {
+      "index": 47,
+      "label": "UNIT",
+      "description": "Unit of measurement",
+      "category": "metric",
+      "dbMapping": "curated.vessel_metrics.unit"
+    },
+    {
+      "index": 48,
+      "label": "AUTHORIZATION_STATUS",
+      "description": "Status of authorization (active, expired, suspended)",
+      "category": "authorization_metadata",
+      "dbMapping": "curated.vessel_authorizations.status",
+      "validValues": ["ACTIVE", "EXPIRED", "SUSPENDED", "REVOKED", "PENDING"]
+    },
+    {
+      "index": 49,
+      "label": "SANCTION_TYPE",
+      "description": "Type of sanction",
+      "category": "intelligence_metadata",
+      "dbMapping": "curated.vessel_sanctions.sanction_type",
+      "validValues": ["IUU", "FINANCIAL", "TRADE", "NAVIGATION"]
+    },
+    {
+      "index": 50,
+      "label": "SANCTION_PROGRAM",
+      "description": "Sanctioning program or authority",
+      "category": "intelligence_metadata",
+      "dbMapping": "curated.vessel_sanctions.program"
+    },
+    {
+      "index": 51,
+      "label": "ENTITY_TYPE",
+      "description": "Type of entity (person, organization)",
+      "category": "entity_metadata",
+      "dbMapping": null
+    },
+    {
+      "index": 52,
+      "label": "ENTITY_SUBTYPE",
+      "description": "Subtype of entity",
+      "category": "entity_metadata",
+      "dbMapping": null
+    },
+    {
+      "index": 53,
+      "label": "ASSOCIATION_TYPE",
+      "description": "Type of association between entities",
+      "category": "entity_metadata",
+      "dbMapping": "curated.vessel_associates.associate_type"
+    },
+    {
+      "index": 54,
+      "label": "OWNERSHIP_TYPE",
+      "description": "Type of ownership",
+      "category": "entity_metadata",
+      "dbMapping": "curated.vessel_associates.ownership_type"
+    },
+    {
+      "index": 55,
+      "label": "CONTROL_LEVEL",
+      "description": "Level of control (majority, minority, beneficial)",
+      "category": "entity_metadata",
+      "dbMapping": "curated.vessel_associates.control_level"
+    },
+    {
+      "index": 56,
+      "label": "ADDRESS_TYPE",
+      "description": "Type of address (registered, operational, mailing)",
+      "category": "entity_metadata",
+      "dbMapping": null
+    },
+    {
+      "index": 57,
+      "label": "ALIAS_TYPE",
+      "description": "Type of alias (former name, AKA)",
+      "category": "entity_metadata",
+      "dbMapping": null
+    },
+    {
+      "index": 58,
+      "label": "NAME_TYPE",
+      "description": "Type of name (legal, trading, former)",
+      "category": "entity_metadata",
+      "dbMapping": null
+    },
+    {
+      "index": 59,
+      "label": "GENDER",
+      "description": "Gender of person entity",
+      "category": "entity_metadata",
+      "dbMapping": "curated.entity_persons.gender"
+    },
+    {
+      "index": 60,
+      "label": "RISK_SCORE",
+      "description": "Numerical risk score",
+      "category": "intelligence_metadata",
+      "dbMapping": "curated.vessel_info.risk_score",
+      "validator": "validate_score_range",
+      "format": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    {
+      "index": 61,
+      "label": "CONFIDENCE_SCORE",
+      "description": "Confidence score for extraction",
+      "category": "ml_metadata",
+      "dbMapping": "stage.extractions.confidence",
+      "validator": "validate_probability",
+      "format": "^0?(\\.[0-9]+)?$|^1(\\.0+)?$"
+    }
+  ],
+  "categories": {
+    "special": ["O"],
+    "vessel_identity": ["VESSEL", "VESSEL_NAME"],
+    "vessel_identifier": ["IMO", "IRCS", "MMSI", "EU_CFR", "EXTERNAL_MARKING"],
+    "vessel_registration": ["FLAG"],
+    "vessel_specs": ["VESSEL_TYPE", "HULL_MATERIAL", "VESSEL_ENGINE_TYPE", "VESSEL_FUEL_TYPE", "FREEZER_TYPE", "BUILD_YEAR"],
+    "vessel_metrics": ["TONNAGE", "LENGTH", "ENGINE_POWER", "CREW_COUNT"],
+    "vessel_associate": ["BENEFICIAL_OWNER", "OPERATOR", "CHARTERER"],
+    "vessel_crew": ["VESSEL_MASTER", "CREW_MEMBER"],
+    "fishing_specs": ["GEAR_TYPE", "SPECIES"],
+    "cargo": ["COMMODITY", "HS_CODE"],
+    "entity": ["ORGANIZATION", "PERSON", "COMPANY"],
+    "location": ["PORT", "LOCATION", "COUNTRY"],
+    "temporal": ["DATE", "FLAG_REGISTERED_DATE"],
+    "regulatory": ["RFMO", "LICENSE"],
+    "authorization": ["FISHING_AUTHORIZATION", "FISHING_LICENSE", "TRANSSHIPMENT_AUTHORIZATION", "CARRIER_AUTHORIZATION", "OBSERVER_AUTHORIZATION", "SUPPORT_VESSEL_AUTHORIZATION"],
+    "authorization_metadata": ["AUTHORIZATION_STATUS"],
+    "intelligence": ["RISK_LEVEL", "SANCTION"],
+    "intelligence_metadata": ["SANCTION_TYPE", "SANCTION_PROGRAM", "RISK_SCORE"],
+    "entity_metadata": ["ENTITY_TYPE", "ENTITY_SUBTYPE", "ASSOCIATION_TYPE", "OWNERSHIP_TYPE", "CONTROL_LEVEL", "ADDRESS_TYPE", "ALIAS_TYPE", "NAME_TYPE", "GENDER"],
+    "metric": ["METRIC_VALUE", "UNIT"],
+    "ml_metadata": ["CONFIDENCE_SCORE"]
+  },
+  "validators": {
+    "validate_imo": "Check-digit algorithm (Luhn mod 10) for 7-digit IMO numbers",
+    "validate_mmsi": "MID (first 3 digits) must be valid ITU Maritime Identification Digit",
+    "validate_ircs": "ITU radio callsign format validation",
+    "validate_eu_cfr": "EU CFR format: 3-letter country code + 9 digits",
+    "validate_iso3166": "ISO 3166-1 alpha-2 or alpha-3 country code",
+    "validate_rfmo_code": "Valid RFMO acronym from canonical list",
+    "validate_fao_gear": "FAO ISSCFG gear type code",
+    "validate_asfis_code": "ASFIS 3-alpha species code",
+    "validate_hs_code": "Harmonized System code (4-10 digits)",
+    "validate_year": "Valid year (1900-present)",
+    "validate_score_range": "Numerical value within acceptable range",
+    "validate_probability": "Probability value between 0.0 and 1.0"
+  },
+  "changeLog": [
+    {
+      "version": "1.0.0",
+      "date": "2025-09-30",
+      "changes": "Initial taxonomy freeze. 63 labels aligned with Triton model output shape, ESC configuration, and database schema mappings.",
+      "author": "oceanid-infrastructure"
+    }
+  ],
+  "usage": {
+    "model_training": "Use 'labels' array in exact order for model output shape",
+    "adapter_configuration": "Load into NER_LABELS environment variable as JSON array",
+    "postprocessor": "Generate EntityType enum from 'labels' array",
+    "database_mapping": "Use 'dbMapping' fields to populate stage.extractions.db_mapping",
+    "validation": "Apply validators before persisting to curated schema"
+  },
+  "deprecationPolicy": {
+    "labelRename": "Requires major version bump (e.g., 1.x.x → 2.0.0). Provide alias map in migration guide.",
+    "labelRemoval": "Requires major version bump. Mark as deprecated in minor version first (e.g., 1.5.0 → 2.0.0).",
+    "labelAddition": "Requires minor version bump (e.g., 1.0.0 → 1.1.0). Append to end of list to preserve indices.",
+    "validatorUpdate": "Patch version bump (e.g., 1.0.0 → 1.0.1) if validation logic changes without affecting labels."
+  }
+}
