@@ -173,7 +173,7 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
         sessionDuration: "24h",
         type: "self_hosted",
     });
-    new cloudflare.AccessPolicy("gpu-access-bypass-service-token", {
+    new cloudflare.AccessPolicy("gpu-access-allow-service-token", {
         applicationId: gpuAccessApp.id,
         zoneId: cloudflareZoneId,
         name: "Bypass for Adapter Service Token",
