@@ -6,6 +6,8 @@ export interface LabelStudioArgs {
     namespace?: string;
     replicas?: number;
     mlBackendUrl?: pulumi.Input<string>;
+    dbUrl?: pulumi.Input<string>;           // Optional: external Postgres (CrunchyBridge)
+    hostUrl?: pulumi.Input<string>;         // Optional: public URL (e.g., https://label.<base>)
 }
 
 export class LabelStudio extends pulumi.ComponentResource {
@@ -15,7 +17,7 @@ export class LabelStudio extends pulumi.ComponentResource {
     constructor(name: string, args: LabelStudioArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:apps:LabelStudio", name, {}, opts);
 
-        const { k8sProvider, namespace = "apps", replicas = 1, mlBackendUrl } = args;
+        const { k8sProvider, namespace = "apps", replicas = 1, mlBackendUrl, dbUrl, hostUrl } = args;
 
         const ns = new k8s.core.v1.Namespace(`${name}-ns`, {
             metadata: {
@@ -44,11 +46,13 @@ export class LabelStudio extends pulumi.ComponentResource {
                         containers: [
                             {
                                 name: "label-studio",
-                                image: "heartexlabs/label-studio:latest",
+                                image: "heartexlabs/label-studio:1.21.0",
                                 ports: [{ containerPort: 8080, name: "http" }],
                                 env: [
                                     { name: "LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED", value: "true" },
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
+                                    ...(dbUrl ? [{ name: "DATABASE_URL", value: dbUrl as any }] : []),
+                                    ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
                                     ...(adminEmail ? [{ name: "LABEL_STUDIO_USERNAME", value: adminEmail as any }] : []),
                                     ...(adminPassword ? [{ name: "LABEL_STUDIO_PASSWORD", value: adminPassword as any }] : []),
                                 ] as any,

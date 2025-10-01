@@ -287,6 +287,17 @@ const annotationsSink = new AnnotationsSink("annotations-sink", {
     schemaVersion,
 });
 
+// Update Label Studio to use external CrunchyBridge DB if provided
+// This keeps Label Studio tables isolated from staging/curated schemas.
+new LabelStudio("label-studio", {
+    k8sProvider,
+    namespace: "apps",
+    replicas: 1,
+    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}/predict_ls`,
+    dbUrl,                                         // CrunchyBridge URL (recommended to use a dedicated DB e.g., /labelstudio)
+    hostUrl: pulumi.interpolate`https://${labelHostname}`,
+});
+
 // Optional: host-level Cloudflared connector on Calypso for GPU access
 const enableCalypsoHostConnector = cfg.getBoolean("enableCalypsoHostConnector") ?? true;
 let calypsoConnector: HostCloudflared | undefined;
@@ -305,7 +316,7 @@ if (enableCalypsoHostConnector) {
     // Start Triton Inference Server on Calypso via generic HostDockerService
     const sentry = getSentrySettings();
     const tritonEnv = toEnvVars(sentry);
-    const tritonImage = cfg.get("tritonImage") || "ghcr.io/triton-inference-server/server:2.60.0-py3";
+    const tritonImage = cfg.get("tritonImage") || "nvcr.io/nvidia/tritonserver:25.08-py3";
     calypsoTriton = new HostDockerService("calypso-triton", {
         host: "192.168.2.80",
         user: "oceanid",
