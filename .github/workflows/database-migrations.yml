@@ -69,7 +69,13 @@ jobs:
           echo "::add-mask::$DATABASE_URL"
           echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_OUTPUT
 
+          if [ -z "$DATABASE_URL" ]; then
+            echo "ℹ️ No DATABASE_URL found in ESC. Skipping migrations gracefully."
+            echo "SKIP=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Verify database connection
+        if: ${{ steps.esc.outputs.SKIP != 'true' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -80,7 +86,21 @@ jobs:
           }
           echo "✅ Database connection successful"
 
+      - name: Ensure required extensions (pgcrypto, postgis, btree_gist)
+        if: ${{ steps.esc.outputs.SKIP != 'true' && github.event.inputs.dry_run == 'false' }}
+        env:
+          DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
+        run: |
+          echo "🔧 Ensuring required extensions are installed..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            CREATE EXTENSION IF NOT EXISTS postgis;
+            CREATE EXTENSION IF NOT EXISTS btree_gist;
+SQL
+          echo "✅ Extensions ensured"
+
       - name: Check existing migrations
+        if: ${{ steps.esc.outputs.SKIP != 'true' }}
         id: check
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
@@ -104,7 +124,7 @@ jobs:
           fi
 
       - name: Apply V3 migration (staging tables)
-        if: ${{ (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V3') && github.event.inputs.dry_run == 'false' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V3') && github.event.inputs.dry_run == 'false' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -140,7 +160,7 @@ SQL
           echo "✅ V3 migration completed"
 
       - name: Apply V4 migration (reference tables)
-        if: ${{ (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V4') && github.event.inputs.dry_run == 'false' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V4') && github.event.inputs.dry_run == 'false' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -173,7 +193,7 @@ SQL
           echo "✅ V4 migration completed"
 
       - name: Apply V5 migration (temporal events)
-        if: ${{ (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V5') && github.event.inputs.dry_run == 'false' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V5') && github.event.inputs.dry_run == 'false' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -206,7 +226,7 @@ SQL
           echo "✅ V5 migration completed"
 
       - name: Apply V6 migration (vessel_info typed)
-        if: ${{ (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V6') && github.event.inputs.dry_run == 'false' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && (github.event.inputs.migration_version == 'all' || github.event.inputs.migration_version == 'V6') && github.event.inputs.dry_run == 'false' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -239,7 +259,7 @@ SQL
           echo "✅ V6 migration completed"
 
       - name: Dry run summary
-        if: ${{ github.event.inputs.dry_run == 'true' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && github.event.inputs.dry_run == 'true' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -252,7 +272,7 @@ SQL
           echo "To apply migrations, re-run with dry_run=false"
 
       - name: Verify final state
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: ${{ steps.esc.outputs.SKIP != 'true' && github.event.inputs.dry_run == 'false' }}
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
@@ -271,3 +291,7 @@ SQL
 
           echo ""
           echo "✅ All requested migrations applied successfully"
+      - name: Skipped (no DATABASE_URL configured)
+        if: ${{ steps.esc.outputs.SKIP == 'true' }}
+        run: |
+          echo "ℹ️ database-migrations: No DATABASE_URL configured in ESC. Skipping migrations with success."
