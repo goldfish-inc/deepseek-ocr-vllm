@@ -154,7 +154,10 @@
       "Bash(aws s3api put-public-access-block:*)",
       "Bash(aws iam create-user:*)",
       "Bash(aws iam create-access-key:*)",
-      "Bash(yes)"
+      "Bash(yes)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl logs -n apps -l app=ls-ml-autoconnect --tail=100)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get pods -n apps)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6ODA2NjUzNjYwNiwiaWF0IjoxNzU5MzM2NjA2LCJqdGkiOiIyMzk3Y2JmYjY0ODE0ZjZlOWEyY2YwZWJmZGFiNGU2MCIsInVzZXJfaWQiOjF9.LrCbsUzXIACCzYe8McTEZikxcW97pRvp-iQ_oZKW4MQ\")"
     ],
     "deny": [],
     "ask": []

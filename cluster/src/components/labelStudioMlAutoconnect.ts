@@ -256,7 +256,9 @@ async def trigger_sync():
                 },
                 data: {
                     "main.py": appCode,
-                    "requirements.txt": "fastapi==0.115.0\\nuvicorn[standard]==0.32.0\\nhttpx==0.28.1",
+                    "requirements.txt": `fastapi==0.115.0
+uvicorn[standard]==0.32.0
+httpx==0.28.1`,
                 },
             },
             { provider: k8sProvider, parent: this }
