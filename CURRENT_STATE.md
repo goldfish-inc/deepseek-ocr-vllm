@@ -9,6 +9,7 @@ Stack: ryan-taylor/oceanid-cluster/prod
   - Host tunnel (Calypso): systemd cloudflared connected with correct node tunnel credentials; serves `gpu.<base>`.
 - NodeTunnels (K8s): Disabled (`enableNodeTunnels=false`) while focusing on pre‑labels; host connector covers GPU.
 - Label Studio: deployed; ML backend points to the in‑cluster adapter.
+- Label Studio DB: external Postgres on CrunchyBridge (database `labelfish`); cluster reads `labelStudioDbUrl` from ESC to set `DATABASE_URL`.
 - Adapter: FastAPI in `apps`; DistilBERT support; `DEFAULT_MODEL=distilbert-base-uncased`.
 - Triton: running on Calypso via systemd Docker; image `ghcr.io/triton-inference-server/server:2.60.0-py3`; model repo `/opt/triton/models`.
 - DistilBERT ONNX: installed at `/opt/triton/models/distilbert-base-uncased/1/model.onnx`.

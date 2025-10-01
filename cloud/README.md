@@ -157,11 +157,97 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "go
 
 # CrunchyBridge Postgres URL for migrations
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
+
+# Label Studio DB password (manual provisioning only)
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerPassword "<strong_password>" --secret
 ```
 
 Workflows:
 - `train-ner.yml` reads `hfAccessToken`, `hfDatasetRepo`, and `hfModelRepo` from ESC.
 - `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
+
+## Label Studio DB (labelfish) — Manual provisioning on ebisu
+
+Recommended (keeps CI safe and LS isolated from staging/curated):
+
+```bash
+# 1) Create database in CrunchyBridge "ebisu" (example owner shown)
+cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres -- -c \
+  "CREATE DATABASE labelfish OWNER u_ogfzdegyvvaj3g4iyuvlu5yxmi;"
+
+# 2) Apply bootstrap SQL
+cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres --database labelfish \
+  < ../sql/labelstudio/labelfish_schema.sql
+
+# 3) Store LS connection URL in ESC for the cluster stack
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl \
+  "postgres://labelfish_owner:<password>@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish" --secret
+```
+
+Notes:
+- The cluster stack requires `labelStudioDbUrl` and sets `DATABASE_URL` for the Label Studio deployment.
+- You can also provision the DB via IaC by setting `oceanid-cloud:enableLabelStudioDb=true` and running `pulumi up` locally (not in GitHub Actions). Default is `false` for safety.
+
+## Database Provisioning (Manual Only)
+
+### Label Studio Database (`labelfish`)
+
+**IMPORTANT:** Database provisioning is **disabled by default** and uses `command.local.Command`, which requires psql installed locally. It **will not run in GitHub Actions**.
+
+#### Safety Guarantees:
+
+1. **Cluster never recreated on push**: `enableCrunchyBridgeProvisioning: true` with `protect: true` prevents deletion
+2. **Database never created on push**: `enableLabelStudioDb` defaults to `false`
+3. **Idempotent**: Safe to run multiple times (uses `IF NOT EXISTS` patterns)
+
+#### Manual Provisioning Steps:
+
+```bash
+cd cloud/
+
+# 1. Set admin URL (must have CREATEDB privilege)
+# Get from: cb uri <cluster-id> or use existing admin credentials
+pulumi config set --secret oceanid-cloud:crunchyAdminUrl "postgres://<admin_user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres"
+
+# 2. Generate strong password and store in ESC
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerPassword "$(openssl rand -base64 32)" --secret
+
+# 3. Enable database provisioning (local only)
+pulumi config set oceanid-cloud:enableLabelStudioDb true
+
+# 4. Run Pulumi locally (requires psql in PATH)
+pulumi up
+
+# 5. Disable flag to prevent accidental re-runs
+pulumi config set oceanid-cloud:enableLabelStudioDb false
+
+# 6. Store connection URL in ESC for cluster stack
+pulumi stack output labelStudioDbUrl --show-secrets
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl "<url_from_above>" --secret
+```
+
+**Config Key Scoping:**
+- `oceanid-cloud:crunchyAdminUrl` - Admin credentials (CREATEDB privilege) for database provisioning
+- `oceanid-cloud:labelStudioOwnerPassword` - Password for `labelfish_owner` role
+- `oceanid-cluster:labelStudioDbUrl` - Runtime connection URL for Label Studio (used by cluster stack)
+
+#### What Gets Created:
+
+- Database: `labelfish`
+- Roles: `labelfish_owner`, `labelfish_rw`, `labelfish_ro`
+- Schema: `labelfish` (isolated from staging/curated)
+- Extensions: `pgcrypto`, `citext`, `pg_trgm`, `btree_gist`
+- Sane defaults: UTC timezone, statement/lock timeouts, search_path
+
+#### Verification:
+
+```bash
+# Check database exists
+/opt/homebrew/opt/postgresql@17/bin/psql "$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl --show-secrets --value string)" -c "\l"
+
+# Check schema and roles
+/opt/homebrew/opt/postgresql@17/bin/psql "$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl --show-secrets --value string)" -c "\dn" -c "\du"
+```
 
 ## Stack Outputs
 

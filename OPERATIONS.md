@@ -106,6 +106,36 @@ curl -sk https://gpu.<base>/v2/health/ready
   - `make db:psql`
   - `psql "$DATABASE_URL" -c "select * from stage.v_documents_freshness;"`
 
+### Label Studio database (labelfish)
+- Database: `labelfish` on the "ebisu" CrunchyBridge cluster (PG 17), isolated from staging/curated
+- Schema: `labelfish` (bootstrap in `sql/labelstudio/labelfish_schema.sql`); app tables created by Label Studio migrations
+- Roles: `labelfish_owner` (app), `labelfish_rw` (optional services), `labelfish_ro` (read‑only)
+- Extensions: `pgcrypto`, `citext`, `pg_trgm`, `btree_gist`; defaults: `UTC`, `search_path=labelfish,public`, timeouts
+
+Provision (manual):
+```bash
+# Create DB (example owner shown via CrunchyBridge CLI)
+cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres -- -c \
+  "CREATE DATABASE labelfish OWNER u_ogfzdegyvvaj3g4iyuvlu5yxmi;"
+
+# Apply bootstrap SQL (roles/schema/extensions/grants)
+cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres --database labelfish \
+  < sql/labelstudio/labelfish_schema.sql
+
+# Store connection URL for the cluster stack
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl \
+  "postgres://labelfish_owner:<password>@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish" --secret
+```
+
+Wire Label Studio (cluster):
+- The cluster stack reads `labelStudioDbUrl` (ESC secret) and sets `DATABASE_URL` for the LS deployment.
+- Public host: `LABEL_STUDIO_HOST=https://label.<base>`
+- Tunnel ingress/DNS: `label.<base>` CNAME → `<cluster_tunnel_id>.cfargotunnel.com` (proxied) with ingress mapping to LS service.
+
+Verify:
+- `curl -I https://label.<base>/` → `302 Found` to `/user/login/`
+- First start creates app tables: `psql …/labelfish -c "\dt labelfish.*"`
+
 ## Add a new GPU host (host‑level)
 1. Provision SSH user + key; add to ESC.
 2. Add a `HostCloudflared` + optional `HostGpuService` for the host.
