@@ -1,4 +1,5 @@
 packages:
   - cloud
+  - cloud/sdks/crunchybridge
   - cluster
   - policy
