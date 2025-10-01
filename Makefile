@@ -43,6 +43,7 @@ hooks:
 	chmod +x .githooks/pre-commit
 	@echo "Git hooks installed. Next commit will run type/checks and OPA tests."
 
+
 # Minimal deploy for current architecture (no SSH provisioning or LB)
 .PHONY: deploy-simple
 deploy-simple:
