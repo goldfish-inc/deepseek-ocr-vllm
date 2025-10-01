@@ -113,9 +113,8 @@ async def validate_labels():
     except Exception as e:
         print(f"⚠️  Warning: Label validation error: {e}")
 
-@app.get("/healthz")
-@app.get("/health")  # Label Studio expects /health endpoint
-def healthz():
+@app.get("/health")
+def health():
     return {
         "ok": True,
         "labels": {

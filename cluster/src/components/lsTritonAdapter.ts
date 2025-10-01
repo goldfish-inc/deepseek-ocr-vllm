@@ -9,6 +9,8 @@ export interface LsTritonAdapterArgs {
     namespace?: string;
     serviceName?: string;
     tritonBaseUrl: pulumi.Input<string>; // e.g., https://gpu.boathou.se
+    cfAccessClientId?: pulumi.Input<string>;
+    cfAccessClientSecret?: pulumi.Input<string>;
 }
 
 export class LsTritonAdapter extends pulumi.ComponentResource {
@@ -18,7 +20,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
     constructor(name: string, args: LsTritonAdapterArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:ml:LsTritonAdapter", name, {}, opts);
 
-        const { k8sProvider, namespace = "apps", serviceName = "ls-triton-adapter", tritonBaseUrl } = args;
+        const { k8sProvider, namespace = "apps", serviceName = "ls-triton-adapter", tritonBaseUrl, cfAccessClientId, cfAccessClientSecret } = args;
 
         // Use existing namespace rather than creating a new one
         // The 'apps' namespace is created by LabelStudio component
@@ -55,7 +57,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             ? (readFirstExisting("adapter/app_with_ner.py") || readFirstExisting("adapter/app.py"))
             : undefined;
 
-        const appPy = externalApp ?? `
+const appPy = externalApp ?? `
 import os
 import json
 import base64
@@ -103,6 +105,16 @@ if SENTRY_DSN:
 
 TRITON_BASE = os.getenv("TRITON_BASE_URL")  # e.g., https://gpu.base
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "bert-base-uncased")
+# Optional Cloudflare Access service token support
+CF_ACCESS_CLIENT_ID = os.getenv("CF_ACCESS_CLIENT_ID")
+CF_ACCESS_CLIENT_SECRET = os.getenv("CF_ACCESS_CLIENT_SECRET")
+def _cf_access_headers():
+    if CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET:
+        return {
+            "CF-Access-Client-Id": CF_ACCESS_CLIENT_ID,
+            "CF-Access-Client-Secret": CF_ACCESS_CLIENT_SECRET,
+        }
+    return {}
 NER_LABELS_ENV = os.getenv("NER_LABELS")
 try:
     NER_LABELS = json.loads(NER_LABELS_ENV) if NER_LABELS_ENV else [
@@ -123,8 +135,8 @@ class PredictRequest(BaseModel):
     # Optional raw Triton inputs pass-through
     inputs: Optional[dict] = None
 
-@app.get("/healthz")
-async def healthz():
+@app.get("/health")
+async def health():
     return {"ok": True}
 
 def _bytes_tensor(name: str, value: bytes):
@@ -184,7 +196,7 @@ async def predict(req: PredictRequest):
 
     try:
         async with httpx.AsyncClient(timeout=60.0, verify=True) as client:
-            r = await client.post(url, json=payload)
+            r = await client.post(url, json=payload, headers=_cf_access_headers())
             if r.status_code >= 400:
                 raise HTTPException(status_code=502, detail=f"Triton error: {r.status_code} {r.text}")
             out = r.json()
@@ -355,6 +367,16 @@ async def predict_ls(request: Request):
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 
+        // Optional: allow gating gpu.<base> behind Cloudflare Access with service tokens
+        const cfIdFromCfg = cfgPulumi.getSecret("cfAccessClientId");
+        const cfSecretFromCfg = cfgPulumi.getSecret("cfAccessClientSecret");
+        const finalCfId = (cfAccessClientId as any) || (cfIdFromCfg as any);
+        const finalCfSecret = (cfAccessClientSecret as any) || (cfSecretFromCfg as any);
+        if (finalCfId && finalCfSecret) {
+            envBase["CF_ACCESS_CLIENT_ID"] = finalCfId;
+            envBase["CF_ACCESS_CLIENT_SECRET"] = finalCfSecret;
+        }
+
         // If Secret not provided, fall back to config/default
         if (!nerLabelsSecret) {
             envBase["NER_LABELS"] = (cfgPulumi.get("nerLabels") || JSON.stringify(defaultLabels));
@@ -394,8 +416,8 @@ async def predict_ls(request: Request):
                                 "python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.txt && exec /venv/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
                             ],
                             ports: [{ containerPort: 9090, name: "http" }],
-                            readinessProbe: { httpGet: { path: "/healthz", port: 9090 }, initialDelaySeconds: 5, periodSeconds: 10 },
-                            livenessProbe: { httpGet: { path: "/healthz", port: 9090 }, initialDelaySeconds: 10, periodSeconds: 20 },
+                            readinessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 5, periodSeconds: 10 },
+                            livenessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 10, periodSeconds: 20 },
                             resources: { requests: { cpu: "100m", memory: "128Mi" } },
                         }],
                     },

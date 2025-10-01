@@ -97,6 +97,47 @@ for i in $(seq 1 10); do
   sleep 2
 done
 $SUDO systemctl status cloudflared-node --no-pager --full || true
+
+# Lightweight watchdog to keep tunnel healthy
+cat > /tmp/cloudflared-watchdog.sh <<'WD'
+#!/usr/bin/env bash
+set -euo pipefail
+SUDO=""; if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; fi
+if ! $SUDO systemctl is-active --quiet cloudflared-node; then
+  $SUDO systemctl restart cloudflared-node || true
+  exit 0
+fi
+# Optional: surface local Triton health (no restart here to avoid flapping)
+curl -sf http://localhost:${gpuPort}/v2/health/ready >/dev/null 2>&1 || true
+WD
+$SUDO install -m 0755 /tmp/cloudflared-watchdog.sh /usr/local/bin/cloudflared-watchdog.sh
+
+cat > /tmp/cloudflared-watchdog.service <<'SVC'
+[Unit]
+Description=Cloudflared Watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cloudflared-watchdog.sh
+SVC
+
+cat > /tmp/cloudflared-watchdog.timer <<'TMR'
+[Unit]
+Description=Run Cloudflared Watchdog every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
+TMR
+
+$SUDO mv /tmp/cloudflared-watchdog.service /etc/systemd/system/cloudflared-watchdog.service
+$SUDO mv /tmp/cloudflared-watchdog.timer /etc/systemd/system/cloudflared-watchdog.timer
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable --now cloudflared-watchdog.timer
 exit 0
 `),
         }, { parent: this, customTimeouts: { create: "10m", update: "10m" } });

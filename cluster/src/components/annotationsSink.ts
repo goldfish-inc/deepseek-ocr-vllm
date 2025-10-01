@@ -214,8 +214,8 @@ async def on_start():
     # Skip blocking startup operations - initialize lazily on first request
     pass
 
-@app.get("/healthz")
-async def healthz():
+@app.get("/health")
+async def health():
     return {"ok": True}
 
 @app.post("/webhook")
@@ -339,8 +339,8 @@ if __name__ == "__main__":
                 "python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.txt && exec /venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080"
               ],
               ports: [{ containerPort: 8080, name: "http" }],
-              readinessProbe: { httpGet: { path: "/healthz", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
-              livenessProbe: { httpGet: { path: "/healthz", port: 8080 }, initialDelaySeconds: 10, periodSeconds: 20 },
+              readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
+              livenessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 10, periodSeconds: 20 },
               resources: { requests: { cpu: "50m", memory: "128Mi" } },
             }],
           },

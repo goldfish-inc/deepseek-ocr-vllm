@@ -234,7 +234,7 @@ async def webhook_receiver(request: Request):
         logger.error(f"❌ Webhook processing failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/healthz")
+@app.get("/health")
 async def health():
     """Health check endpoint."""
     return {"ok": True}
@@ -320,12 +320,12 @@ httpx==0.28.1`,
                                         limits: { cpu: "200m", memory: "256Mi" },
                                     },
                                     readinessProbe: {
-                                        httpGet: { path: "/healthz", port: "http" as any },
+                                        httpGet: { path: "/health", port: "http" as any },
                                         initialDelaySeconds: 10,
                                         periodSeconds: 10,
                                     },
                                     livenessProbe: {
-                                        httpGet: { path: "/healthz", port: "http" as any },
+                                        httpGet: { path: "/health", port: "http" as any },
                                         initialDelaySeconds: 30,
                                         periodSeconds: 30,
                                     },
