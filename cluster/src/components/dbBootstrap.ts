@@ -87,7 +87,7 @@ create index if not exists ix_stage_extractions_doc on stage.extractions(documen
             volumes: [{ name: "sql", configMap: { name: cfg.metadata.name } }],
             containers: [{
               name: "psql",
-              image: "postgres:16",
+              image: "postgres:17",
               env: [{ name: "DATABASE_URL", value: dbUrl as any }],
               volumeMounts: [{ name: "sql", mountPath: "/sql" }],
               command: ["bash", "-lc"],
@@ -103,4 +103,3 @@ create index if not exists ix_stage_extractions_doc on stage.extractions(documen
     this.registerOutputs({});
   }
 }
-
