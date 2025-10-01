@@ -254,13 +254,22 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
     tritonBaseUrl,
 });
 
-const labelStudio = new LabelStudio("label-studio", {
+// Deploy Label Studio with dedicated labelfish database (CrunchyBridge ebisu cluster)
+const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl");
+
+new LabelStudio("label-studio", {
     k8sProvider,
+    namespace: "apps",
+    replicas: 1,
     mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}/predict_ls`,
+    dbUrl: labelStudioDbUrl,
+    hostUrl: pulumi.interpolate`https://${labelHostname}`,
 });
 
 // SME Readiness - Configure boathou.se domain with Cloudflare Access
-const enableSMEAccess = cfg.getBoolean("enableLabelStudioAccess") ?? true;
+// NOTE: Access app creation is now managed by cloud stack to prevent duplication
+// This component only exports URLs and service token management
+const enableSMEAccess = cfg.getBoolean("enableLabelStudioAccess") ?? false; // Default false - cloud stack owns Access
 const smeEmailDomain = cfg.get("accessAllowedEmailDomain") ?? "boathou.se";
 
 const smeReadiness = new SMEReadiness("sme-ready", {
@@ -285,17 +294,6 @@ const annotationsSink = new AnnotationsSink("annotations-sink", {
     hfToken,
     dbUrl,
     schemaVersion,
-});
-
-// Update Label Studio to use external CrunchyBridge DB if provided
-// This keeps Label Studio tables isolated from staging/curated schemas.
-new LabelStudio("label-studio", {
-    k8sProvider,
-    namespace: "apps",
-    replicas: 1,
-    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}/predict_ls`,
-    dbUrl,                                         // CrunchyBridge URL (recommended to use a dedicated DB e.g., /labelstudio)
-    hostUrl: pulumi.interpolate`https://${labelHostname}`,
 });
 
 // Optional: host-level Cloudflared connector on Calypso for GPU access
