@@ -119,9 +119,44 @@ const labelCname = new cloudflare.Record("label-cname", {
     comment: "Label Studio for oceanid-cluster via main tunnel",
 });
 
+// nautalis documentation site (cloudflare pages)
+const nautalisCname = new cloudflare.Record("nautalis-cname", {
+    zoneId: cloudflareZoneId,
+    name: "nautilus.boathou.se",
+    type: "CNAME",
+    content: "nautalis.pages.dev",
+    proxied: true,
+    ttl: 1,
+    comment: "Nautalis documentation site via Cloudflare Pages",
+});
+
 // =============================================================================
 // CLOUDFLARE ACCESS
 // =============================================================================
+
+// Access application for nautilus.boathou.se
+const nautalisAccessApp = new cloudflare.AccessApplication("nautalis-access-app", {
+    zoneId: cloudflareZoneId,
+    name: "Nautalis: Goldfish Inc. Documentation",
+    domain: "nautilus.boathou.se",
+    type: "self_hosted",
+    sessionDuration: "24h",
+});
+
+// Email OTP authentication policy for nautalis
+const nautalisAccessPolicy = new cloudflare.AccessPolicy("nautalis-access-policy", {
+    applicationId: nautalisAccessApp.id,
+    zoneId: cloudflareZoneId,
+    name: "Email verification for nautalis access",
+    precedence: 1,
+    decision: "allow",
+    includes: [
+        {
+            emailDomains: ["goldfish.io"],
+        },
+    ],
+});
+
 // NOTE: Cloudflare Access disabled for Label Studio per user request
 // Label Studio is now publicly accessible via tunnel at label.boathou.se
 // Authentication is handled by Label Studio's built-in user management
@@ -130,6 +165,9 @@ const labelCname = new cloudflare.Record("label-cname", {
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
 export const labelDnsRecord = labelCname.id;
+export const nautalisDnsRecord = nautalisCname.id;
+export const nautalisAccessAppId = nautalisAccessApp.id;
+export const nautalisAccessPolicyId = nautalisAccessPolicy.id;
 
 // =============================================================================
 // PULUMI ESC
