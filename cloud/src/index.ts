@@ -88,7 +88,7 @@ const labelCname = new cloudflare.Record("label-cname", {
     proxied: true,
     ttl: 1,
     comment: "Label Studio for oceanid-cluster via main tunnel",
-}, { protect: true });
+});
 
 // =============================================================================
 // CLOUDFLARE ACCESS
@@ -99,7 +99,8 @@ const cloudflareAccountId = "8fa97474778c8a894925c148ca829739";
 // Label Studio Access app (adopted from existing)
 const labelStudioAccess = new cloudflare.ZeroTrustAccessApplication("label-studio", {
     accountId: cloudflareAccountId,
-    name: "Label Studio - Maritime NER",
+    name: "Goldfish Label Studio",
+    domain: "label.boathou.se",
     autoRedirectToIdentity: true,
     customDenyMessage: "Access restricted to authorized SME annotators.",
     customDenyUrl: "https://boathou.se/access-denied",
