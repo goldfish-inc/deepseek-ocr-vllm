@@ -1,9 +1,11 @@
 FROM python:3.11-slim
-
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
+COPY requirements.txt /tmp/requirements.txt
+RUN python -m venv /venv \
+ && /venv/bin/pip install --upgrade pip \
+ && /venv/bin/pip install -r /tmp/requirements.txt
+# App code will be mounted via ConfigMap at runtime; just provide entrypoint
+ENV PATH="/venv/bin:$PATH"
+CMD ["uvicorn","app:app","--host","0.0.0.0","--port","9090"]
 
-RUN pip install --no-cache-dir fastapi uvicorn httpx numpy transformers torch sentry-sdk
-
-COPY app.py .
-
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9090"]

@@ -484,6 +484,7 @@ if __name__ == "__main__":
         template: {
           metadata: { labels: { app: serviceName } },
           spec: {
+            imagePullSecrets: [{ name: "ghcr-creds" }],
             volumes: [{ name: "code", configMap: {
               name: code.metadata.name,
               items: [
@@ -494,14 +495,11 @@ if __name__ == "__main__":
             } }],
             containers: [{
               name: "sink",
-              image: "python:3.11-slim",
+              image: (new pulumi.Config()).get("sinkImage") || "ghcr.io/goldfish-inc/oceanid/annotations-sink:main",
               workingDir: "/app",
               env,
               volumeMounts: [{ name: "code", mountPath: "/app" }],
-              command: ["bash", "-lc"],
-              args: [
-                "python -m venv /venv && /venv/bin/pip install --no-cache-dir -r requirements.txt && exec /venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080"
-              ],
+              command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"],
               ports: [{ containerPort: 8080, name: "http" }],
               readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
               livenessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 10, periodSeconds: 20 },

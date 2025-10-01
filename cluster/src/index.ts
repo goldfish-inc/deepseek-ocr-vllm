@@ -273,6 +273,21 @@ const labelStudio = new LabelStudio("label-studio", {
     hostUrl: pulumi.interpolate`https://${labelHostname}`,
 });
 
+// GHCR image pull secret (private images)
+(() => {
+    const cfg = new pulumi.Config();
+    const ghcrUser = cfg.get("ghcrUsername");
+    const ghcrToken = cfg.getSecret("ghcrToken");
+    if (ghcrUser && ghcrToken) {
+        const auth = pulumi.interpolate`${ghcrUser}:${ghcrToken}`.apply(s => Buffer.from(s).toString("base64"));
+        const dockerconfig = pulumi.all([auth]).apply(([a]) => JSON.stringify({ auths: { "ghcr.io": { auth: a, username: ghcrUser } } }));
+        new k8s.core.v1.Secret("ghcr-creds", {
+            metadata: { name: "ghcr-creds", namespace: "apps" },
+            type: "kubernetes.io/dockerconfigjson",
+            data: { ".dockerconfigjson": dockerconfig.apply(v => Buffer.from(v).toString("base64")) },
+        }, { provider: k8sProvider });
+    }
+})();
 // In-cluster one-off provisioner Job to configure Label Studio project "NER_Data"
 // - Connects ML backend
 // - Applies full NER labeling interface from ESC/labels.json
