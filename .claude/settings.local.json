@@ -139,7 +139,12 @@
       "Bash(https://api.github.com/repos/goldfish-inc/oceanid/actions/workflows/train-ner.yml/dispatches )",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(gh secret:*)"
+      "Bash(gh secret:*)",
+      "Bash(psql:*)",
+      "Bash(/opt/homebrew/opt/postgresql@17/bin/psql \"postgres://u_ogfzdegyvvaj3g4iyuvlu5yxmi:erg95iL1maqSkZGPPKJ4mTaETPcjxyEiCYBLJR7lrAmECjPIPvaNDu7BjVJSmW0a@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/postgres\" -c \"CREATE DATABASE labelfish;\")",
+      "Bash(/opt/homebrew/opt/postgresql@17/bin/psql \"postgres://u_ogfzdegyvvaj3g4iyuvlu5yxmi:erg95iL1maqSkZGPPKJ4mTaETPcjxyEiCYBLJR7lrAmECjPIPvaNDu7BjVJSmW0a@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/postgres\" -c \"\\du\")",
+      "Bash(pnpm --filter @oceanid/cloud build)",
+      "WebFetch(domain:docs.crunchybridge.com)"
     ],
     "deny": [],
     "ask": []
