@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   train-export-publish:
@@ -22,14 +21,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Configure Pulumi ESC access
-        uses: pulumi/auth-actions@v1
-        with:
-          organization: ryan-taylor
-          requested-token-type: urn:pulumi:token-type:access_token:organization
-
       - name: Export HF token from ESC
         id: esc
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           # Install ESC CLI
           curl -fsSL https://get.pulumi.com/esc/install.sh | sh
