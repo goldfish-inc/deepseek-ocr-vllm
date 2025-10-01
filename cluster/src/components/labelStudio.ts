@@ -69,6 +69,8 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED", value: "true" },
                                     { name: "CSRF_TRUSTED_ORIGINS", value: "https://label.boathou.se" },
                                     { name: "DJANGO_ALLOWED_HOSTS", value: "*" },
+                                    // Enable legacy API token authentication (required for API access)
+                                    { name: "LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN", value: "true" },
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(dbUrl ? [{ name: "DATABASE_URL", value: dbUrl as any }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
