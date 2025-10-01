@@ -222,34 +222,14 @@ ${extras}  - service: http_status:404
             },
         }, { provider: k8sProvider, parent: this });
 
-        const dnsRecord = new cloudflare.DnsRecord(`${name}-record`, {
-            zoneId: cluster.cloudflare.zoneId,
-            name: cluster.cloudflare.tunnelHostname,
-            type: "CNAME",
-            content: cluster.cloudflare.tunnelTarget,
-            proxied: true,
-            ttl: 1,
-            comment: pulumi.interpolate`Managed by Pulumi for cluster ${cluster.name}`,
-        }, { provider: cloudflareProvider, parent: this });
-
-        // Optional extra DNS hostnames
-        extraDns.forEach((host, idx) => {
-            new cloudflare.DnsRecord(`${name}-extra-${idx}`, {
-                zoneId: cluster.cloudflare.zoneId,
-                name: host,
-                type: "CNAME",
-                content: cluster.cloudflare.tunnelTarget,
-                proxied: true,
-                ttl: 1,
-                comment: pulumi.interpolate`Extra hostname for ${cluster.name}`,
-            }, { provider: cloudflareProvider, parent: this });
-        });
+        // NOTE: DNS records (k3s.boathou.se, gpu.boathou.se) now managed by oceanid-cloud stack
+        // The cloudflared deployment still runs here, but DNS is managed centrally
 
         this.outputs = {
             namespace: namespace.metadata.name,
             deploymentName: deployment.metadata.name,
             metricsServiceName: service.metadata.name,
-            dnsRecordName: dnsRecord.name,
+            dnsRecordName: pulumi.output(cluster.cloudflare.tunnelHostname),
         };
 
         this.registerOutputs(this.outputs);

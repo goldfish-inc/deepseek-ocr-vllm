@@ -1,11 +1,19 @@
 # Oceanid Infrastructure
 
-Pulumi-powered GitOps stack for operating the Oceanid k3s fleet behind Cloudflare Zero Trust. The repository is structured as a pnpm workspace with two packages:
-
-- `@oceanid/cluster` – the Pulumi program that bootstraps Cloudflare tunnels, Flux, and any supporting workloads on the k3s control plane.
-- `@oceanid/policy` – lightweight TypeScript helpers plus OPA policies that run during CI to keep baseline security controls in place.
+Pulumi-powered GitOps stack for operating the Oceanid k3s fleet behind Cloudflare Zero Trust.
 
 > **Status:** Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. New staging database pipeline in development (see [CURRENT_STATE.md](CURRENT_STATE.md) and issues #46-#50).
+
+## Infrastructure Ownership
+
+| Project | Manages | Runs Where | Triggered By |
+|---------|---------|------------|--------------|
+| **[cloud/](cloud/)** | Cloudflare DNS/Access, CrunchyBridge PostgreSQL, ESC secrets | GitHub Actions (OIDC) | Push to `cloud/**` |
+| **[cluster/](cluster/)** | k3s bootstrap, Flux, PKO, Cloudflare tunnels | Local / Self-hosted runner | Manual `pulumi up` |
+| **[clusters/](clusters/)** | Application workloads (Label Studio, etc.) | Flux CD in-cluster | Push to `clusters/**` |
+| **[policy/](policy/)** | OPA security policies, TypeScript helpers | GitHub Actions CI | All PRs |
+
+**Key Principle:** Cloud resources (DNS, DB) are automated via CI. Cluster bootstrap requires kubeconfig and runs locally. Applications deploy via GitOps.
 
 ## Architecture Overview
 

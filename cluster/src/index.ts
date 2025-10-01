@@ -22,11 +22,22 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
-import { CrunchyBridgeCluster } from "./components/crunchyBridgeCluster";
 
 // =============================================================================
 // CLUSTER PROVISIONING
 // =============================================================================
+
+// Guard against running cluster stack in GitHub Actions
+// This stack requires kubeconfig access and should run locally or on self-hosted runners
+if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
+    throw new Error(
+        "❌ CLUSTER STACK CANNOT RUN IN GITHUB ACTIONS\n\n" +
+        "This stack manages Kubernetes resources and requires kubeconfig access.\n" +
+        "It MUST run locally or on a self-hosted runner with cluster access.\n\n" +
+        "For cloud resources (Cloudflare, CrunchyBridge), use the 'oceanid-cloud' stack instead.\n" +
+        "See cloud/README.md for details."
+    );
+}
 
 const cfg = new pulumi.Config();
 const namespaceName = "apps";
@@ -217,24 +228,7 @@ if (enableAppsStack) {
 // CRUNCHYBRIDGE DATABASE PROVISIONING
 // =============================================================================
 
-// Provision CrunchyBridge managed PostgreSQL cluster via IaC
-// Database migrations run via GitHub Actions workflow, not k3s Jobs
-const enableCrunchyBridgeProvisioning = cfg.getBoolean("enableCrunchyBridgeProvisioning") ?? false;
-let crunchyCluster: CrunchyBridgeCluster | undefined;
-
-if (enableCrunchyBridgeProvisioning) {
-    crunchyCluster = new CrunchyBridgeCluster("ebisu", {
-        apiKey: cfg.requireSecret("crunchybridge_api_key"),
-        teamId: cfg.requireSecret("crunchybridge_team_id"),
-        name: "ebisu",
-        provider: "aws",
-        region: "us-east-2",
-        planId: "standard-4", // 4GB RAM, 1 vCPU, 50GB storage (matches existing)
-        majorVersion: 17,
-        storage: 50,
-        isHa: false,
-    });
-}
+// NOTE: CrunchyBridge PostgreSQL cluster now managed by oceanid-cloud stack
 
 const flux = new FluxBootstrap("gitops", {
     cluster: clusterConfig,
@@ -259,7 +253,7 @@ if (enableNodeTunnels) {
     nodeTunnels = new NodeTunnels("node-tunnels", {
         cluster: clusterConfig,
         k8sProvider,
-        cloudflareProvider,
+        // NOTE: cloudflareProvider omitted - DNS now managed by oceanid-cloud stack
     });
 }
 
@@ -349,18 +343,7 @@ if (enableCalypsoHostConnector) {
         ],
     }, { dependsOn: [calypsoConnector] });
 
-    // Ensure gpu.<base> DNS exists when NodeTunnels are disabled
-    if (!enableNodeTunnels) {
-        new cloudflare.DnsRecord("host-gpu-cname", {
-            zoneId: clusterConfig.cloudflare.zoneId,
-            name: clusterConfig.nodeTunnel.hostnames.gpu,
-            type: "CNAME",
-            content: clusterConfig.nodeTunnel.target,
-            proxied: true,
-            ttl: 1,
-            comment: pulumi.interpolate`GPU access for ${clusterConfig.name} host connector`,
-        }, { provider: cloudflareProvider });
-    }
+    // NOTE: GPU DNS record (gpu.boathou.se) now managed by oceanid-cloud stack
 
     // Host-side model pullers to fetch latest models from HF and drop new versions for Triton
     const hfModelRepo = cfg.get("hfModelRepo") || "distilbert/distilbert-base-uncased";
