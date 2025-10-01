@@ -1,6 +1,7 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as crunchybridge from "@pulumi/crunchybridge";
 import * as cloudflare from "@pulumi/cloudflare";
+import { PostgresDatabase } from "./components/postgresDatabase";
 
 // =============================================================================
 // OCEANID CLOUD INFRASTRUCTURE
@@ -52,6 +53,34 @@ export const connectionUrl: pulumi.Output<string> | undefined = cluster?.id.appl
 );
 
 // =============================================================================
+// LABEL STUDIO DATABASE
+// =============================================================================
+// IMPORTANT: Database provisioning uses command.local.Command and MUST run locally.
+// Set enableLabelStudioDb=true ONLY when running locally (not in GitHub Actions).
+// Default is false to prevent database creation on every push.
+
+const enableLabelStudioDb = cfg.getBoolean("enableLabelStudioDb") ?? false;
+let labelStudioDb: PostgresDatabase | undefined;
+
+if (enableLabelStudioDb) {
+    // Admin URL for CrunchyBridge cluster (must have CREATEDB privilege)
+    // This is scoped to oceanid-cloud project, separate from cluster runtime URLs
+    const adminUrl = cfg.requireSecret("crunchyAdminUrl");
+    const labelStudioOwnerPassword = cfg.requireSecret("labelStudioOwnerPassword");
+
+    labelStudioDb = new PostgresDatabase("labelfish", {
+        adminUrl,
+        databaseName: "labelfish",
+        ownerRole: "labelfish_owner",
+        ownerPassword: labelStudioOwnerPassword,
+        bootstrapSqlPath: "sql/labelstudio/labelfish_schema.sql",
+    });
+}
+
+export const labelStudioDbUrl: pulumi.Output<string> | undefined = labelStudioDb?.outputs.connectionUrl;
+export const labelStudioDbReady: pulumi.Output<boolean> | undefined = labelStudioDb?.outputs.ready;
+
+// =============================================================================
 // CLOUDFLARE DNS
 // =============================================================================
 
@@ -93,27 +122,14 @@ const labelCname = new cloudflare.Record("label-cname", {
 // =============================================================================
 // CLOUDFLARE ACCESS
 // =============================================================================
-
-const cloudflareAccountId = "8fa97474778c8a894925c148ca829739";
-
-// Label Studio Access app (adopted from existing)
-const labelStudioAccess = new cloudflare.ZeroTrustAccessApplication("label-studio", {
-    accountId: cloudflareAccountId,
-    name: "Goldfish Label Studio",
-    domain: "label.boathou.se",
-    autoRedirectToIdentity: true,
-    customDenyMessage: "Access restricted to authorized SME annotators.",
-    customDenyUrl: "https://boathou.se/access-denied",
-    httpOnlyCookieAttribute: true,
-    logoUrl: "https://labelstud.io/images/logo.png",
-    sessionDuration: "8h",
-}, { protect: true });
+// NOTE: Cloudflare Access disabled for Label Studio per user request
+// Label Studio is now publicly accessible via tunnel at label.boathou.se
+// Authentication is handled by Label Studio's built-in user management
 
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
 export const labelDnsRecord = labelCname.id;
-export const labelStudioAccessId = labelStudioAccess.id;
 
 // =============================================================================
 // PULUMI ESC
