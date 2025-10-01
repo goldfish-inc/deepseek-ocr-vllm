@@ -145,7 +145,11 @@ const nautalisAccessPolicy = new cloudflare.AccessPolicy("nautalis-access-policy
     decision: "allow",
     includes: [
         {
-            emailDomains: ["goldfish.io"],
+            emails: [
+                "ryan@goldfish.io",
+                "emily@goldfish.io",
+                "celeste@goldfish.io",
+            ],
         },
     ],
 });
