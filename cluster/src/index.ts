@@ -22,7 +22,7 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
-import { LabelStudioMlSetup } from "./components/labelStudioMlSetup";
+import { LabelStudioMlAutoconnect } from "./components/labelStudioMlAutoconnect";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -268,10 +268,10 @@ const labelStudio = new LabelStudio("label-studio", {
 });
 
 // Auto-configure ML backend for all Label Studio projects
-// Runs as CronJob every hour to discover new projects and connect ML backend
+// Uses PROJECT_CREATED webhook for instant connection + hourly fallback sync
 const labelStudioApiToken = cfg.requireSecret("labelStudioApiToken");
 
-new LabelStudioMlSetup("ls-ml-setup", {
+new LabelStudioMlAutoconnect("ls-ml-autoconnect", {
     k8sProvider,
     namespace: "apps",
     labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",

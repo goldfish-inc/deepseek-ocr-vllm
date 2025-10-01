@@ -4,13 +4,14 @@ Programmatically connect the Triton ML backend to Label Studio projects.
 
 ## ⚠️ System-Wide Auto-Configuration Now Available
 
-**New projects automatically get ML backend connected within 1 hour** via Kubernetes CronJob.
+**New projects get ML backend connected INSTANTLY** via Label Studio webhooks.
 
-- **Auto-configured**: CronJob runs hourly, connects ML backend to all projects
-- **No manual steps**: Just create your project and wait up to 1 hour
-- **Check status**: `kubectl get cronjob ls-ml-setup -n apps`
+- **Real-time**: PROJECT_CREATED webhook fires immediately when you create a project
+- **Zero wait**: ML backend connected in seconds, not minutes or hours
+- **Fallback**: Hourly sync catches any missed projects (safety net)
+- **Check status**: `kubectl logs -n apps -l app=ls-ml-autoconnect`
 
-**This script is now optional** - use only for immediate setup or troubleshooting.
+**This script is now deprecated** - the webhook-based approach is automatic and instant.
 
 ## Quick Start
 

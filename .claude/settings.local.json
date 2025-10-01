@@ -148,7 +148,13 @@
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,svc -n apps)",
       "WebFetch(domain:labelstud.io)",
       "WebFetch(domain:api.labelstud.io)",
-      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl port-forward -n apps svc/ls-triton-adapter 9090:9090)"
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl port-forward -n apps svc/ls-triton-adapter 9090:9090)",
+      "Bash(aws sts:*)",
+      "Bash(aws s3 mb:*)",
+      "Bash(aws s3api put-public-access-block:*)",
+      "Bash(aws iam create-user:*)",
+      "Bash(aws iam create-access-key:*)",
+      "Bash(yes)"
     ],
     "deny": [],
     "ask": []

@@ -71,20 +71,28 @@ flowchart LR
 
 ## Label Studio ML Backend (Auto-configured)
 
-- **ML backend auto-connection**: Kubernetes CronJob runs hourly to connect `ls-triton-adapter` to all projects
-- **No manual setup required**: New projects automatically get ML backend within 1 hour
-- **Architecture**: CronJob → Label Studio API → Connect ML backend to all projects
+- **Real-time ML backend connection**: Webhook-based instant connection when projects are created
+- **Zero wait time**: Projects get ML backend immediately (no delay)
+- **Architecture**: Label Studio PROJECT_CREATED webhook → FastAPI receiver → Connect ML backend
+- **Fallback**: Hourly sync for any missed projects (safety net)
 - **Authentication**: Uses Label Studio API token from 1Password (stored in ESC as `labelStudioApiToken`)
 
-**Manual trigger** (if needed):
-```bash
-KUBECONFIG=~/.kube/k3s-config.yaml kubectl create job --from=cronjob/ls-ml-setup ls-ml-setup-manual -n apps
-```
+**How it works**:
+1. On startup, service registers PROJECT_CREATED webhook with Label Studio
+2. When you create a project, Label Studio fires webhook instantly
+3. Service receives webhook and connects ML backend immediately
+4. Hourly background sync catches any missed projects
 
 **Check status**:
 ```bash
-KUBECONFIG=~/.kube/k3s-config.yaml kubectl get cronjob ls-ml-setup -n apps
-KUBECONFIG=~/.kube/k3s-config.yaml kubectl logs -n apps -l app=ls-ml-setup --tail=50
+# View service logs
+KUBECONFIG=~/.kube/k3s-config.yaml kubectl logs -n apps -l app=ls-ml-autoconnect --tail=50
+
+# Manual sync trigger (if needed)
+curl http://ls-ml-autoconnect.apps.svc.cluster.local:8080/sync
+
+# Health check
+KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy ls-ml-autoconnect -n apps
 ```
 
 ## Secrets & Config
