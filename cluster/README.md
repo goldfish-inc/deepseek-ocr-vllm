@@ -262,3 +262,4 @@ This stack now focuses exclusively on k8s cluster bootstrap.
 - [Cloud Infrastructure](../cloud/README.md) - DNS, Access, databases
 - [CLAUDE.md](../CLAUDE.md) - Cluster connection guide
 - [CURRENT_STATE.md](../CURRENT_STATE.md) - Component status
+# Test CI guard
