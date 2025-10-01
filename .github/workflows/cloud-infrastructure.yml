@@ -54,7 +54,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build CrunchyBridge SDK
-        run: cd cloud/sdks/crunchybridge && pnpm build
+        run: cd cloud/sdks/crunchybridge && pnpm install && pnpm build
 
       - name: Type-check cloud program
         run: pnpm --filter @oceanid/cloud build
@@ -88,7 +88,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build CrunchyBridge SDK
-        run: cd cloud/sdks/crunchybridge && pnpm build
+        run: cd cloud/sdks/crunchybridge && pnpm install && pnpm build
 
       - name: Build cloud program
         run: pnpm --filter @oceanid/cloud build
@@ -143,7 +143,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build CrunchyBridge SDK
-        run: cd cloud/sdks/crunchybridge && pnpm build
+        run: cd cloud/sdks/crunchybridge && pnpm install && pnpm build
 
       - name: Build cloud program
         run: pnpm --filter @oceanid/cloud build
