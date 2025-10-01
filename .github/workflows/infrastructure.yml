@@ -120,7 +120,6 @@ jobs:
           diff: true
           pulumi-version: ${{ env.PULUMI_VERSION }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.access-token }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
   deploy:
@@ -172,5 +171,4 @@ jobs:
           refresh: true
           pulumi-version: ${{ env.PULUMI_VERSION }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.access-token }}
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
