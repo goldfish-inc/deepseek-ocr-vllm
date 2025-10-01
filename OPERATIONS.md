@@ -69,10 +69,29 @@ flowchart LR
   CL --> TR[Triton 8000]
 ```
 
+## Label Studio ML Backend (Auto-configured)
+
+- **ML backend auto-connection**: Kubernetes CronJob runs hourly to connect `ls-triton-adapter` to all projects
+- **No manual setup required**: New projects automatically get ML backend within 1 hour
+- **Architecture**: CronJob → Label Studio API → Connect ML backend to all projects
+- **Authentication**: Uses Label Studio API token from 1Password (stored in ESC as `labelStudioApiToken`)
+
+**Manual trigger** (if needed):
+```bash
+KUBECONFIG=~/.kube/k3s-config.yaml kubectl create job --from=cronjob/ls-ml-setup ls-ml-setup-manual -n apps
+```
+
+**Check status**:
+```bash
+KUBECONFIG=~/.kube/k3s-config.yaml kubectl get cronjob ls-ml-setup -n apps
+KUBECONFIG=~/.kube/k3s-config.yaml kubectl logs -n apps -l app=ls-ml-setup --tail=50
+```
+
 ## Secrets & Config
 - ESC keys to verify:
   - `cloudflareNodeTunnelId`, `cloudflareNodeTunnelToken`, `cloudflareNodeTunnelHostname`, `cloudflareNodeTunnelTarget`
   - `cloudflareAccountId`, `cloudflareApiToken`, `cloudflareZoneId`
+  - `labelStudioApiToken` - API token for ML backend auto-configuration (from 1Password)
 - The node tunnel token can be either:
   - Base64‑encoded credentials.json, or
   - Raw TUNNEL_TOKEN string

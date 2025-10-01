@@ -2,6 +2,16 @@
 
 Programmatically connect the Triton ML backend to Label Studio projects.
 
+## ⚠️ System-Wide Auto-Configuration Now Available
+
+**New projects automatically get ML backend connected within 1 hour** via Kubernetes CronJob.
+
+- **Auto-configured**: CronJob runs hourly, connects ML backend to all projects
+- **No manual steps**: Just create your project and wait up to 1 hour
+- **Check status**: `kubectl get cronjob ls-ml-setup -n apps`
+
+**This script is now optional** - use only for immediate setup or troubleshooting.
+
 ## Quick Start
 
 ```bash

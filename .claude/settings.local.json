@@ -144,7 +144,11 @@
       "Bash(/opt/homebrew/opt/postgresql@17/bin/psql \"postgres://u_ogfzdegyvvaj3g4iyuvlu5yxmi:erg95iL1maqSkZGPPKJ4mTaETPcjxyEiCYBLJR7lrAmECjPIPvaNDu7BjVJSmW0a@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/postgres\" -c \"CREATE DATABASE labelfish;\")",
       "Bash(/opt/homebrew/opt/postgresql@17/bin/psql \"postgres://u_ogfzdegyvvaj3g4iyuvlu5yxmi:erg95iL1maqSkZGPPKJ4mTaETPcjxyEiCYBLJR7lrAmECjPIPvaNDu7BjVJSmW0a@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/postgres\" -c \"\\du\")",
       "Bash(pnpm --filter @oceanid/cloud build)",
-      "WebFetch(domain:docs.crunchybridge.com)"
+      "WebFetch(domain:docs.crunchybridge.com)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,svc -n apps)",
+      "WebFetch(domain:labelstud.io)",
+      "WebFetch(domain:api.labelstud.io)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl port-forward -n apps svc/ls-triton-adapter 9090:9090)"
     ],
     "deny": [],
     "ask": []

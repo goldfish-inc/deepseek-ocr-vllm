@@ -22,6 +22,7 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
+import { LabelStudioMlSetup } from "./components/labelStudioMlSetup";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -257,7 +258,7 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
 // Deploy Label Studio with dedicated labelfish database (CrunchyBridge ebisu cluster)
 const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl");
 
-new LabelStudio("label-studio", {
+const labelStudio = new LabelStudio("label-studio", {
     k8sProvider,
     namespace: "apps",
     replicas: 1,
@@ -265,6 +266,18 @@ new LabelStudio("label-studio", {
     dbUrl: labelStudioDbUrl,
     hostUrl: pulumi.interpolate`https://${labelHostname}`,
 });
+
+// Auto-configure ML backend for all Label Studio projects
+// Runs as CronJob every hour to discover new projects and connect ML backend
+const labelStudioApiToken = cfg.requireSecret("labelStudioApiToken");
+
+new LabelStudioMlSetup("ls-ml-setup", {
+    k8sProvider,
+    namespace: "apps",
+    labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",
+    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}`,
+    apiToken: labelStudioApiToken,
+}, { dependsOn: [labelStudio, lsAdapter] });
 
 // SME Readiness - Configure boathou.se domain with Cloudflare Access
 // NOTE: Access app creation is now managed by cloud stack to prevent duplication
