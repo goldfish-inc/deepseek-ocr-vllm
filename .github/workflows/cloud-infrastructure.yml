@@ -53,10 +53,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build CrunchyBridge SDK
-        run: pnpm --filter @pulumi/crunchybridge build
-
-      - name: Type-check cloud program
+      - name: Build cloud program
         run: pnpm --filter @oceanid/cloud build
 
   preview:
