@@ -120,8 +120,15 @@ const labelCname = new cloudflare.Record("label-cname", {
 });
 
 // nautalis documentation site (cloudflare pages)
-// Note: DNS is handled automatically by Cloudflare Pages when custom domain is added
-// No manual DNS record needed
+const nautalisCname = new cloudflare.Record("nautalis-dns", {
+    zoneId: cloudflareZoneId,
+    name: "nautilus",
+    type: "CNAME",
+    content: "nautalis.pages.dev",
+    proxied: true,
+    ttl: 1,
+    comment: "Nautalis documentation site (Cloudflare Pages)",
+});
 
 // =============================================================================
 // CLOUDFLARE ACCESS
@@ -162,6 +169,7 @@ const nautalisAccessPolicy = new cloudflare.AccessPolicy("nautalis-access-policy
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
 export const labelDnsRecord = labelCname.id;
+export const nautalisDnsRecord = nautalisCname.id;
 export const nautalisAccessAppId = nautalisAccessApp.id;
 export const nautalisAccessPolicyId = nautalisAccessPolicy.id;
 
