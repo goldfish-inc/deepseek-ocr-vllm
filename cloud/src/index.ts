@@ -161,9 +161,29 @@ const nautalisAccessPolicy = new cloudflare.AccessPolicy("nautalis-access-policy
     ],
 });
 
-// NOTE: Cloudflare Access disabled for Label Studio per user request
-// Label Studio is now publicly accessible via tunnel at label.boathou.se
-// Authentication is handled by Label Studio's built-in user management
+// GPU endpoint protection via service token (used by in-cluster adapter)
+const enableGpuAccess = true;
+const cfAccessServiceTokenId = cfg.get("cfAccessServiceTokenId");
+let gpuAccessApp: cloudflare.AccessApplication | undefined;
+if (enableGpuAccess && cfAccessServiceTokenId) {
+    gpuAccessApp = new cloudflare.AccessApplication("gpu-access-app", {
+        zoneId: cloudflareZoneId,
+        name: "GPU Service",
+        domain: "gpu.boathou.se",
+        sessionDuration: "24h",
+        type: "self_hosted",
+    });
+    new cloudflare.AccessPolicy("gpu-access-bypass-service-token", {
+        applicationId: gpuAccessApp.id,
+        zoneId: cloudflareZoneId,
+        name: "Bypass for Adapter Service Token",
+        precedence: 1,
+        decision: "bypass",
+        includes: [
+            { serviceTokens: [cfAccessServiceTokenId] } as any,
+        ],
+    });
+}
 
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
@@ -172,6 +192,7 @@ export const labelDnsRecord = labelCname.id;
 export const nautalisDnsRecord = nautalisCname.id;
 export const nautalisAccessAppId = nautalisAccessApp.id;
 export const nautalisAccessPolicyId = nautalisAccessPolicy.id;
+export const gpuAccessAppId = gpuAccessApp?.id;
 
 // =============================================================================
 // PULUMI ESC
