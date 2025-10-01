@@ -26,6 +26,18 @@ if SENTRY_DSN:
 TRITON_BASE = os.getenv("TRITON_BASE_URL", "http://localhost:8000")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "bert-base-uncased")
 
+# Optional Cloudflare Access service token support for gating GPU endpoint
+CF_ACCESS_CLIENT_ID = os.getenv("CF_ACCESS_CLIENT_ID")
+CF_ACCESS_CLIENT_SECRET = os.getenv("CF_ACCESS_CLIENT_SECRET")
+
+def _cf_access_headers():
+    if CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET:
+        return {
+            "CF-Access-Client-Id": CF_ACCESS_CLIENT_ID,
+            "CF-Access-Client-Secret": CF_ACCESS_CLIENT_SECRET,
+        }
+    return {}
+
 # Load NER labels from labels.json or environment variable
 # CRITICAL: No silent fallback - fail fast if labels missing to prevent mislabeling
 NER_LABELS_ENV = os.getenv("NER_LABELS")
@@ -73,7 +85,7 @@ async def validate_labels():
         # Query Triton model metadata to get expected number of classes
         metadata_url = f"{TRITON_BASE}/v2/models/{DEFAULT_MODEL}/config"
         async with httpx.AsyncClient() as client:
-            response = await client.get(metadata_url)
+            response = await client.get(metadata_url, headers=_cf_access_headers())
             response.raise_for_status()
             model_config = response.json()
 
@@ -102,6 +114,7 @@ async def validate_labels():
         print(f"⚠️  Warning: Label validation error: {e}")
 
 @app.get("/healthz")
+@app.get("/health")  # Label Studio expects /health endpoint
 def healthz():
     return {
         "ok": True,
@@ -144,7 +157,7 @@ async def predict(req: PredictRequest):
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(url, json=payload)
+            r = await client.post(url, json=payload, headers=_cf_access_headers())
             r.raise_for_status()
             out = r.json()
             if (model.startswith("bert") or model.startswith("distilbert")) and req.task == "classification":
@@ -167,4 +180,3 @@ async def predict(req: PredictRequest):
     except Exception as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
-
