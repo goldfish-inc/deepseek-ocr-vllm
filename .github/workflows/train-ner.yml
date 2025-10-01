@@ -31,8 +31,8 @@ jobs:
           export PATH="$HOME/.pulumi/bin:$PATH"
 
           # Get HF token from ESC (camelCase key to match Pulumi config)
-          HF_TOKEN=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfAccessToken)
-          if [ -z "$HF_TOKEN" ]; then
+          HF_TOKEN=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken --show-secrets --value string)
+          if [ -z "$HF_TOKEN" ] || [ "$HF_TOKEN" = "[secret]" ]; then
             echo "❌ HF token not found in ESC (pulumiConfig.oceanid-cluster:hfAccessToken)" >&2
             exit 1
           fi
@@ -40,8 +40,8 @@ jobs:
           echo "HF_TOKEN=$HF_TOKEN" >> $GITHUB_ENV
 
           # Get HF repos from ESC (with sensible defaults)
-          HF_DATASET_REPO=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfDatasetRepo || true)
-          HF_MODEL_REPO=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfModelRepo || true)
+          HF_DATASET_REPO=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo --value string 2>/dev/null || echo "goldfish-inc/oceanid-annotations")
+          HF_MODEL_REPO=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo --value string 2>/dev/null || echo "goldfish-inc/oceanid-ner-distilbert")
           if [ -z "$HF_DATASET_REPO" ]; then HF_DATASET_REPO="goldfish-inc/oceanid-annotations"; fi
           if [ -z "$HF_MODEL_REPO" ]; then HF_MODEL_REPO="goldfish-inc/oceanid-ner-distilbert"; fi
           echo "HF_DATASET_REPO=$HF_DATASET_REPO" >> $GITHUB_ENV
