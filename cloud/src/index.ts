@@ -79,6 +79,17 @@ const gpuCname = new cloudflare.Record("gpu-cname", {
     comment: "GPU access for oceanid-cluster host connector",
 }, { protect: true });
 
+// label studio tunnel (adopted from existing)
+const labelCname = new cloudflare.Record("label-cname", {
+    zoneId: cloudflareZoneId,
+    name: "label.boathou.se",
+    type: "CNAME",
+    content: "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc.cfargotunnel.com",
+    proxied: true,
+    ttl: 1,
+    comment: "Label Studio for oceanid-cluster via main tunnel",
+}, { protect: true });
+
 // =============================================================================
 // CLOUDFLARE ACCESS
 // =============================================================================
@@ -100,6 +111,7 @@ const labelStudioAccess = new cloudflare.ZeroTrustAccessApplication("label-studi
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
+export const labelDnsRecord = labelCname.id;
 export const labelStudioAccessId = labelStudioAccess.id;
 
 // =============================================================================
