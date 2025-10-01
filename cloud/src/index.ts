@@ -119,15 +119,15 @@ const labelCname = new cloudflare.Record("label-cname", {
     comment: "Label Studio for oceanid-cluster via main tunnel",
 });
 
-// nautalis documentation site (cloudflare pages)
-const nautalisCname = new cloudflare.Record("nautalis-dns", {
+// nautilus documentation site (cloudflare pages)
+const nautilusCname = new cloudflare.Record("nautilus-dns", {
     zoneId: cloudflareZoneId,
     name: "nautilus",
     type: "CNAME",
-    content: "nautalis.pages.dev",
+    content: "nautilus.pages.dev",
     proxied: true,
     ttl: 1,
-    comment: "Nautalis documentation site (Cloudflare Pages)",
+    comment: "Nautilus documentation site (Cloudflare Pages)",
 });
 
 // =============================================================================
@@ -135,19 +135,19 @@ const nautalisCname = new cloudflare.Record("nautalis-dns", {
 // =============================================================================
 
 // Access application for nautilus.boathou.se
-const nautalisAccessApp = new cloudflare.AccessApplication("nautalis-access-app", {
+const nautilusAccessApp = new cloudflare.AccessApplication("nautilus-access-app", {
     zoneId: cloudflareZoneId,
-    name: "Nautalis: Goldfish Inc. Documentation",
+    name: "Nautilus: Goldfish Inc. Documentation",
     domain: "nautilus.boathou.se",
     type: "self_hosted",
     sessionDuration: "24h",
 });
 
-// Email OTP authentication policy for nautalis
-const nautalisAccessPolicy = new cloudflare.AccessPolicy("nautalis-access-policy", {
-    applicationId: nautalisAccessApp.id,
+// Email OTP authentication policy for nautilus
+const nautilusAccessPolicy = new cloudflare.AccessPolicy("nautilus-access-policy", {
+    applicationId: nautilusAccessApp.id,
     zoneId: cloudflareZoneId,
-    name: "Email verification for nautalis access",
+    name: "Email verification for nautilus access",
     precedence: 1,
     decision: "allow",
     includes: [
@@ -189,9 +189,9 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
 export const labelDnsRecord = labelCname.id;
-export const nautalisDnsRecord = nautalisCname.id;
-export const nautalisAccessAppId = nautalisAccessApp.id;
-export const nautalisAccessPolicyId = nautalisAccessPolicy.id;
+export const nautilusDnsRecord = nautilusCname.id;
+export const nautilusAccessAppId = nautilusAccessApp.id;
+export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
 
 // =============================================================================
