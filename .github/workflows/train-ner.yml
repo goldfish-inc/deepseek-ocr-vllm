@@ -20,22 +20,45 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Configure Pulumi ESC access
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:organization
+
+      - name: Export HF token from ESC
+        id: esc
+        run: |
+          # Install ESC CLI
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          export PATH="$HOME/.pulumi/bin:$PATH"
+
+          # Get HF token from ESC (camelCase key to match Pulumi config)
+          HF_TOKEN=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfAccessToken)
+          if [ -z "$HF_TOKEN" ]; then
+            echo "❌ HF token not found in ESC (pulumiConfig.oceanid-cluster:hfAccessToken)" >&2
+            exit 1
+          fi
+          echo "::add-mask::$HF_TOKEN"
+          echo "HF_TOKEN=$HF_TOKEN" >> $GITHUB_ENV
+
+          # Get HF repos from ESC (with sensible defaults)
+          HF_DATASET_REPO=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfDatasetRepo || true)
+          HF_MODEL_REPO=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:hfModelRepo || true)
+          if [ -z "$HF_DATASET_REPO" ]; then HF_DATASET_REPO="goldfish-inc/oceanid-annotations"; fi
+          if [ -z "$HF_MODEL_REPO" ]; then HF_MODEL_REPO="goldfish-inc/oceanid-ner-distilbert"; fi
+          echo "HF_DATASET_REPO=$HF_DATASET_REPO" >> $GITHUB_ENV
+          echo "HF_MODEL_REPO=$HF_MODEL_REPO" >> $GITHUB_ENV
+
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install transformers datasets "optimum[exporters]" onnxruntime huggingface_hub
 
-      - name: Prepare labels.json from secret
-        env:
-          NER_LABELS_JSON: ${{ secrets.NER_LABELS_JSON }}
-        run: |
-          if [ -z "${NER_LABELS_JSON}" ]; then echo "NER_LABELS_JSON secret is required"; exit 1; fi
-          echo "${NER_LABELS_JSON}" > labels.json
-
       - name: Fetch HF dataset annotations
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO || 'goldfish-inc/oceanid-annotations' }}
+          HF_TOKEN: ${{ env.HF_TOKEN }}
+          HF_DATASET_REPO: ${{ env.HF_DATASET_REPO }}
         run: |
           python - <<'PY'
 import os, json, pathlib
@@ -62,8 +85,8 @@ PY
 
       - name: Publish ONNX to HF model repo
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_MODEL_REPO: ${{ vars.HF_MODEL_REPO || 'goldfish-inc/oceanid-ner-distilbert' }}
+          HF_TOKEN: ${{ env.HF_TOKEN }}
+          HF_MODEL_REPO: ${{ env.HF_MODEL_REPO }}
         run: |
           python - <<'PY'
 import os, io
