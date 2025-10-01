@@ -7,6 +7,18 @@ import * as cloudflare from "@pulumi/cloudflare";
 
 import { clusterConfig } from "./config";
 
+// Guard against running cluster stack in GitHub Actions
+// This stack requires kubeconfig access and should run locally or on self-hosted runners
+if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
+    throw new Error(
+        "❌ CLUSTER STACK CANNOT RUN IN GITHUB ACTIONS\n\n" +
+        "This stack manages Kubernetes resources and requires kubeconfig access.\n" +
+        "It MUST run locally or on a self-hosted runner with cluster access.\n\n" +
+        "For cloud resources (Cloudflare, CrunchyBridge), use the 'oceanid-cloud' stack instead.\n" +
+        "See cloud/README.md for details."
+    );
+}
+
 export const kubeconfigPath = path.resolve(clusterConfig.kubeconfigPath);
 
 if (!fs.existsSync(kubeconfigPath)) {

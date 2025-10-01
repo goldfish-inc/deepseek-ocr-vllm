@@ -26,18 +26,7 @@ import { DbBootstrap } from "./components/dbBootstrap";
 // =============================================================================
 // CLUSTER PROVISIONING
 // =============================================================================
-
-// Guard against running cluster stack in GitHub Actions
-// This stack requires kubeconfig access and should run locally or on self-hosted runners
-if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
-    throw new Error(
-        "❌ CLUSTER STACK CANNOT RUN IN GITHUB ACTIONS\n\n" +
-        "This stack manages Kubernetes resources and requires kubeconfig access.\n" +
-        "It MUST run locally or on a self-hosted runner with cluster access.\n\n" +
-        "For cloud resources (Cloudflare, CrunchyBridge), use the 'oceanid-cloud' stack instead.\n" +
-        "See cloud/README.md for details."
-    );
-}
+// NOTE: CI guard is in providers.ts to catch GitHub Actions before kubeconfig loading
 
 const cfg = new pulumi.Config();
 const namespaceName = "apps";
