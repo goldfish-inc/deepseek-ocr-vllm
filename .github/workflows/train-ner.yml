@@ -62,20 +62,20 @@ jobs:
           HF_TOKEN: ${{ env.HF_TOKEN }}
           HF_DATASET_REPO: ${{ env.HF_DATASET_REPO }}
         run: |
-          python - <<'PY'
-import os, json, pathlib
-from huggingface_hub import HfApi, hf_hub_download, list_repo_files
-HF_TOKEN=os.environ['HF_TOKEN']
-REPO=os.environ.get('HF_DATASET_REPO','goldfish-inc/oceanid-annotations')
-api=HfApi(token=HF_TOKEN)
-out=pathlib.Path('local_annotations'); out.mkdir(exist_ok=True)
-for f in list_repo_files(REPO, repo_type='dataset'):
-    if f.startswith('annotations/') and f.endswith('.jsonl'):
-        p=hf_hub_download(REPO, filename=f, repo_type='dataset', token=HF_TOKEN)
-        dst=out/ pathlib.Path(f).name
-        open(dst,'wb').write(open(p,'rb').read())
-print('downloaded jsonl files to', out)
-PY
+          python - << 'PY'
+          import os, json, pathlib
+          from huggingface_hub import HfApi, hf_hub_download, list_repo_files
+          HF_TOKEN=os.environ['HF_TOKEN']
+          REPO=os.environ.get('HF_DATASET_REPO','goldfish-inc/oceanid-annotations')
+          api=HfApi(token=HF_TOKEN)
+          out=pathlib.Path('local_annotations'); out.mkdir(exist_ok=True)
+          for f in list_repo_files(REPO, repo_type='dataset'):
+              if f.startswith('annotations/') and f.endswith('.jsonl'):
+                  p=hf_hub_download(REPO, filename=f, repo_type='dataset', token=HF_TOKEN)
+                  dst=out/ pathlib.Path(f).name
+                  open(dst,'wb').write(open(p,'rb').read())
+          print('downloaded jsonl files to', out)
+          PY
 
       - name: Train NER
         run: |
@@ -90,15 +90,15 @@ PY
           HF_TOKEN: ${{ env.HF_TOKEN }}
           HF_MODEL_REPO: ${{ env.HF_MODEL_REPO }}
         run: |
-          python - <<'PY'
-import os, io
-from datetime import datetime
-from huggingface_hub import HfApi, CommitOperationAdd
-repo=os.environ.get('HF_MODEL_REPO','goldfish-inc/oceanid-ner-distilbert')
-api=HfApi(token=os.environ['HF_TOKEN'])
-api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
-bin=open('distilbert_onnx/model.onnx','rb').read()
-op=CommitOperationAdd(path_in_repo='onnx/model.onnx', path_or_fileobj=io.BytesIO(bin))
-api.create_commit(repo_id=repo, repo_type='model', operations=[op], commit_message=f"Update ONNX {datetime.utcnow().isoformat()}Z")
-print('published ONNX to', repo)
-PY
+          python - << 'PY'
+          import os, io
+          from datetime import datetime
+          from huggingface_hub import HfApi, CommitOperationAdd
+          repo=os.environ.get('HF_MODEL_REPO','goldfish-inc/oceanid-ner-distilbert')
+          api=HfApi(token=os.environ['HF_TOKEN'])
+          api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
+          bin=open('distilbert_onnx/model.onnx','rb').read()
+          op=CommitOperationAdd(path_in_repo='onnx/model.onnx', path_or_fileobj=io.BytesIO(bin))
+          api.create_commit(repo_id=repo, repo_type='model', operations=[op], commit_message=f"Update ONNX {datetime.utcnow().isoformat()}Z")
+          print('published ONNX to', repo)
+          PY
