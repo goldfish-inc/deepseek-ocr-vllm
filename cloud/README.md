@@ -141,6 +141,28 @@ Set in workflow file (`.github/workflows/cloud-infrastructure.yml`):
 
 - `PULUMI_CONFIG_PASSPHRASE`: Stack encryption passphrase
 
+## ESC‑only CI (No GitHub Secrets)
+
+All CI workflows use Pulumi ESC via OIDC. No GitHub Secrets or Variables are required for model training or database migrations.
+
+Set these ESC keys once:
+
+```bash
+# HF token for training/sink/model publish
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "<HF_WRITE_TOKEN>" --secret
+
+# Optional: repo names (defaults are shown)
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
+
+# CrunchyBridge Postgres URL for migrations
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
+```
+
+Workflows:
+- `train-ner.yml` reads `hfAccessToken`, `hfDatasetRepo`, and `hfModelRepo` from ESC.
+- `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
+
 ## Stack Outputs
 
 Current exports:

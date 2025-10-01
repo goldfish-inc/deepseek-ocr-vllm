@@ -34,22 +34,29 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
   - Docling model present:
     - `curl -s https://gpu.<base>/v2/models/docling_granite_python`
 
-## Hands-off Training and Deployment
+## Hands‑off Training and Deployment (ESC‑only)
 
-- GitHub Actions (`.github/workflows/train-ner.yml`) trains nightly from the HF dataset and publishes an updated ONNX to a private HF model repo.
+- GitHub Actions (`.github/workflows/train-ner.yml`) trains (nightly or on demand) from the HF dataset and publishes an updated ONNX to a private HF model repo.
 - Calypso runs a `model-puller` systemd timer that fetches the latest ONNX into `/opt/triton/models/distilbert-base-uncased/<n>/`.
-- Triton is started with repository polling, so new versions load automatically.
+- Triton repository polling reloads new versions automatically.
 
-Configure once:
-- GitHub Secrets:
-  - `HF_TOKEN` (write access)
-  - `NER_LABELS_JSON` (JSON array matching adapter’s NER_LABELS)
-- GitHub Variables (optional):
-  - `HF_DATASET_REPO` (default `goldfish-inc/oceanid-annotations`)
-  - `HF_MODEL_REPO` (default `goldfish-inc/oceanid-ner-distilbert`)
-- ESC / Pulumi:
-  - `oceanid-cluster:hfAccessToken` (for sink + model puller)
-  - `oceanid-cluster:postgres_url` for CrunchyBridge
+Configure once in Pulumi ESC (no GitHub Secrets/Vars required):
+- `pulumiConfig.oceanid-cluster:hfAccessToken` → HF write token (used by sink + CI)
+- `pulumiConfig.oceanid-cluster:hfDatasetRepo` → e.g., `goldfish-inc/oceanid-annotations`
+- `pulumiConfig.oceanid-cluster:hfModelRepo` → e.g., `goldfish-inc/oceanid-ner-distilbert`
+- `pulumiConfig.oceanid-cluster:postgres_url` → CrunchyBridge PG 17 URL (for migrations)
+
+ESC commands:
+```bash
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "<HF_WRITE_TOKEN>" --secret
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
+```
+
+Workflows:
+- `train-ner.yml` pulls HF token + repo names from ESC via OIDC.
+- `database-migrations.yml` pulls DB URL from ESC and applies SQL migrations V3–V6; ensures extensions `pgcrypto`, `postgis`, `btree_gist`. Skips gracefully if DB URL not set.
 - Check connector health in Cloudflare Zero Trust → Tunnels.
 
 Mermaid (GPU path):
