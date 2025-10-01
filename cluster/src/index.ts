@@ -22,7 +22,6 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
-import { DatabaseMigrations } from "./components/databaseMigrations";
 import { CrunchyBridgeCluster } from "./components/crunchyBridgeCluster";
 
 // =============================================================================
@@ -215,13 +214,13 @@ if (enableAppsStack) {
 }
 
 // =============================================================================
-// CRUNCHYBRIDGE DATABASE PROVISIONING + MIGRATIONS
+// CRUNCHYBRIDGE DATABASE PROVISIONING
 // =============================================================================
 
 // Provision CrunchyBridge managed PostgreSQL cluster via IaC
+// Database migrations run via GitHub Actions workflow, not k3s Jobs
 const enableCrunchyBridgeProvisioning = cfg.getBoolean("enableCrunchyBridgeProvisioning") ?? false;
 let crunchyCluster: CrunchyBridgeCluster | undefined;
-let crunchyDbUrl: pulumi.Output<string>;
 
 if (enableCrunchyBridgeProvisioning) {
     crunchyCluster = new CrunchyBridgeCluster("ebisu", {
@@ -235,23 +234,6 @@ if (enableCrunchyBridgeProvisioning) {
         storage: 50,
         isHa: false,
     });
-    crunchyDbUrl = crunchyCluster.outputs.connectionUrl;
-} else {
-    // Use existing database URL from config (manual provisioning)
-    crunchyDbUrl = cfg.requireSecret("postgres_url");
-}
-
-// Apply database migrations (V3-V6) via Kubernetes Jobs
-const enableDatabaseMigrations = cfg.getBoolean("enableDatabaseMigrations") ?? true;
-
-if (enableDatabaseMigrations) {
-    new DatabaseMigrations("crunchybridge-migrations", {
-        k8sProvider,
-        namespace: namespaceName,
-        dbUrl: crunchyDbUrl,
-        migrationsPath: "../../../sql/migrations", // Relative to compiled dist/src/components/
-        enableSeedData: true,
-    }, { dependsOn: crunchyCluster ? [crunchyCluster] : [] });
 }
 
 const flux = new FluxBootstrap("gitops", {
