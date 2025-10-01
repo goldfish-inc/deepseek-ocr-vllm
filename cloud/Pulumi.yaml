@@ -1,0 +1,7 @@
+name: oceanid-cloud
+description: Oceanid cloud infrastructure (Cloudflare, CrunchyBridge, ESC) - no kubeconfig required
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+main: dist/

@@ -1,0 +1,19 @@
+{
+  "name": "@oceanid/cloud",
+  "version": "1.0.0",
+  "description": "Oceanid cloud infrastructure (Cloudflare, CrunchyBridge, ESC) - runs in GitHub Actions with no kubeconfig",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@pulumi/pulumi": "^3.197.0",
+    "@pulumi/cloudflare": "^5.43.1",
+    "@pulumi/crunchybridge": "file:./sdks/crunchybridge"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

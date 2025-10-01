@@ -1,0 +1,6 @@
+config:
+  oceanid-cloud:crunchybridge_api_key:
+    secure: AAABAIZOmKmGY6pzgNVpqtykXgtsfHx8TEBs/8Xeg4Lv+fBwACkYs2zAA103aXQnJ71dB6dz+vKeUbmj+xw1/FsOdXcvr1Skx3+4rEr7pPWPfavh
+  oceanid-cloud:crunchybridge_team_id:
+    secure: AAABAGM+ihRerLx0SuXFianZFMtNRrUtil040J9Tp5iUD9L1F9az3Oks/zJsEvoCrxikHJocyLpAIQ==
+  oceanid-cloud:enableCrunchyBridgeProvisioning: "true"
