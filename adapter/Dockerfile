@@ -5,7 +5,9 @@ COPY requirements.txt /tmp/requirements.txt
 RUN python -m venv /venv \
  && /venv/bin/pip install --upgrade pip \
  && /venv/bin/pip install -r /tmp/requirements.txt
-# App code will be mounted via ConfigMap at runtime; just provide entrypoint
+# Copy application code into image
+COPY app.py /app/app.py
+COPY ner/ /app/ner/
 ENV PATH="/venv/bin:$PATH"
 CMD ["uvicorn","app:app","--host","0.0.0.0","--port","9090"]
 
