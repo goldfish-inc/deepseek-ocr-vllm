@@ -52,7 +52,7 @@ Use this file after a context reset to pick up work fast.
 - Validate Triton: `curl -sk https://gpu.<base>/v2/health/ready`
 - Validate adapter:
   - `kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &`
-  - `curl -s http://localhost:9090/healthz`
+  - `curl -s http://localhost:9090/health`
   - `curl -s -X POST http://localhost:9090/predict -H 'Content-Type: application/json' -d '{"model":"bert-base-uncased","task":"ner","text":"MV Iconic…"}'`
 
 ## Current State (now)

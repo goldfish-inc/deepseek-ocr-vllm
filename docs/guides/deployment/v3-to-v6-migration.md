@@ -278,7 +278,7 @@ docker restart ls-triton-adapter
 
 **Health check verification:**
 ```bash
-curl http://localhost:8080/healthz | jq
+curl http://localhost:8080/health | jq
 # Expected: {"ok": true, "database": "connected", "triton": "connected"}
 ```
 

@@ -58,7 +58,7 @@ Stack: ryan-taylor/oceanid-cluster/prod
 ## Key Endpoints
 - Label Studio: `https://label.<base>` (ZeroTrust)
 - Triton (Calypso): `https://gpu.<base>` (HTTP v2 `/v2/health/ready`)
-- Adapter (cluster): `svc/ls-triton-adapter.apps.svc:9090` (`/healthz`, `/predict`)
+- Adapter (cluster): `svc/ls-triton-adapter.apps.svc:9090` (`/health`, `/predict`)
 - Annotations Sink: `http://annotations-sink.apps.svc.cluster.local:8080/webhook`
 
 ## Secrets / Config (ESC)
@@ -82,7 +82,7 @@ curl -sk https://gpu.<base>/v2/health/ready
 
 # Adapter
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-curl -s http://localhost:9090/healthz
+curl -s http://localhost:9090/health
 curl -s -X POST http://localhost:9090/predict -H 'Content-Type: application/json' \
   -d '{"model":"distilbert-base-uncased","task":"ner","text":"MV Aurora bert test."}'
 ```

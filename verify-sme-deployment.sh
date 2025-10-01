@@ -103,10 +103,10 @@ kubectl port-forward -n apps svc/ls-triton-adapter 9090:9090 > /dev/null 2>&1 &
 PF_PID=$!
 sleep 2
 
-ADAPTER_HEALTH=$(curl -s http://localhost:9090/healthz 2>/dev/null | jq -r '.ok' 2>/dev/null || echo "false")
+ADAPTER_HEALTH=$(curl -s http://localhost:9090/health 2>/dev/null | jq -r '.ok' 2>/dev/null || echo "false")
 if [ "$ADAPTER_HEALTH" = "true" ]; then
     echo -e "Adapter health check: ${GREEN}Healthy${NC}"
-    NER_COUNT=$(curl -s http://localhost:9090/healthz 2>/dev/null | jq -r '.ner_labels_count' 2>/dev/null || echo "0")
+    NER_COUNT=$(curl -s http://localhost:9090/health 2>/dev/null | jq -r '.labels.count' 2>/dev/null || echo "0")
     echo "NER labels configured: $NER_COUNT"
 else
     echo -e "Adapter health check: ${RED}Unhealthy${NC}"

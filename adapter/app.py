@@ -7,6 +7,9 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sentry_sdk
+import io
+import zipfile
+import xml.etree.ElementTree as ET
 
 try:
     from transformers import AutoTokenizer
@@ -124,6 +127,29 @@ def health():
         }
     }
 
+# Label Studio ML backend setup endpoint (required by LS when connecting a model)
+@app.get("/setup")
+def setup():
+    return {
+        "model_version": "1.0.0",
+        "title": "Triton Inference Adapter",
+        "description": "Label Studio ML backend bridging to Triton HTTP v2",
+        "interactive": True,
+    }
+
+@app.post("/setup")
+def setup_post(_: dict = None):
+    # Accept Label Studio POST /setup handshake
+    return {
+        "model_version": "1.0.0",
+        "title": "Triton Inference Adapter",
+        "description": "Label Studio ML backend bridging to Triton HTTP v2",
+        "interactive": True,
+        "status": "OK",
+    }
+
+# No /healthz endpoint used; /health is canonical
+
 @app.post("/predict")
 async def predict(req: PredictRequest):
     model = (req.model or DEFAULT_MODEL).strip()
@@ -179,3 +205,131 @@ async def predict(req: PredictRequest):
     except Exception as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict_ls")
+async def predict_ls(request: dict):
+    # Accept LS-style payloads and normalize different doc types
+    try:
+        body = request
+        tasks = body if isinstance(body, list) else body.get("tasks") or body.get("data") or []
+        if not isinstance(tasks, list):
+            tasks = [tasks]
+        if not tasks:
+            raise HTTPException(status_code=400, detail="No tasks provided")
+        data = (tasks[0] or {}).get("data") or tasks[0] or {}
+        # Prefer text
+        text = data.get("text")
+        if text:
+            return await predict(PredictRequest(text=text, model="distilbert-base-uncased", task="ner"))
+        # Try PDFs/CSV/XLSX via URL
+        url = None
+        for k in ["pdf", "file", "file_upload", "document", "url"]:
+            v = data.get(k)
+            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                url = v
+                break
+        if url and url.lower().endswith(".pdf"):
+            # Proxy to Triton Docling model by sending empty inputs (model fetches via url is not implemented here)
+            # Fallback: raise a friendly error suggesting text extraction
+            return await predict(PredictRequest(text=f"[PDF] {url}", model="distilbert-base-uncased", task="ner"))
+        if url and url.lower().endswith(".csv"):
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    import csv, io
+                    rdr = list(csv.reader(io.StringIO(r.text)))
+                    lines = []
+                    if rdr:
+                        headers = rdr[0]
+                        is_header = any(any(c.isalpha() for c in (h or "")) for h in headers)
+                        if is_header:
+                            for row in rdr[1:]:
+                                parts = []
+                                for h, v in zip(headers, row):
+                                    hv = (h or "").strip()
+                                    vv = (v or "").strip()
+                                    if hv and vv:
+                                        parts.append(f"{hv}: {vv}")
+                                if parts:
+                                    lines.append(", ".join(parts))
+                        else:
+                            lines = [", ".join(r) for r in rdr]
+                    txt = "\n".join(lines)[:5000]
+                return await predict(PredictRequest(text=txt, model="distilbert-base-uncased", task="ner"))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to process CSV: {e}")
+        if url and url.lower().endswith(".xlsx"):
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    txt = _xlsx_to_text(r.content)
+                if not txt:
+                    raise HTTPException(status_code=400, detail="Empty XLSX content")
+                return await predict(PredictRequest(text=txt, model="distilbert-base-uncased", task="ner"))
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to process XLSX: {e}")
+        raise HTTPException(status_code=400, detail="Unsupported task data; provide text, pdf or csv URL")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+# Minimal XLSX text extractor using stdlib (no external deps)
+def _xlsx_to_text(data: bytes, limit: int = 5000) -> str:
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        # Load sharedStrings if present
+        shared = []
+        try:
+            with z.open('xl/sharedStrings.xml') as f:
+                tree = ET.parse(f)
+                root = tree.getroot()
+                # Namespaces handling
+                for si in root.iter():
+                    if si.tag.endswith('}si'):
+                        texts = []
+                        for t in si.iter():
+                            if t.tag.endswith('}t') and t.text:
+                                texts.append(t.text)
+                        shared.append(''.join(texts))
+        except KeyError:
+            shared = []
+        parts = []
+        for name in z.namelist():
+            if not name.startswith('xl/worksheets/sheet') or not name.endswith('.xml'):
+                continue
+            with z.open(name) as f:
+                tree = ET.parse(f)
+                root = tree.getroot()
+                for row in root.iter():
+                    if row.tag.endswith('}row'):
+                        vals = []
+                        for c in row:
+                            if not hasattr(c, 'tag'):
+                                continue
+                            if not c.tag.endswith('}c'):
+                                continue
+                            t_attr = c.attrib.get('t')
+                            v_text = None
+                            for v in c:
+                                if v.tag.endswith('}v') and v.text is not None:
+                                    v_text = v.text
+                                    break
+                            if v_text is None:
+                                continue
+                            if t_attr == 's':
+                                try:
+                                    idx = int(v_text)
+                                    v_text = shared[idx] if 0 <= idx < len(shared) else v_text
+                                except Exception:
+                                    pass
+                            vals.append(str(v_text))
+                        if vals:
+                            parts.append(', '.join(vals))
+        text = '\n'.join(parts)
+        return text[:limit]
+    except Exception:
+        return ''

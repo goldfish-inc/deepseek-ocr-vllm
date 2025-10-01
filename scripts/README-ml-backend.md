@@ -2,16 +2,15 @@
 
 Programmatically connect the Triton ML backend to Label Studio projects.
 
-## ⚠️ System-Wide Auto-Configuration Now Available
+## Recommended: Manual per-project connection
 
-**New projects get ML backend connected INSTANTLY** via Label Studio webhooks.
+The recommended approach is to connect the ML backend from the Label Studio UI on a per‑project basis:
 
-- **Real-time**: PROJECT_CREATED webhook fires immediately when you create a project
-- **Zero wait**: ML backend connected in seconds, not minutes or hours
-- **Fallback**: Hourly sync catches any missed projects (safety net)
-- **Check status**: `kubectl logs -n apps -l app=ls-ml-autoconnect`
+- Project → Settings → Model → Connect model
+- URL: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
+- Authentication: none
 
-**This script is now deprecated** - the webhook-based approach is automatic and instant.
+This avoids coupling infrastructure to a personal user token.
 
 ## Quick Start
 
@@ -30,9 +29,9 @@ pip install label-studio-sdk requests
 python3 scripts/connect-ml-backend.py
 ```
 
-## What It Does
+## What This Script Does (optional)
 
-1. **Connects to Label Studio** using your API key
+1. **Connects to Label Studio** using your user access token
 2. **Finds your project** by name (default: "SME 2025")
 3. **Adds ML backend** URL to project settings
 4. **Enables pre-annotations** for automatic labeling
@@ -53,7 +52,7 @@ export ML_BACKEND_URL="http://custom-backend.example.com:9090"
 python3 scripts/connect-ml-backend.py
 ```
 
-## Default Settings
+## Defaults
 
 - **Label Studio URL**: `https://label.boathou.se`
 - **ML Backend URL**: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
@@ -122,7 +121,7 @@ This is expected when running from outside the cluster. The backend is accessibl
 ```bash
 # From within cluster
 kubectl port-forward -n apps svc/ls-triton-adapter 9090:9090 &
-curl http://localhost:9090/healthz
+curl http://localhost:9090/health
 ```
 
 ### "403 Forbidden" or "401 Unauthorized"

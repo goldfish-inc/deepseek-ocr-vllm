@@ -139,6 +139,25 @@ class PredictRequest(BaseModel):
 async def health():
     return {"ok": True}
 
+@app.get("/setup")
+async def setup():
+    return {
+        "model_version": "1.0.0",
+        "title": "Triton Inference Adapter",
+        "description": "Label Studio ML backend bridging to Triton HTTP v2",
+        "interactive": True,
+    }
+
+@app.post("/setup")
+async def setup_post():
+    return {
+        "model_version": "1.0.0",
+        "title": "Triton Inference Adapter",
+        "description": "Label Studio ML backend bridging to Triton HTTP v2",
+        "interactive": True,
+        "status": "OK",
+    }
+
 def _bytes_tensor(name: str, value: bytes):
     # Triton HTTP v2 bytes: base64 of raw bytes, dtype BYTES
     return {"name": name, "shape": [1,1], "datatype": "BYTES", "data": [base64.b64encode(value).decode("utf-8")]}
@@ -297,14 +316,20 @@ async def predict_ls(request: Request):
     t = tasks[0] or {}
     data = t.get("data", t)
     pdf_url = None
+    csv_url = None
     text = None
     if isinstance(data, dict):
         text = data.get("text")
-        for k in ["pdf", "file", "document", "url"]:
+        for k in ["pdf", "file", "file_upload", "document", "url"]:
             v = data.get(k)
-            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")) and v.lower().endswith(".pdf"):
-                pdf_url = v
-                break
+            if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                lv = v.lower()
+                if lv.endswith(".pdf"):
+                    pdf_url = v
+                    break
+                if lv.endswith(".csv"):
+                    csv_url = v
+                    break
         if not pdf_url:
             for v in data.values():
                 if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")) and ".pdf" in v.lower():
@@ -313,6 +338,97 @@ async def predict_ls(request: Request):
 
     if pdf_url:
         return await predict(PredictRequest(pdf_url=pdf_url, model="docling_granite_python"))
+    # Try Excel (.xlsx)
+    xlsx_url = None
+    for k in ["excel", "xlsx", "file", "file_upload", "document", "url"]:
+        v = data.get(k)
+        if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")) and v.lower().endswith(".xlsx"):
+            xlsx_url = v
+            break
+    if xlsx_url:
+        try:
+            import httpx, io, zipfile
+            import xml.etree.ElementTree as ET
+            async with httpx.AsyncClient(timeout=20.0, verify=True) as client:
+                r = await client.get(xlsx_url)
+                r.raise_for_status()
+                z = zipfile.ZipFile(io.BytesIO(r.content))
+                shared = []
+                try:
+                    with z.open('xl/sharedStrings.xml') as f:
+                        root = ET.parse(f).getroot()
+                        for si in root.iter():
+                            if si.tag.endswith('}si'):
+                                texts = []
+                                for t in si.iter():
+                                    if t.tag.endswith('}t') and t.text:
+                                        texts.append(t.text)
+                                shared.append(''.join(texts))
+                except KeyError:
+                    shared = []
+                parts = []
+                for name in z.namelist():
+                    if not name.startswith('xl/worksheets/sheet') or not name.endswith('.xml'):
+                        continue
+                    with z.open(name) as f:
+                        root = ET.parse(f).getroot()
+                        for row in root.iter():
+                            if row.tag.endswith('}row'):
+                                vals = []
+                                for c in row:
+                                    if not hasattr(c, 'tag') or not c.tag.endswith('}c'):
+                                        continue
+                                    t_attr = c.attrib.get('t')
+                                    v_text = None
+                                    for v in c:
+                                        if getattr(v, 'tag', '').endswith('}v') and v.text is not None:
+                                            v_text = v.text
+                                            break
+                                    if v_text is None:
+                                        continue
+                                    if t_attr == 's':
+                                        try:
+                                            idx = int(v_text)
+                                            v_text = shared[idx] if 0 <= idx < len(shared) else v_text
+                                        except Exception:
+                                            pass
+                                    vals.append(str(v_text))
+                                if vals:
+                                    parts.append(', '.join(vals))
+                xl_text = "\n".join(parts)[:5000]
+            return await predict(PredictRequest(text=xl_text, model="distilbert-base-uncased", task="ner"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to process XLSX: {e}")
+    if csv_url:
+        try:
+            import httpx, csv, io
+            async with httpx.AsyncClient(timeout=20.0, verify=True) as client:
+                r = await client.get(csv_url)
+                r.raise_for_status()
+                content = r.text
+            reader = csv.reader(io.StringIO(content))
+            rows = list(reader)
+            lines: list[str] = []
+            if rows:
+                headers = rows[0]
+                # Heuristic: header row if any cell is non-numeric or contains letters
+                is_header = any(any(c.isalpha() for c in (h or "")) for h in headers)
+                if is_header:
+                    for row in rows[1:]:
+                        parts = []
+                        for h, v in zip(headers, row):
+                            hv = (h or "").strip()
+                            vv = (v or "").strip()
+                            if hv and vv:
+                                parts.append(f"{hv}: {vv}")
+                        if parts:
+                            lines.append(", ".join(parts))
+                else:
+                    lines = [", ".join(r) for r in rows]
+            csv_text = "\n".join(lines)[:5000]
+            return await predict(PredictRequest(text=csv_text, model="distilbert-base-uncased", task="ner"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to process CSV: {e}")
     if text:
         return await predict(PredictRequest(text=text, model="distilbert-base-uncased", task="ner"))
 

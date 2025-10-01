@@ -120,7 +120,7 @@ The adapter is automatically configured as the ML backend for Label Studio.
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
 
 # Health check
-curl http://localhost:9090/healthz
+curl http://localhost:9090/health
 
 # NER prediction (once BERT model is deployed)
 curl -X POST http://localhost:9090/predict \

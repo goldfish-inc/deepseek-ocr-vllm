@@ -40,8 +40,8 @@ def mock_httpx(monkeypatch):
     monkeypatch.setattr(app_mod, "httpx", types.SimpleNamespace(AsyncClient=DummyClient))
 
 
-def test_healthz():
-    r = client.get("/healthz")
+def test_health():
+    r = client.get("/health")
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -66,4 +66,3 @@ def test_predict_bytes_inputs(monkeypatch):
     r = client.post("/predict", json=payload)
     # Should 400 on invalid base64
     assert r.status_code == 400
-

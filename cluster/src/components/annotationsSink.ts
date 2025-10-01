@@ -52,6 +52,11 @@ from typing import Any, Dict, List
 import asyncio
 import uvicorn
 from fastapi import FastAPI, Request
+import httpx
+import csv
+import io
+import zipfile
+import xml.etree.ElementTree as ET
 from pydantic import BaseModel
 
 # Optional Postgres
@@ -176,6 +181,13 @@ async def _maybe_init_pg():
                 annotator text,
                 updated_at timestamptz default now()
             );
+            create table if not exists stage.table_ingest (
+                id bigserial primary key,
+                document_id bigint references stage.documents(id) on delete cascade,
+                rows_json jsonb,
+                meta jsonb,
+                created_at timestamptz default now()
+            );
             """)
     except Exception as e:
         print(f"[WARN] Failed to initialize DB schema at startup: {e}")
@@ -208,6 +220,19 @@ async def _insert_pg(doc: Dict[str, Any]):
                 doc_id, s.get("label"), s.get("value"), s.get("start"), s.get("end"), s.get("confidence"), s.get("db_mapping"), doc.get("annotator")
             )
 
+async def _insert_table(doc_text: str, rows: List[List[str]] | None, meta: Dict[str, Any] | None):
+    if not DATABASE_URL or asyncpg is None or _pg_pool is None:
+        return
+    async with _pg_pool.acquire() as conn:
+        doc_id = await conn.fetchval(
+            "insert into stage.documents(external_id, source, content) values($1,$2,$3) returning id",
+            None, "ls_task", doc_text
+        )
+        await conn.execute(
+            "insert into stage.table_ingest(document_id, rows_json, meta) values($1, $2::jsonb, $3::jsonb)",
+            doc_id, json.dumps(rows or []), json.dumps(meta or {})
+        )
+
 @app.on_event("startup")
 async def on_start():
     print("[INFO] Starting up - skipping HF and DB init, will initialize on first request")
@@ -217,6 +242,145 @@ async def on_start():
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+def _xlsx_rows(data: bytes) -> List[List[str]]:
+    rows: List[List[str]] = []
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        shared: List[str] = []
+        try:
+            with z.open('xl/sharedStrings.xml') as f:
+                root = ET.parse(f).getroot()
+                for si in root.iter():
+                    if si.tag.endswith('}si'):
+                        texts = []
+                        for t in si.iter():
+                            if t.tag.endswith('}t') and t.text:
+                                texts.append(t.text)
+                        shared.append(''.join(texts))
+        except KeyError:
+            shared = []
+        for name in z.namelist():
+            if not name.startswith('xl/worksheets/sheet') or not name.endswith('.xml'):
+                continue
+            with z.open(name) as f:
+                root = ET.parse(f).getroot()
+                for row in root.iter():
+                    if row.tag.endswith('}row'):
+                        vals: List[str] = []
+                        for c in row:
+                            if not hasattr(c, 'tag') or not c.tag.endswith('}c'):
+                                continue
+                            t_attr = c.attrib.get('t')
+                            v_text = None
+                            for v in c:
+                                if getattr(v, 'tag', '').endswith('}v') and v.text is not None:
+                                    v_text = v.text
+                                    break
+                            if v_text is None:
+                                continue
+                            if t_attr == 's':
+                                try:
+                                    idx = int(v_text)
+                                    v_text = shared[idx] if 0 <= idx < len(shared) else v_text
+                                except Exception:
+                                    pass
+                            vals.append(str(v_text))
+                        if vals:
+                            rows.append(vals)
+    except Exception:
+        return []
+    return rows
+
+@app.post("/ingest")
+async def ingest(req: Request):
+    await _maybe_init_pg()
+    payload = await req.json()
+    tasks = []
+    if isinstance(payload, dict):
+        if payload.get("event") in ("TASK_CREATED","TASKS_BULK_CREATED"):
+            t = payload.get("tasks") or payload.get("task")
+            if isinstance(t, list):
+                tasks = t
+            elif isinstance(t, dict):
+                tasks = [t]
+        else:
+            t = payload.get("data") or payload.get("tasks")
+            if isinstance(t, list):
+                tasks = t
+            elif isinstance(t, dict):
+                tasks = [t]
+    if not tasks:
+        return {"ok": True, "ingested": 0}
+
+    ingested = 0
+    for t in tasks:
+        data = (t.get("data") if isinstance(t, dict) else None) or t
+        text = (data or {}).get("text") if isinstance(data, dict) else None
+        url = None
+        if isinstance(data, dict):
+            for k in ("file", "file_upload", "document", "url", "pdf"):
+                v = data.get(k)
+                if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                    url = v
+                    break
+        rows = None
+        doc_text = None
+        try:
+            if url and url.lower().endswith(".csv"):
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    rdr = list(csv.reader(io.StringIO(r.text)))
+                    rows = rdr
+                    lines = []
+                    if rdr:
+                        headers = rdr[0]
+                        is_header = any(any(c.isalpha() for c in (h or "")) for h in headers)
+                        if is_header:
+                            for row in rdr[1:]:
+                                parts = []
+                                for h, v in zip(headers, row):
+                                    hv=(h or "").strip(); vv=(v or "").strip()
+                                    if hv and vv:
+                                        parts.append(f"{hv}: {vv}")
+                                if parts:
+                                    lines.append(", ".join(parts))
+                        else:
+                            lines = [", ".join(r) for r in rdr]
+                    doc_text = "\n".join(lines)[:5000]
+            elif url and url.lower().endswith(".xlsx"):
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    rows = _xlsx_rows(r.content)
+                    lines = []
+                    if rows:
+                        headers = rows[0]
+                        is_header = any(any(c.isalpha() for c in (h or "")) for h in headers)
+                        if is_header:
+                            for row in rows[1:]:
+                                parts=[]
+                                for h, v in zip(headers, row):
+                                    hv=(h or "").strip(); vv=(v or "").strip()
+                                    if hv and vv:
+                                        parts.append(f"{hv}: {vv}")
+                                if parts:
+                                    lines.append(", ".join(parts))
+                        else:
+                            lines = [", ".join(r) for r in rows]
+                    doc_text = "\n".join(lines)[:5000]
+            elif text:
+                doc_text = str(text)
+            else:
+                continue
+            await _insert_table(doc_text or "", rows or [], {"project_id": payload.get("project_id"), "type": "ingest"})
+            ingested += 1
+        except Exception as e:
+            print(f"[WARN] ingest failed for task: {e}")
+            continue
+
+    return {"ok": True, "ingested": ingested}
 
 @app.post("/webhook")
 async def webhook(req: Request):

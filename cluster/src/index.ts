@@ -22,7 +22,6 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
-import { LabelStudioMlAutoconnect } from "./components/labelStudioMlAutoconnect";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -243,16 +242,23 @@ if (enableNodeTunnels) {
     nodeTunnels = new NodeTunnels("node-tunnels", {
         cluster: clusterConfig,
         k8sProvider,
-        // NOTE: cloudflareProvider omitted - DNS now managed by oceanid-cloud stack
+        // NOTE: Cloudflare DNS & Access are managed by the cloud stack
     });
 }
 
 // Deploy Label Studio on the control-plane VPS (Kubernetes)
 // Triton adapter (in-cluster) bridging LS -> Triton HTTP v2
 const tritonBaseUrl = pulumi.interpolate`https://${clusterConfig.nodeTunnel.hostnames.gpu}`;
+
+// Inject CF Access service token headers into adapter if provided via ESC
+const cfAccessClientIdOut = cfg.getSecret("cfAccessClientId") as any;
+const cfAccessClientSecretOut = cfg.getSecret("cfAccessClientSecret") as any;
+
 const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
     k8sProvider,
     tritonBaseUrl,
+    cfAccessClientId: (cfAccessClientIdOut as any) ?? undefined,
+    cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
 });
 
 // Deploy Label Studio with dedicated labelfish database (CrunchyBridge ebisu cluster)
@@ -267,17 +273,261 @@ const labelStudio = new LabelStudio("label-studio", {
     hostUrl: pulumi.interpolate`https://${labelHostname}`,
 });
 
-// Auto-configure ML backend for all Label Studio projects
-// Uses PROJECT_CREATED webhook for instant connection + hourly fallback sync
-const labelStudioApiToken = cfg.requireSecret("labelStudioApiToken");
+// In-cluster one-off provisioner Job to configure Label Studio project "NER_Data"
+// - Connects ML backend
+// - Applies full NER labeling interface from ESC/labels.json
+// - Imports a sample text task (for verification)
+(() => {
+    const cfgLS = new pulumi.Config();
+    const lsPat = cfgLS.getSecret("labelStudioPat");
+    if (!lsPat) {
+        return; // Skip if PAT not provided; can be added later via ESC
+    }
 
-new LabelStudioMlAutoconnect("ls-ml-autoconnect", {
-    k8sProvider,
-    namespace: "apps",
-    labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",
-    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}`,
-    apiToken: labelStudioApiToken,
-}, { dependsOn: [labelStudio, lsAdapter] });
+    const provisionerCode = `
+import argparse
+import json
+import os
+import sys
+import urllib.request
+
+def http(method: str, url: str, headers=None, data=None):
+    headers = headers or {}
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = resp.read().decode("utf-8")
+            return resp.getcode(), body
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8") if e.fp else ""
+        return e.code, body
+
+def access_token(ls_url: str, pat: str) -> str:
+    code, body = http("POST", f"{ls_url.rstrip('/')}/api/token/refresh", headers={"Content-Type":"application/json"}, data=json.dumps({"refresh":pat}).encode("utf-8"))
+    if code != 200:
+        print(f"Token refresh failed: {code} {body}", file=sys.stderr)
+        sys.exit(2)
+    return json.loads(body)["access"]
+
+def label_config_xml(labels):
+    tags = "\n".join([f"      <Label value=\"{l}\"/>" for l in labels])
+    return (
+        "<View>\n"
+        "  <Header value=\"Document Text\"/>\n"
+        "  <Text name=\"text\" value=\"$text\"/>\n"
+        "  <Labels name=\"ner\" toName=\"text\" showInline=\"true\">\n"
+        f"{tags}\n"
+        "  </Labels>\n"
+        "  <Relations name=\"rels\" toName=\"text\"/>\n"
+        "</View>"
+    )
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--title", required=True)
+    p.add_argument("--description", default=None)
+    args = p.parse_args()
+
+    ls_url = os.getenv("LABEL_STUDIO_URL") or "http://label-studio.apps.svc.cluster.local:8080"
+    pat = os.getenv("LABEL_STUDIO_PAT")
+    backend_url = os.getenv("ML_BACKEND_URL") or "http://ls-triton-adapter.apps.svc.cluster.local:9090"
+    if not pat:
+        print("LABEL_STUDIO_PAT not set", file=sys.stderr)
+        sys.exit(1)
+    token = access_token(ls_url, pat)
+    auth = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    # Find project by title
+    code, body = http("GET", f"{ls_url.rstrip('/')}/api/projects/", headers=auth)
+    if code != 200:
+        print(f"List projects failed: {code} {body}", file=sys.stderr)
+        sys.exit(2)
+    pid = None
+    try:
+        projects = json.loads(body)
+        for proj in projects:
+            if isinstance(proj, dict) and proj.get("title") == args.title:
+                pid = proj.get("id")
+                break
+    except Exception as e:
+        print(f"Parse projects error: {e}", file=sys.stderr)
+        sys.exit(2)
+    if not pid:
+        print("Project not found: "+args.title, file=sys.stderr)
+        sys.exit(3)
+
+    # Ensure ML backend
+    code, body = http("GET", f"{ls_url.rstrip('/')}/api/ml?project={pid}", headers=auth)
+    if code != 200:
+        print(f"List ML backends failed: {code} {body}", file=sys.stderr)
+        sys.exit(4)
+    try:
+        exists = any(isinstance(b, dict) and b.get("url") == backend_url for b in json.loads(body))
+    except Exception:
+        exists = False
+    if not exists:
+        payload = json.dumps({"url": backend_url, "project": pid, "title": "Triton Inference Adapter", "description": "NER + Docling predictions", "is_interactive": True}).encode("utf-8")
+        code, body = http("POST", f"{ls_url.rstrip('/')}/api/ml", headers=auth, data=payload)
+        if code not in (200,201):
+            print(f"Add ML backend failed: {code} {body}", file=sys.stderr)
+            sys.exit(5)
+
+    # Apply label config
+    labels_env = os.getenv("NER_LABELS")
+    labels = []
+    if labels_env:
+        try:
+            labels = [str(x) for x in json.loads(labels_env)]
+        except Exception:
+            labels = []
+    if not labels:
+        labels = ["VESSEL_NAME","IMO","MMSI","IRCS","PORT","DATE","COMPANY","FLAG"]
+    xml = label_config_xml(labels)
+    body = {"label_config": xml}
+    if args.description:
+        body["description"] = args.description
+    code, resp = http("PATCH", f"{ls_url.rstrip('/')}/api/projects/{pid}", headers=auth, data=json.dumps(body).encode("utf-8"))
+    if code not in (200,201):
+        print(f"Patch project failed: {code} {resp}", file=sys.stderr)
+        sys.exit(6)
+
+    # Import sample task (optional)
+    sample = [{"data": {"text": "Vessel NEREUS IMO 8819421 arrived at BURELA on 2023-01-01."}}]
+    code, _ = http("POST", f"{ls_url.rstrip('/')}/api/projects/{pid}/import", headers=auth, data=json.dumps(sample).encode("utf-8"))
+    print(f"Provisioned project {pid} with {len(labels)} labels (import status {code})")
+
+    # Register ingest webhook for tasks created (to write raw docs to stage.*)
+    sink_url = os.getenv("SINK_INGEST_URL") or "http://annotations-sink.apps.svc.cluster.local:8080/ingest"
+    code, body = http("GET", f"{ls_url.rstrip('/')}/api/webhooks", headers=auth)
+    if code == 200:
+        try:
+            hooks = json.loads(body)
+        except Exception:
+            hooks = []
+        need = True
+        for h in hooks:
+            if isinstance(h, dict) and h.get("url") == sink_url:
+                need = False
+                break
+        if need:
+            payload = json.dumps({
+                "url": sink_url,
+                "send_payload": True,
+                "send_for_all_actions": False,
+                "is_active": True,
+                "actions": ["TASK_CREATED","TASKS_BULK_CREATED"],
+                "headers": {}
+            }).encode("utf-8")
+            code, body = http("POST", f"{ls_url.rstrip('/')}/api/webhooks", headers=auth, data=payload)
+            print(f"Webhook create status: {code}")
+
+if __name__ == "__main__":
+    main()
+`;
+
+    const provConfig = new k8s.core.v1.ConfigMap("ls-provisioner-code", {
+        metadata: { name: "ls-provisioner-code", namespace: "apps" },
+        data: { "provision.py": provisionerCode },
+    }, { provider: k8sProvider });
+
+    const provSecret = new k8s.core.v1.Secret("ls-provisioner-secret", {
+        metadata: { name: "ls-provisioner-secret", namespace: "apps" },
+        stringData: { LABEL_STUDIO_PAT: lsPat as any },
+    }, { provider: k8sProvider });
+
+    new k8s.batch.v1.Job("ls-provisioner-ner-data", {
+        metadata: { name: "ls-provisioner-ner-data", namespace: "apps" },
+        spec: {
+            backoffLimit: 1,
+            template: {
+                metadata: { labels: { app: "ls-provisioner" } },
+                spec: {
+                    restartPolicy: "Never",
+                    containers: [{
+                        name: "provision",
+                        image: "python:3.11-slim",
+                        command: ["python", "/app/provision.py", "--title", "NER_Data", "--description", "Universal document NER (PDF, CSV, XLSX, text). Pre-labels via adapter; SMEs review & approve."],
+                        env: [
+                            { name: "LABEL_STUDIO_URL", value: "http://label-studio.apps.svc.cluster.local:8080" },
+                            { name: "ML_BACKEND_URL", value: pulumi.interpolate`${lsAdapter.serviceUrl}` as any },
+                            ...(cfg.get("nerLabels") ? [{ name: "NER_LABELS", value: cfg.get("nerLabels")! }] : []),
+                            { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: provSecret.metadata.name, key: "LABEL_STUDIO_PAT" } } },
+                        ] as any,
+                        volumeMounts: [{ name: "code", mountPath: "/app" }],
+                    }],
+                    volumes: [{ name: "code", configMap: { name: provConfig.metadata.name } }],
+                },
+            },
+        },
+    }, { provider: k8sProvider, dependsOn: [labelStudio, lsAdapter, provConfig, provSecret] });
+})();
+
+// Verification: List webhooks and confirm NER_Data exists (runs once)
+(() => {
+    const cfgLS = new pulumi.Config();
+    const lsPat = cfgLS.getSecret("labelStudioPat");
+    if (!lsPat) return;
+    const code = `
+import json, os, sys
+import urllib.request
+def http(m,u,h=None,d=None):
+    r=urllib.request.Request(u,data=d,headers=h or {},method=m)
+    with urllib.request.urlopen(r,timeout=20) as resp:
+        print(resp.getcode()); print(resp.read().decode('utf-8')[:2000])
+pat=os.getenv('LABEL_STUDIO_PAT'); ls=os.getenv('LABEL_STUDIO_URL')
+data=json.dumps({'refresh':pat}).encode('utf-8')
+req=urllib.request.Request(ls.rstrip('/')+'/api/token/refresh',data=data,headers={'Content-Type':'application/json'})
+with urllib.request.urlopen(req,timeout=20) as resp:
+    tok=json.loads(resp.read().decode('utf-8'))['access']
+h={'Authorization':f'Bearer {tok}'}
+http('GET', ls.rstrip('/')+'/api/projects/', h)
+http('GET', ls.rstrip('/')+'/api/webhooks', h)
+`;
+    const cm = new k8s.core.v1.ConfigMap("ls-verify-code", { metadata: { name: "ls-verify-code", namespace: "apps" }, data: { "verify.py": code } }, { provider: k8sProvider });
+    const sec = new k8s.core.v1.Secret("ls-verify-secret", { metadata: { name: "ls-verify-secret", namespace: "apps" }, stringData: { LABEL_STUDIO_PAT: lsPat as any }}, { provider: k8sProvider });
+    new k8s.batch.v1.Job("ls-verify", {
+        metadata: { name: "ls-verify", namespace: "apps" },
+        spec: {
+            backoffLimit: 0,
+            template: { metadata: { labels: { app: "ls-verify" } }, spec: { restartPolicy: "Never", containers: [{
+                name: "verify", image: "python:3.11-slim",
+                command: ["python", "/app/verify.py"],
+                env: [
+                    { name: "LABEL_STUDIO_URL", value: "http://label-studio.apps.svc.cluster.local:8080" },
+                    { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: sec.metadata.name, key: "LABEL_STUDIO_PAT" } } },
+                ] as any,
+                volumeMounts: [{ name: "code", mountPath: "/app" }],
+            }], volumes: [{ name: "code", configMap: { name: cm.metadata.name } }] } },
+        }
+    }, { provider: k8sProvider, dependsOn: [cm, sec] });
+})();
+
+// Verification: DB ingest check (stage.table_ingest)
+(() => {
+    const cfg = new pulumi.Config();
+    const pgUrl = cfg.getSecret("postgres_url");
+    if (!pgUrl) return;
+    new k8s.batch.v1.Job("db-verify-ingest", {
+        metadata: { name: "db-verify-ingest", namespace: "apps" },
+        spec: {
+            backoffLimit: 0,
+            template: {
+                metadata: { labels: { app: "db-verify" } },
+                spec: {
+                    restartPolicy: "Never",
+                    containers: [{
+                        name: "psql",
+                        image: "postgres:16-alpine",
+                        command: ["sh", "-lc", "echo 'now:' && psql \"$DATABASE_URL\" -t -c 'select now();' && echo 'table_ingest:' && psql \"$DATABASE_URL\" -t -c 'select count(*) from stage.table_ingest;'"],
+                        env: [{ name: "DATABASE_URL", value: pgUrl as any }] as any,
+                    }],
+                },
+            },
+        },
+    }, { provider: k8sProvider });
+})();
+
+ 
 
 // SME Readiness - Configure boathou.se domain with Cloudflare Access
 // NOTE: Access app creation is now managed by cloud stack to prevent duplication
@@ -421,7 +671,7 @@ $SUDO systemctl restart tritonserver
 export const smeUrls = {
     labelStudio: smeReadiness.labelStudioUrl,
     gpuServices: smeReadiness.gpuServiceUrl,
-    adapterHealth: pulumi.interpolate`${lsAdapter.serviceUrl}/healthz`,
+    adapterHealth: pulumi.interpolate`${lsAdapter.serviceUrl}/health`,
     annotationsWebhook: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
 };
 

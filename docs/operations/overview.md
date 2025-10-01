@@ -11,7 +11,7 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 - DNS: `gpu.<base>` CNAME points to the Node Tunnel target `<TUNNEL_ID>.cfargotunnel.com`.
 - Host tunnel: systemd `cloudflared-node.service`, config under `/etc/cloudflared/config.yaml` routing `gpu.<base>` → `http://localhost:8000`.
 - Triton: systemd `tritonserver.service` (Docker), ports 8000/8001/8002; models mounted from `/opt/triton/models`.
-- Adapter: calls `TRITON_BASE_URL=https://gpu.<base>`.
+- Adapter: calls `TRITON_BASE_URL=https://gpu.<base>` and presents Cloudflare Access service token when enabled.
 - Pulumi ownership: `HostCloudflared` and `HostDockerService` components render/update these units.
 
 ## Deploy
@@ -59,6 +59,19 @@ Workflows:
 - `database-migrations.yml` pulls DB URL from ESC and applies SQL migrations V3–V6; ensures extensions `pgcrypto`, `postgis`, `btree_gist`. Skips gracefully if DB URL not set.
 - Check connector health in Cloudflare Zero Trust → Tunnels.
 
+## Access Controls
+
+- GPU endpoint `gpu.<base>` is protected by a Cloudflare Zero Trust Access application that only allows a service token issued to the in-cluster adapter. The adapter is provisioned with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` automatically.
+- Kubernetes API `api.<base>` is exposed via the node tunnel and protected by Cloudflare Access. Use `cloudflared access tcp` to connect.
+
+### K8s API via Access (recommended)
+```bash
+cloudflared access tcp --hostname api.<base> --url 127.0.0.1:6443 &
+export KUBECONFIG=~/.kube/k3s-config.yaml
+kubectl cluster-info
+```
+Ensure your email domain or emails are included in Access policy.
+
 Mermaid (GPU path):
 
 ```mermaid
@@ -69,31 +82,20 @@ flowchart LR
   CL --> TR[Triton 8000]
 ```
 
-## Label Studio ML Backend (Auto-configured)
+## Label Studio ML Backend (Manual per project)
 
-- **Real-time ML backend connection**: Webhook-based instant connection when projects are created
-- **Zero wait time**: Projects get ML backend immediately (no delay)
-- **Architecture**: Label Studio PROJECT_CREATED webhook → FastAPI receiver → Connect ML backend
-- **Fallback**: Hourly sync for any missed projects (safety net)
-- **Authentication**: Uses Label Studio API token from 1Password (stored in ESC as `labelStudioApiToken`)
+- Connection is configured by project admins in the UI.
+- No global automation or shared user tokens are used.
 
-**How it works**:
-1. On startup, service registers PROJECT_CREATED webhook with Label Studio
-2. When you create a project, Label Studio fires webhook instantly
-3. Service receives webhook and connects ML backend immediately
-4. Hourly background sync catches any missed projects
+Steps:
+- Project → Settings → Model → Connect model
+- URL: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
+- Authentication: none
+- Enable pre-annotations if desired (interactive predictions)
 
-**Check status**:
-```bash
-# View service logs
-KUBECONFIG=~/.kube/k3s-config.yaml kubectl logs -n apps -l app=ls-ml-autoconnect --tail=50
-
-# Manual sync trigger (if needed)
-curl http://ls-ml-autoconnect.apps.svc.cluster.local:8080/sync
-
-# Health check
-KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy ls-ml-autoconnect -n apps
-```
+Notes:
+- The deprecated `ls-ml-autoconnect` service was removed to avoid coupling infra to a personal API token.
+- `ls-triton-adapter` stays running cluster‑wide as the shared inference endpoint.
 
 ## Secrets & Config
 - ESC keys to verify:

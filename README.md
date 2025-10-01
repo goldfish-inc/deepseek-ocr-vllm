@@ -152,7 +152,7 @@ make smoke
 curl -sk https://gpu.boathou.se/v2/health/ready
 # Adapter health (port-forward)
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-curl -s http://localhost:9090/healthz
+curl -s http://localhost:9090/health
 ```
 
 Adapter config
@@ -178,6 +178,7 @@ This is the standardized path to the GPU workstation — do not reinvent this.
 - Host tunnel on Calypso: Pulumi `HostCloudflared` renders `/etc/cloudflared/config.yaml` and a systemd unit `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
 - Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds `/opt/triton/models`.
 - Adapter in cluster: `ls-triton-adapter` calls `TRITON_BASE_URL=https://gpu.<base>`.
+ - When enabled, the adapter presents a Cloudflare Access service token so the public GPU endpoint is not exposed to the world.
 - Pulumi flags/keys: `enableCalypsoHostConnector=true`, `cloudflareNodeTunnelId|Token|Hostname`, optional `tritonImage`.
 
 Mermaid (request flow):
@@ -235,6 +236,7 @@ curl -s -X POST http://localhost:9090/predict \
 Label Studio integration
 - For automatic PDF pre‑labels from tasks, set the ML Model URL to the adapter's LS endpoint:
   - `http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls`
+  - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
   The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.
 
 ## Model Training Loop (DistilBERT NER)

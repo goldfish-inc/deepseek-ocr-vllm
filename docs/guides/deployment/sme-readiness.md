@@ -39,7 +39,7 @@ curl -sk https://gpu.<base>/v2/health/ready
 
 # Adapter
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-curl -s http://localhost:9090/healthz
+curl -s http://localhost:9090/health
 # BERT NER example
 curl -s -X POST http://localhost:9090/predict \
   -H 'Content-Type: application/json' \

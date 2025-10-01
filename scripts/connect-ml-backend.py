@@ -139,7 +139,7 @@ def main():
         try:
             # Try internal URL first (if running in cluster)
             health_response = requests.get(
-                f"{ML_BACKEND_URL}/healthz",
+                f"{ML_BACKEND_URL}/health",
                 timeout=5
             )
             health_response.raise_for_status()
