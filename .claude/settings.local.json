@@ -130,7 +130,16 @@
       "Bash(echo \"ssh calypso ''watch -n 2 \"\"docker images | head -5\"\"''\")",
       "Bash(brew list:*)",
       "Bash(export:*)",
-      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get job db-bootstrap-job -n apps)"
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get job db-bootstrap-job -n apps)",
+      "Bash(gh workflow run:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh api:*)",
+      "Bash(https://api.github.com/repos/goldfish-inc/oceanid/actions/workflows/train-ner.yml/dispatches )",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh secret:*)"
     ],
     "deny": [],
     "ask": []
