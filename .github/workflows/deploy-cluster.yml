@@ -1,4 +1,4 @@
-name: Deploy Cluster
+name: Update Image Tags
 
 on:
   workflow_run:
@@ -20,7 +20,7 @@ permissions:
   packages: read
 
 jobs:
-  deploy:
+  update-config:
     runs-on: ubuntu-latest
     # Only run if build workflow succeeded or manually triggered
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
@@ -31,31 +31,10 @@ jobs:
           # Get the commit that triggered the build workflow
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: '10.17.1'
-
-      - name: Install Pulumi CLI
-        uses: pulumi/actions@v5
-        with:
-          pulumi-version: '3.198.0'
-
       - name: Install ESC CLI
         run: |
           curl -fsSL https://get.pulumi.com/esc/install.sh | sh
           echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
-
-      - name: Configure Pulumi access
-        run: |
-          pulumi login
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
       - name: Determine image tags
         id: images
@@ -94,24 +73,15 @@ jobs:
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: cluster
-
-      - name: Build cluster code
-        run: pnpm build
-        working-directory: cluster
-
-      - name: Deploy with Pulumi
+      - name: Summary
         run: |
-          pulumi stack select prod
-          pulumi up --yes --skip-preview
-        working-directory: cluster
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
-
-      - name: Verify deployment
-        run: |
-          echo "Deployment completed. New images:"
+          echo "✅ ESC config updated with immutable image tags"
+          echo ""
+          echo "Image tags updated to:"
           echo "  Adapter: ${{ steps.images.outputs.adapter_image }}"
           echo "  Sink: ${{ steps.images.outputs.sink_image }}"
+          echo ""
+          echo "To deploy these images, run locally:"
+          echo "  pulumi -C cluster up"
+          echo ""
+          echo "Or wait for next scheduled deployment if auto-deploy is configured."
