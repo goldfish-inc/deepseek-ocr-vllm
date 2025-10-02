@@ -13,6 +13,7 @@ Successfully extracted cleaning patterns from 7 legacy pandas scripts into SQL r
 ### 1. Migration from @ebisu → @oceanid
 
 **Scripts migrated** (7 total):
+
 - `country/clean_esp_vessels.py` - Spanish locale (quote fixes, port names)
 - `country/clean_dnk_robust.py` - Danish/Nordic patterns
 - `country/clean_bgr_robust.py` - Bulgarian Cyrillic handling
@@ -22,6 +23,7 @@ Successfully extracted cleaning patterns from 7 legacy pandas scripts into SQL r
 - `reference/clean_msc_gear_data.py` - Marine Stewardship Council gear
 
 **Data migrated** (18MB):
+
 - 15 RFMO vessel CSVs (ICCAT, IOTC, WCPFC, etc.)
 - 1 SEAFO PDF (133KB - will test Docling-Granite extraction)
 - 2 Excel files (IATTC, IOTC - legacy formats)
@@ -31,6 +33,7 @@ Successfully extracted cleaning patterns from 7 legacy pandas scripts into SQL r
 Built `scripts/extract-knowledge/extract_pandas_patterns.py`:
 
 **Features**:
+
 - AST-based Python parser (no regex on source code)
 - Extracts:
   - `re.sub()` patterns → `regex_replace` rules
@@ -41,6 +44,7 @@ Built `scripts/extract-knowledge/extract_pandas_patterns.py`:
 - Generates priority scores (higher = more specific)
 
 **Usage**:
+
 ```bash
 python scripts/extract-knowledge/extract_pandas_patterns.py \
   --input scripts/legacy-pandas-cleaners/ \
@@ -63,6 +67,7 @@ python scripts/extract-knowledge/extract_pandas_patterns.py \
 ## Sample Extracted Rules
 
 ### Bulgarian Cyrillic Quote Fix
+
 ```sql
 INSERT INTO stage.cleaning_rules (
   rule_name, rule_type, source_type, source_name,
@@ -83,6 +88,7 @@ INSERT INTO stage.cleaning_rules (
 ```
 
 ### Danish Nordic Quote Pattern
+
 ```sql
 INSERT INTO stage.cleaning_rules (
   rule_name, rule_type, source_type, source_name,
@@ -103,6 +109,7 @@ INSERT INTO stage.cleaning_rules (
 ```
 
 ### RFMO Whitespace Normalization
+
 ```sql
 INSERT INTO stage.cleaning_rules (
   rule_name, rule_type, source_type, source_name,
@@ -138,6 +145,7 @@ Rules are assigned priority scores to control application order:
 ## Integration with ML Pipeline
 
 ### Current State (Pandas Scripts)
+
 ```
 Raw CSV → Manual script → Cleaned CSV → @ebisu DB
   ↓           ↓              ↓
@@ -146,6 +154,7 @@ Raw CSV → Manual script → Cleaned CSV → @ebisu DB
 ```
 
 ### Future State (ML Pipeline)
+
 ```
 Raw CSV → Docling-Granite → Apply cleaning_rules → ML confidence → Review
   ↓            ↓                    ↓                    ↓            ↓
@@ -154,6 +163,7 @@ Raw CSV → Docling-Granite → Apply cleaning_rules → ML confidence → Revie
 ```
 
 ### Benefits
+
 1. **Codified knowledge**: Tribal knowledge now versioned in database
 2. **Measurable**: Track rule effectiveness (`times_applied`, `success_rate`)
 3. **Improvable**: Human corrections update rule confidence
@@ -163,6 +173,7 @@ Raw CSV → Docling-Granite → Apply cleaning_rules → ML confidence → Revie
 ## Next Steps
 
 ### Phase 1: Deploy Staging DB (#46)
+
 ```sql
 CREATE TABLE stage.cleaning_rules (
   id UUID PRIMARY KEY,
@@ -185,6 +196,7 @@ CREATE TABLE stage.cleaning_rules (
 ```
 
 ### Phase 2: Apply Rules in Ingestion Worker (#48)
+
 ```python
 # Fetch rules for source
 rules = await db.fetch("""
@@ -208,6 +220,7 @@ for rule in rules:
 ```
 
 ### Phase 3: Measure Effectiveness
+
 ```sql
 -- Rule effectiveness report
 SELECT rule_name, rule_type, times_applied, success_rate,
@@ -219,6 +232,7 @@ LIMIT 20;
 ```
 
 ### Phase 4: Train ML Model (#49)
+
 ```python
 # Use extracted rules as training data seed
 training_examples = []
@@ -247,6 +261,7 @@ model = train_model(training_examples, base_model='distilbert-base-uncased')
 ## Validation
 
 ### Test Extraction
+
 ```bash
 # Run extraction
 python scripts/extract-knowledge/extract_pandas_patterns.py
@@ -262,12 +277,14 @@ python scripts/extract-knowledge/extract_pandas_patterns.py
 ```
 
 ### Verify SQL Syntax
+
 ```bash
 # Check SQL is valid (requires psql)
 psql -d test -f sql/seed_cleaning_rules.sql --dry-run
 ```
 
 ### Sample Rules
+
 ```bash
 # Preview first 80 lines
 head -80 sql/seed_cleaning_rules.sql

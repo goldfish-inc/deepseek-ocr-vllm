@@ -1,0 +1,10 @@
+{
+	"devDependencies": {
+		"markdownlint": "^0.38.0",
+		"markdownlint-cli2": "^0.18.1"
+	},
+	"scripts": {
+		"lint:md": "markdownlint-cli2 '**/*.md'",
+		"lint:md:fix": "markdownlint-cli2 --fix '**/*.md'"
+	}
+}

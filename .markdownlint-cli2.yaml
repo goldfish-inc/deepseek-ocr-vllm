@@ -1,0 +1,9 @@
+globs:
+  - "**/*.md"
+ignores:
+  - "node_modules/**"
+  - "**/node_modules/**"
+  - "build/**"
+  - "dist/**"
+  - ".pulumi/**"
+  - "CLAUDE.md"

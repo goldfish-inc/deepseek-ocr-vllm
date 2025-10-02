@@ -7,23 +7,27 @@ This document describes what you *can* do under the Pulumi **Individual (free / 
 ## ✅ What You Can Do
 
 ### ✔ Pulumi Cloud Backend (Free for Individuals)
+
 - Use Pulumi's managed backend for state and secrets
 - **No limit** on the number of stacks, projects, or updates
 - **500 free deployment minutes** per month for "Pulumi Deployments for Everyone"
 - Full access to Pulumi ESC (Environments, Secrets, Configuration)
 
 ### ✔ Policy as Code (CrossGuard) – Local Enforcement
+
 - Author **Policy Packs** in TypeScript, Python, or JavaScript using the open-source Policy SDK
 - Use `pulumi preview --policy-pack <path>` or `pulumi up --policy-pack <path>` to enforce policies locally
 - Adopt existing policy packs (e.g., **Compliance-Ready Policies**, **AWSGuard**)
 - **Unlimited local policy evaluations** (doesn't count against any quota)
 
 ### ✔ Remediation & Advisory Policies
+
 - Policy packs can include "remediation" capability to automatically correct violations
 - Policies can be `mandatory` (block changes) or `advisory` (warn only)
 - Full validation during CI/CD pipeline without service limits
 
 ### ✔ Pulumi Kubernetes Operator (PKO)
+
 - Deploy and use PKO in your clusters without restrictions
 - Reconcile Pulumi Stacks as Kubernetes CRDs
 - Full GitOps integration with Flux/ArgoCD
@@ -33,11 +37,13 @@ This document describes what you *can* do under the Pulumi **Individual (free / 
 ## ⚠️ What Is *Not* Available on Free Tier
 
 ### ❌ Centralized Policy Enforcement
+
 - Cannot enforce policies centrally through Pulumi Cloud
 - Cannot push policy packs across an organization from the service
 - Limited to **10 policy evaluations per month** if using cloud-based CrossGuard
 
 ### ❌ Advanced Governance Features
+
 - No policy dashboards or compliance reports
 - No organization-wide enforcement
 - No advanced audit logs
@@ -46,6 +52,7 @@ This document describes what you *can* do under the Pulumi **Individual (free / 
 - No drift detection/remediation by service
 
 ### ❌ Self-Hosted Backend
+
 - Cannot self-host the Pulumi service (private on-prem backend)
 - Must use Pulumi Cloud for state storage
 
@@ -56,18 +63,21 @@ This document describes what you *can* do under the Pulumi **Individual (free / 
 Given these limitations, the Oceanid infrastructure uses a hybrid approach:
 
 ### 1. Local Policy Validation (Free & Unlimited)
+
 ```typescript
 // policy/validation.ts - Runs locally, no quota
 pulumi preview --policy-pack ./policy  // ✅ Free
 ```
 
 ### 2. OPA for Additional Validation
+
 ```bash
 # policy/opa-policies.rego - Completely free
 opa eval -d policy/opa-policies.rego "data.oceanid.policies"
 ```
 
 ### 3. GitHub Actions Integration
+
 ```yaml
 # .github/workflows/infrastructure.yml
 jobs:
@@ -88,6 +98,7 @@ jobs:
 ## 📊 Resource Usage Tracking
 
 ### Current Monthly Usage (Free Tier)
+
 | Resource | Used | Limit | Status |
 |----------|------|-------|--------|
 | Deployment Minutes | ~50 | 500 | ✅ 10% |
@@ -97,6 +108,7 @@ jobs:
 | Team Members | 1 | 1 | ✅ |
 
 ### Cost Optimization Strategy
+
 1. **All policies run locally** - Never hit the 10/month cloud limit
 2. **OPA for complex rules** - Completely free alternative
 3. **GitHub Actions for CI** - Uses GitHub's free tier
@@ -109,12 +121,14 @@ jobs:
 If/when we need paid features:
 
 ### Team Plan ($75/user/month)
+
 - Centralized policy enforcement
 - Team collaboration (up to 10 members)
 - Audit logs
 - Basic RBAC
 
 ### Business Critical (Custom pricing)
+
 - SSO/SAML
 - Advanced RBAC
 - Drift detection & remediation
@@ -122,6 +136,7 @@ If/when we need paid features:
 - SLA support
 
 ### When to Upgrade
+
 - [ ] Need centralized policy enforcement across team
 - [ ] Multiple developers need access
 - [ ] Compliance requirements (SOC2, HIPAA)
@@ -133,6 +148,7 @@ If/when we need paid features:
 ## 💡 Best Practices for Free Tier
 
 ### 1. Maximize Local Validation
+
 ```bash
 # Always validate locally first
 pulumi preview --policy-pack ./policy --diff
@@ -142,12 +158,14 @@ pulumi up --yes
 ```
 
 ### 2. Use ESC Effectively
+
 ```bash
 # Store all secrets in ESC (included free)
 esc env set default/oceanid-cluster secret.key "value" --secret
 ```
 
 ### 3. Leverage PKO for GitOps
+
 ```yaml
 # Stack CRD - runs without hitting quotas
 apiVersion: pulumi.com/v1
@@ -158,6 +176,7 @@ spec:
 ```
 
 ### 4. Monitor Usage
+
 ```bash
 # Check deployment minutes used
 pulumi stack history --json | jq '.updates[].duration'
@@ -170,6 +189,7 @@ pulumi stack history --json | jq '.updates[].duration'
 ## 🛡️ Policy Examples for Free Tier
 
 ### Local Policy Pack Structure
+
 ```
 policy/
 ├── validation.ts        # TypeScript policies (local)
@@ -179,6 +199,7 @@ policy/
 ```
 
 ### Example: Enforce Resource Limits (Free)
+
 ```typescript
 // Runs locally - no quota usage
 export const requireResourceLimits: PolicyRule = {
@@ -192,6 +213,7 @@ export const requireResourceLimits: PolicyRule = {
 ```
 
 ### CI Integration (Free)
+
 ```yaml
 # GitHub Actions - validate on every PR
 - name: Policy Check
@@ -205,12 +227,14 @@ export const requireResourceLimits: PolicyRule = {
 ## 📈 Scaling Considerations
 
 ### Current Setup (Free Tier)
+
 - ✅ 1 developer
 - ✅ Local policies only
 - ✅ GitHub Actions CI
 - ✅ PKO for GitOps
 
 ### Future Growth Path
+
 1. **Add developers** → Stay on free (each has own account)
 2. **Need central policies** → Upgrade to Team
 3. **Compliance required** → Business Critical

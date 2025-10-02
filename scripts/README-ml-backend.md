@@ -63,11 +63,13 @@ python3 scripts/connect-ml-backend.py
 The `ls-triton-adapter` backend provides:
 
 ### Named Entity Recognition (NER)
+
 - **Model**: DistilBERT base uncased
 - **Task Type**: Text annotation
 - **Entities**: Configured via ESC (vessel_name, IMO, IRCS, etc.)
 
 ### PDF Document Extraction
+
 - **Model**: Docling Granite 258M
 - **Task Type**: Document processing
 - **Extracts**: Tables (TEDS 0.97), formulas (F1 0.968), code (F1 0.988), text (F1 0.84)
@@ -94,7 +96,8 @@ After connecting the backend:
 ### "LABEL_STUDIO_API_KEY environment variable not set"
 
 Get your API key from Label Studio:
-1. Navigate to https://label.boathou.se
+
+1. Navigate to <https://label.boathou.se>
 2. Click your profile → Account & Settings
 3. Go to Access Token section
 4. Copy token: `export LABEL_STUDIO_API_KEY='token_here'`
@@ -102,6 +105,7 @@ Get your API key from Label Studio:
 ### "Project 'SME 2025' not found"
 
 List available projects:
+
 ```python
 from label_studio_sdk.client import LabelStudio
 ls = LabelStudio(base_url='...', api_key='...')
@@ -110,6 +114,7 @@ for p in ls.projects.list():
 ```
 
 Or specify exact project name:
+
 ```bash
 export PROJECT_NAME="My Exact Project Name"
 ```
@@ -144,6 +149,7 @@ done
 ### Custom Backend Configuration
 
 Edit script to customize:
+
 - `is_interactive`: Enable/disable live predictions during annotation
 - `title`: Display name for backend
 - `description`: Backend description shown in UI
@@ -157,7 +163,7 @@ The script uses these Label Studio API endpoints:
 - `POST /api/ml` - Add ML backend
 - `PATCH /api/projects/{id}` - Update project settings
 
-Full API docs: https://api.labelstud.io
+Full API docs: <https://api.labelstud.io>
 
 ## Integration with Training Pipeline
 

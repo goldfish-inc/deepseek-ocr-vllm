@@ -9,6 +9,7 @@
 ## Overview
 
 This guide covers deployment of schema migrations V3-V6 to align NER taxonomy with database schema, enabling:
+
 - ML-powered CSV cleaning pipeline (#48, #49)
 - FK validation for FLAG/RFMO/GEAR_TYPE/SPECIES labels
 - Temporal intelligence tracking (reflagging, authorizations, sanctions)
@@ -30,6 +31,7 @@ CREATE EXTENSION IF NOT EXISTS btree_gist; -- For temporal exclusion constraints
 ```
 
 **Why needed:**
+
 - `pgcrypto`: UUID primary keys in V4/V5 (e.g., `curated.country_iso.id`)
 - `postgis`: Geographic data (RFMO competence areas, port locations, violation sites)
 - `btree_gist`: Temporal exclusion constraints (prevent overlapping vessel flag periods)
@@ -87,6 +89,7 @@ SQL
 ```
 
 **CrunchyBridge advantages:**
+
 - Extensions pre-installed (no package installation needed)
 - Superuser privileges available
 - Managed backups (WAL-based, point-in-time recovery)
@@ -113,6 +116,7 @@ psql $DATABASE_URL -c "\dx btree_gist"
 ```
 
 **Troubleshooting:**
+
 - **Permission denied**: Extensions require superuser or `rds_superuser` role (AWS RDS)
 - **Extension not found**: Install packages (Debian: `postgresql-contrib`, `postgis`, Red Hat: `postgresql-server-devel`, `postgis`)
 
@@ -130,6 +134,7 @@ pg_restore --list oceanid_staging_pre_v3_*.dump | head -20
 ```
 
 **Rollback procedure:**
+
 ```bash
 # If migration fails, restore from backup
 pg_restore --clean --if-exists --dbname=$DATABASE_URL oceanid_staging_pre_v3_*.dump
@@ -265,6 +270,7 @@ psql $DATABASE_URL -c "\d curated.vessel_flag_history" | grep EXCLUDE
 ### 1. Update Application Configuration
 
 **Adapter environment variables:**
+
 ```bash
 # Load labels.json at startup
 export NER_LABELS=$(cat labels.json | jq -c '.labels | map(.label)')
@@ -277,6 +283,7 @@ docker restart ls-triton-adapter
 ```
 
 **Health check verification:**
+
 ```bash
 curl http://localhost:8080/health | jq
 # Expected: {"ok": true, "database": "connected", "triton": "connected"}
@@ -287,18 +294,21 @@ curl http://localhost:8080/health | jq
 ### 2. Seed Additional Reference Data
 
 **Country ISO codes** (200+ countries with MID codes):
+
 ```bash
 # TODO: Create sql/seed_country_iso.sql from ISO 3166-1 + ITU MID data
 # psql $DATABASE_URL -f sql/seed_country_iso.sql
 ```
 
 **FAO gear types** (60+ gear codes):
+
 ```bash
 # TODO: Create sql/seed_gear_types_fao.sql from FAO ISSCFG
 # psql $DATABASE_URL -f sql/seed_gear_types_fao.sql
 ```
 
 **ASFIS species** (12,000+ species):
+
 ```bash
 # TODO: Create sql/seed_harmonized_species.sql from FAO ASFIS
 # psql $DATABASE_URL -f sql/seed_harmonized_species.sql
@@ -309,6 +319,7 @@ curl http://localhost:8080/health | jq
 ### 3. Test End-to-End Flow
 
 **CSV ingestion test:**
+
 ```bash
 # Place test CSV in watched directory
 cp data/raw/vessels/SEAFO_vessels_2025-08-26.csv /data/incoming/
@@ -324,6 +335,7 @@ psql $DATABASE_URL -c "SELECT * FROM stage.v_review_queue LIMIT 10;"
 ```
 
 **NER extraction test:**
+
 ```bash
 # Test NER with db_mapping
 curl -X POST http://localhost:8080/predict \
@@ -451,10 +463,13 @@ SELECT COUNT(*) AS ready_to_promote FROM stage.v_auto_promotable;
 ### Common Issues
 
 **1. Extension not available**
+
 ```
 ERROR: extension "postgis" is not available
 ```
+
 **Fix:** Install PostGIS packages:
+
 ```bash
 # Debian/Ubuntu
 sudo apt-get install postgresql-14-postgis-3
@@ -467,21 +482,27 @@ brew install postgis
 ```
 
 **2. Permission denied for extension**
+
 ```
 ERROR: permission denied to create extension "pgcrypto"
 ```
+
 **Fix:** Connect as superuser or request `rds_superuser` role (AWS RDS)
 
 **3. Temporal exclusion constraint violation**
+
 ```
 ERROR: conflicting key value violates exclusion constraint
 ```
+
 **Fix:** Ensure no overlapping date ranges for same vessel in `vessel_flag_history`
 
 **4. Foreign key violation**
+
 ```
 ERROR: insert or update violates foreign key constraint
 ```
+
 **Fix:** Seed reference tables before inserting dependent data
 
 ---
@@ -505,6 +526,7 @@ ERROR: insert or update violates foreign key constraint
 ## Next Steps
 
 See **Issue #53** for Phase 0 implementation:
+
 1. Wire `labels.json` into adapter/postprocessor
 2. Remove 9-label silent fallback
 3. Add fail-fast startup validation

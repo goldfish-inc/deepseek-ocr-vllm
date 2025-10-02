@@ -34,12 +34,12 @@ assignees: []
 <!-- Why is this change necessary? What issues does the current taxonomy have? -->
 
 
-
 ---
 
 ## Proposed Change
 
 ### New/Modified Label(s)
+
 ```json
 {
   "index": X,
@@ -63,6 +63,7 @@ assignees: []
 ## Impact Assessment
 
 ### Model Retraining Required?
+
 - [ ] **Yes** - Model output shape changes (label addition/removal/reorder)
 - [ ] **No** - Only metadata changes (description, validator, dbMapping)
 
@@ -125,28 +126,39 @@ assignees: []
 <!-- Provide examples showing correct behavior -->
 
 #### Example 1: Positive Match
+
 **Input text**:
+
 ```
 ...
 ```
+
 **Expected extraction**:
+
 ```json
 {"label": "NEW_LABEL", "text": "...", "start": X, "end": Y}
 ```
 
 #### Example 2: Negative Match (should NOT match)
+
 **Input text**:
+
 ```
 ...
 ```
+
 **Expected**: No extraction for NEW_LABEL
 
 #### Example 3: Edge Case
+
 **Input text**:
+
 ```
 ...
 ```
+
 **Expected extraction**:
+
 ```json
 ...
 ```
@@ -179,6 +191,7 @@ def validate_new_label(value: str) -> bool:
 ## Documentation Updates
 
 ### Files to Update
+
 - [ ] `labels.json` - Add changeLog entry
 - [ ] `CURRENT_STATE.md` - Update NER section
 - [ ] `adapter/ner/README.md` - Document new label usage
@@ -194,6 +207,7 @@ def validate_new_label(value: str) -> bool:
 -
 
 **Common confusion with:**
+
 - **OTHER_LABEL**: Distinguish by...
 
 ---
@@ -201,6 +215,7 @@ def validate_new_label(value: str) -> bool:
 ## Rollout Checklist
 
 ### Pre-Merge
+
 - [ ] Review by NER subject matter expert
 - [ ] Review by data science team
 - [ ] Test validator logic with 100+ examples
@@ -208,6 +223,7 @@ def validate_new_label(value: str) -> bool:
 - [ ] Create DB migration if schema changes needed
 
 ### Deployment
+
 - [ ] Update ESC `nerLabels` configuration
 - [ ] Deploy updated adapter
 - [ ] Update Label Studio project labels
@@ -215,6 +231,7 @@ def validate_new_label(value: str) -> bool:
 - [ ] Monitor confidence scores for 7 days
 
 ### Post-Deployment
+
 - [ ] Verify model health endpoint shows correct label count
 - [ ] Check extraction quality on 100 production documents
 - [ ] Review annotation acceptance rate

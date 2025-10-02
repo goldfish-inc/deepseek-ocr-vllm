@@ -3,7 +3,8 @@
 ## Create a Dedicated Token
 
 ### 1. Go to GitHub Token Settings
-https://github.com/settings/tokens/new
+
+<https://github.com/settings/tokens/new>
 
 ### 2. Token Configuration
 
@@ -12,16 +13,18 @@ https://github.com/settings/tokens/new
 **Expiration:** 90 days (rotate quarterly for security)
 
 **Required Permissions (Classic Token):**
+
 - ✅ **repo** (Full control of private repositories)
   - Needed to: Create branches, push commits, create PRs
 - ✅ **workflow** (Update GitHub Action workflows)
-  - Needed if: Your manifests include .github/workflows
+  - Needed if: Your manifests include .GitHub/workflows
 
 **OR Fine-grained Token (Recommended for better security):**
 
 Repository access: `goldfish-inc/oceanid` only
 
 **Repository Permissions:**
+
 - ✅ **Contents:** Write (push commits, create branches)
 - ✅ **Pull requests:** Write (create/update PRs)
 - ✅ **Metadata:** Read (always required)
@@ -68,7 +71,9 @@ kubectl get imageupdateautomation -n flux-system
 ## Security Best Practices
 
 ### Token Naming Convention
+
 Use descriptive names that include:
+
 - Purpose: `flux`
 - Project: `oceanid`
 - Type: `automation`
@@ -76,11 +81,13 @@ Use descriptive names that include:
 Example: `flux-oceanid-automation`
 
 ### Token Rotation Schedule
+
 - **Quarterly rotation** (every 90 days)
 - Set calendar reminder
 - Keep old token active for 24h during rotation
 
 ### Token Storage
+
 - ✅ **DO:** Store in Pulumi ESC (encrypted)
 - ✅ **DO:** Use dedicated token for each cluster
 - ❌ **DON'T:** Share tokens between projects
@@ -88,7 +95,9 @@ Example: `flux-oceanid-automation`
 - ❌ **DON'T:** Use personal tokens for automation
 
 ### Audit Trail
+
 The token usage is tracked in:
+
 1. GitHub Settings → Personal access tokens → Last used
 2. GitHub repo → Settings → Webhooks → Recent Deliveries
 3. Flux logs: `kubectl logs -n flux-system deployment/image-automation-controller`
@@ -98,22 +107,26 @@ The token usage is tracked in:
 ### Why These Permissions?
 
 **repo/contents:write**
+
 - Push commits with updated image tags
 - Create `flux-image-updates` branch
 - Required for GitOps workflow
 
 **pull_requests:write**
+
 - Create PR from `flux-image-updates` branch
 - Update PR description with changes
 - Auto-close stale PRs
 
 **workflow:write** (optional)
+
 - Only if you have GitHub Actions that reference container images
 - Allows updating workflow files with new versions
 
 ## Troubleshooting
 
 ### Test Token Access
+
 ```bash
 # Test token manually (replace with your token)
 curl -H "Authorization: token ghp_YOUR_TOKEN" \
@@ -123,6 +136,7 @@ curl -H "Authorization: token ghp_YOUR_TOKEN" \
 ```
 
 ### Check Flux Can Access Token
+
 ```bash
 # Verify secret exists
 kubectl get secret github-token -n flux-system -o yaml
@@ -134,16 +148,19 @@ kubectl logs -n flux-system deployment/image-automation-controller | grep -i aut
 ### Common Issues
 
 **"Authentication failed"**
+
 - Token expired or revoked
 - Wrong permissions
 - Secret not created in cluster
 
 **"Cannot create PR"**
+
 - Missing pull_requests:write permission
 - Branch protection rules blocking
 - Token for wrong repository
 
 **"Cannot push to branch"**
+
 - Missing contents:write permission
 - Branch protection on main
 - Token expired
@@ -182,4 +199,4 @@ Only non-breaking changes (patch and minor versions) are auto-applied.
 ---
 
 **Ready to create your token?**
-→ https://github.com/settings/tokens/new
+→ <https://github.com/settings/tokens/new>

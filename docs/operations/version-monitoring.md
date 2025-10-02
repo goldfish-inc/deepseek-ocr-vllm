@@ -25,15 +25,18 @@ Automated version monitoring is now configured using Flux's image automation con
 ## Configuration Files
 
 ### Version Monitoring Resources
+
 **Location:** `/clusters/tethys/version-monitoring.yaml`
 
 Contains:
+
 - `ImageRepository` resources for each monitored component
 - `ImagePolicy` resources defining version constraints
 - `Alert` resource for notifications
 - `Provider` for alert handling
 
 ### Image Automation Component (Optional)
+
 **Location:** `/cluster/src/components/imageAutomation.ts`
 
 Pulumi component for programmatic deployment (includes automated PR creation).
@@ -57,16 +60,19 @@ kubectl describe imagepolicy cloudflared -n flux-system
 ## Version Policies Explained
 
 ### Cloudflared
+
 - **Policy:** `>=2024.0.0`
 - **Strategy:** Track all stable releases from 2024 onwards
 - **Current:** Using `latest` tag (auto-updates)
 
 ### Cert-Manager
+
 - **Policy:** `>=1.0.0 <2.0.0`
 - **Strategy:** Stay on v1.x branch for stability
 - **Action Required:** Update from v1.16.2 to v1.18.2 available
 
 ### Pulumi Kubernetes Operator
+
 - **Policy:** `>=2.0.0 <3.0.0`
 - **Strategy:** Stay on v2.x branch
 - **Current:** Already at latest (v2.2.0)
@@ -78,6 +84,7 @@ kubectl describe imagepolicy cloudflared -n flux-system
 To enable automated pull requests when new versions are detected:
 
 1. Create GitHub token secret:
+
 ```bash
 kubectl create secret generic github-token \
   -n flux-system \
@@ -93,6 +100,7 @@ kubectl create secret generic github-token \
 To monitor additional components:
 
 1. Add to `version-monitoring.yaml`:
+
 ```yaml
 ---
 apiVersion: image.toolkit.fluxcd.io/v1beta2
@@ -118,6 +126,7 @@ spec:
 ```
 
 2. Apply the changes:
+
 ```bash
 kubectl apply -f clusters/tethys/version-monitoring.yaml
 ```
@@ -125,6 +134,7 @@ kubectl apply -f clusters/tethys/version-monitoring.yaml
 ## Alert Notifications
 
 Currently configured with a simple logger provider that records events. Can be extended to:
+
 - Send GitHub issues
 - Post to Slack/Discord
 - Email notifications
@@ -133,6 +143,7 @@ Currently configured with a simple logger provider that records events. Can be e
 ## Maintenance
 
 ### Regular Tasks
+
 - Review detected versions weekly
 - Update components quarterly (or for security patches)
 - Review and adjust version policies as needed

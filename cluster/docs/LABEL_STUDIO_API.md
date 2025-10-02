@@ -35,6 +35,7 @@ curl -X POST https://label.boathou.se/api/token/refresh \
 ```
 
 Response:
+
 ```json
 {
   "access": "eyJhbGci...short-lived-token"
@@ -98,58 +99,70 @@ projects = client.list_projects()
 ## Important Notes
 
 ### Token Lifetime
+
 - **PAT (Refresh Token)**: Long-lived, store securely
 - **Access Token**: ~5 minutes, refresh when expired
 
 ### Authentication Scheme
+
 - **Correct**: `Authorization: Bearer <access-token>`
 - **Incorrect**: `Authorization: Token <pat>` (won't work)
 
 ### Token Storage
+
 - **PAT**: Store in 1Password, never commit to git
 - **Access Token**: Generate on-demand, don't store
 
 ### Error Handling
 
 #### 401 Unauthorized
+
 ```json
 {"detail": "Given token not valid for any token type"}
 ```
+
 **Solution**: Your access token expired. Get a new one from PAT.
 
 #### 400 Bad Request
+
 ```json
 {"refresh": ["This field may not be blank."]}
 ```
+
 **Solution**: PAT not provided or empty. Check your environment variable.
 
 ## API Endpoints
 
 ### Token Management
+
 - `POST /api/token/refresh` - Exchange PAT for access token
 - `POST /api/token/verify` - Verify access token validity
 
 ### Common Endpoints
+
 - `GET /api/projects/` - List projects
 - `POST /api/projects/` - Create project
 - `GET /api/projects/{id}/tasks/` - List tasks
 - `POST /api/projects/{id}/tasks/` - Create task
 
-Full API reference: https://api.labelstud.io
+Full API reference: <https://api.labelstud.io>
 
 ## Troubleshooting
 
 ### "Authentication credentials were not provided"
+
 - Check Authorization header format: `Bearer <token>`
 - Ensure you're using access token, not PAT
 - Verify token isn't expired
 
 ### "Invalid token"
+
 - PAT cannot be used directly with API
 - Must exchange PAT for access token first
 - Access token expires after 5 minutes
 
 ### Shell Variable Issues
+
 - Avoid `$()` in zsh - use xargs or temp files
 - Use `op read` instead of `op item get` for simplicity
 - Quote tokens properly to avoid special char issues

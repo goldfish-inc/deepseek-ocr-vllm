@@ -3,18 +3,21 @@
 ## 🎯 Objectives Achieved
 
 ### 1. GitOps with Flux + PKO ✅
+
 - Lightweight solution using only **~200MB RAM**
 - Native Pulumi integration via Pulumi Kubernetes Operator
 - Git-driven deployments without manual `pulumi up`
 - Multi-cluster ready architecture
 
 ### 2. Policy Validation (Free Tier Optimized) ✅
+
 - **Local CrossGuard policies** - No quota usage
 - **OPA integration** - Completely free validation
 - **GitHub Actions CI** - Automated checks on every PR
 - Comprehensive coverage without paid features
 
 ### 3. Complete Documentation ✅
+
 - Architecture diagrams with Mermaid
 - Security documentation
 - GitOps implementation guide
@@ -23,6 +26,7 @@
 ## 📁 Files Created
 
 ### GitOps Implementation
+
 ```
 clusters/
 ├── base/
@@ -40,6 +44,7 @@ clusters/
 ```
 
 ### Policy Validation
+
 ```
 policy/
 ├── validation.ts                   # TypeScript local policies
@@ -48,6 +53,7 @@ policy/
 ```
 
 ### CI/CD Pipeline
+
 ```
 .github/
 └── workflows/
@@ -55,6 +61,7 @@ policy/
 ```
 
 ### Documentation
+
 ```
 ARCHITECTURE.md                     # Network diagrams
 SECURITY.md                        # Security documentation
@@ -65,6 +72,7 @@ IMPLEMENTATION_SUMMARY.md          # This file
 ```
 
 ### Scripts
+
 ```
 scripts/
 └── bootstrap-gitops.sh            # One-command GitOps setup
@@ -73,6 +81,7 @@ scripts/
 ## 🚀 Quick Start Commands
 
 ### 1. Bootstrap GitOps (One-Time Setup)
+
 ```bash
 # Set GitHub token
 export GITHUB_TOKEN=<your-token>
@@ -87,6 +96,7 @@ export GITHUB_TOKEN=<your-token>
 ```
 
 ### 2. Day-2 Operations
+
 ```bash
 # Monitor GitOps
 watch flux get all -A
@@ -102,6 +112,7 @@ kubectl describe stack oceanid-cluster-prod -n pulumi-system
 ```
 
 ### 3. Policy Validation (CI/CD)
+
 ```bash
 # Local validation (no quota)
 pulumi preview --policy-pack ./policy
@@ -116,12 +127,14 @@ npm run validate
 ## 📊 Resource Impact
 
 ### Before Implementation
+
 - Manual deployments via `pulumi up`
 - No policy validation
 - No GitOps automation
 - Total overhead: **0MB**
 
 ### After Implementation
+
 | Component | Memory | CPU | Purpose |
 |-----------|--------|-----|---------|
 | Flux source-controller | 50MB | 0.05 | Git sync |
@@ -130,6 +143,7 @@ npm run validate
 | **Total** | **164MB** | **0.2** | Complete GitOps |
 
 ### Free Tier Usage
+
 | Feature | Usage | Limit | Status |
 |---------|-------|-------|--------|
 | Deployment Minutes | ~50/month | 500 | ✅ 10% |
@@ -157,24 +171,28 @@ graph LR
 ## ✅ Best Practices Implemented
 
 ### 1. Security First
+
 - ✅ All secrets in ESC
 - ✅ OIDC authentication (no long-lived tokens)
 - ✅ Policy validation on every change
 - ✅ Network policies enforced
 
 ### 2. Cost Optimization
+
 - ✅ Stay within free tier limits
 - ✅ Local policy evaluation (no quota)
 - ✅ Minimal resource overhead (<200MB)
 - ✅ OPA for complex rules (free)
 
 ### 3. Operational Excellence
+
 - ✅ GitOps for all changes
 - ✅ Automated rollback via Git
 - ✅ Comprehensive monitoring
 - ✅ Disaster recovery ready
 
 ### 4. Future Proof
+
 - ✅ Multi-cluster ready
 - ✅ Scalable to paid tiers
 - ✅ Standard GitOps patterns
@@ -183,19 +201,23 @@ graph LR
 ## 🎯 Success Metrics
 
 ### Automation
+
 - **Before**: 100% manual deployments
 - **After**: 100% GitOps automated
 
 ### Policy Compliance
+
 - **Before**: 0% validation
 - **After**: 100% validation on every change
 
 ### Resource Efficiency
+
 - **Total overhead**: <200MB RAM
 - **Cost increase**: $0 (free tier)
 - **Operational burden**: Reduced by 80%
 
 ### Security Posture
+
 - **Secret rotation**: Automated
 - **Policy enforcement**: Mandatory
 - **Audit trail**: Complete via Git
@@ -203,16 +225,19 @@ graph LR
 ## 🔮 Next Steps
 
 ### Immediate
+
 1. Run `./scripts/bootstrap-gitops.sh` to enable GitOps
 2. Commit all changes to trigger first reconciliation
 3. Monitor PKO logs for successful deployment
 
 ### Short Term
+
 1. Add more OPA policies for specific requirements
 2. Implement Velero for backup/restore
 3. Add Trivy scanning to CI pipeline
 
 ### Long Term
+
 1. Multi-cluster GitOps with cluster-specific overlays
 2. Progressive delivery with Flagger
 3. Service mesh integration (Cilium eBPF)
@@ -220,17 +245,20 @@ graph LR
 ## 📝 Notes
 
 ### Why This Approach?
+
 1. **Flux + PKO** - Lightest GitOps solution that's Pulumi-native
 2. **Local policies** - Avoid CrossGuard quotas on free tier
 3. **OPA** - Industry standard, completely free
 4. **GitHub Actions** - Leverages GitHub's generous free tier
 
 ### Trade-offs
+
 - No centralized policy dashboard (requires paid tier)
 - No drift detection (can add manually)
 - Manual secret rotation trigger (automated schedule possible)
 
 ### Compatibility
+
 - ✅ Works with existing Pulumi setup
 - ✅ Compatible with future paid tier upgrade
 - ✅ Standard Kubernetes patterns

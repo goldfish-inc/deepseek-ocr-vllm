@@ -12,10 +12,11 @@ The infrastructure is configured to automatically update container images for no
 ### 1. Create GitHub Personal Access Token
 
 Create a GitHub token with the following permissions:
+
 - `repo` - Full control of private repositories
 - `workflow` - Update GitHub Action workflows (if needed)
 
-Token creation: https://github.com/settings/tokens/new
+Token creation: <https://github.com/settings/tokens/new>
 
 ### 2. Add Token to Pulumi ESC
 
@@ -42,11 +43,13 @@ kubectl apply -f clusters/tethys/image-updates.yaml
 ## How It Works
 
 ### Version Detection
+
 1. **Image Repositories** scan Docker registries every hour
 2. **Image Policies** filter versions based on semantic versioning rules
 3. **Alerts** notify when new versions matching policies are found
 
 ### Automated Updates
+
 1. **ImageUpdateAutomation** detects changes matching policies
 2. Creates a new branch `flux-image-updates`
 3. Updates image tags in manifests
@@ -65,11 +68,14 @@ kubectl apply -f clusters/tethys/image-updates.yaml
 ## Configuration Files
 
 ### Pulumi Component
+
 `cluster/src/components/fluxBootstrap.ts`
+
 - Manages GitHub token secret from ESC
 - Creates Kubernetes secret for Flux
 
 ### Flux Configurations
+
 - `clusters/tethys/version-monitoring.yaml` - Image scanning and policies
 - `clusters/tethys/image-updates.yaml` - Automation configuration
 - `infrastructure/cert-manager-auto-update.yaml` - Component update markers

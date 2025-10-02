@@ -1,8 +1,10 @@
 # Oceanid Infrastructure — Current State Snapshot
+
 Date: 2025-09-30
 Stack: ryan-taylor/oceanid-cluster/prod
 
 ## Status
+
 - Access: Cloudflare Zero Trust protects `label.<base>`; GPU access via `gpu.<base>`.
 - Tunnels:
   - Cluster tunnel: in‑cluster cloudflared serves `label.<base>` and optional UIs.
@@ -18,15 +20,18 @@ Stack: ryan-taylor/oceanid-cluster/prod
 - NER labels: ESC → adapter env; no rebuilds required.
 
 ## New Architecture: Staging DB Pipeline (In Development)
+
 **GitHub Issues**: #46 (DB schema), #47 (pandas extraction), #48 (ingestion worker), #49 (ML training), #50 (promotion)
 
 ### Goals
+
 - **Separate ETL from intelligence**: @oceanid/staging for document cleaning, @ebisu/globalDB for maritime intelligence
 - **ML-powered cleaning**: Replace 11 manual pandas scripts with trainable pipeline
 - **Human-in-the-loop**: Label Studio for low-confidence cells, continuous model improvement
 - **Audited promotion**: Stage → GlobalDB with rollback capability
 
 ### Components (Planned)
+
 1. **Staging Database** (Issue #46)
    - `stage.documents` - Track CSV/PDF uploads with processing status
    - `stage.document_processing_log` - Version history (parsed → cleaned → reviewed → promoted)
@@ -56,18 +61,21 @@ Stack: ryan-taylor/oceanid-cluster/prod
    - Intelligence preservation: Conflicts stored, not overwritten
 
 ## Key Endpoints
+
 - Label Studio: `https://label.<base>` (ZeroTrust)
 - Triton (Calypso): `https://gpu.<base>` (HTTP v2 `/v2/health/ready`)
 - Adapter (cluster): `svc/ls-triton-adapter.apps.svc:9090` (`/health`, `/predict`)
 - Annotations Sink: `http://annotations-sink.apps.svc.cluster.local:8080/webhook`
 
 ## Secrets / Config (ESC)
-- Cloudflare: account, api token, zone, cluster tunnel id/token/hostname/target; node tunnel id/token/hostname/target
+
+- Cloudflare: account, API token, zone, cluster tunnel id/token/hostname/target; node tunnel id/token/hostname/target
 - NER labels (JSON, secret): `pulumiConfig.oceanid-cluster:nerLabels`
 - Calypso SSH key: `pulumiConfig.oceanid-cluster:calypso_ssh_key`
 - Optional: `sentry.dsn`, DB creds, HF token
 
 ## Deploy Flags
+
 - `enableNodeProvisioning` (default true) — set false to avoid SSH provisioning during troubleshooting
 - `enableCalypsoHostConnector` (default true) — host cloudflared + Triton
 - `enableNodeTunnels` (default true) — currently false to avoid CrashLoop; host tunnel serves `gpu.<base>`
@@ -76,6 +84,7 @@ Stack: ryan-taylor/oceanid-cluster/prod
 - `enableAppsStack` (default false) — Postgres only (MinIO/Airflow skipped)
 
 ## Validation
+
 ```bash
 # Triton
 curl -sk https://gpu.<base>/v2/health/ready
@@ -88,6 +97,7 @@ curl -s -X POST http://localhost:9090/predict -H 'Content-Type: application/json
 ```
 
 ## What’s Left for SME Go‑Live
+
 1) Ensure NER labels secret exists in ESC and adapter loads it
 2) Validate pre‑labels flow LS → adapter → Triton (`/predict`)
 3) (Optional) Enable Postgres; verify stage.documents/extractions populate via sink
@@ -95,6 +105,7 @@ curl -s -X POST http://localhost:9090/predict -H 'Content-Type: application/json
 5) (Optional) Implement/trial alternate GPU services via Triton Python backend or standalone container
 
 ## Runbook
+
 ```bash
 # Deploy minimal
 make deploy-simple
@@ -106,6 +117,7 @@ ssh calypso 'sudo systemctl restart tritonserver'
 ```
 
 ## Pointers
+
 - Adapter: `cluster/src/components/lsTritonAdapter.ts`
 - Triton service (systemd): `cluster/src/components/hostDockerService.ts`
 - SME readiness (ZeroTrust): `cluster/src/components/smeReadiness.ts`

@@ -9,6 +9,7 @@ An Architecture Decision Record captures an important architectural decision mad
 ## ADR Format
 
 We use a lightweight format:
+
 - **Title**: ADR-XXXX: Brief description
 - **Date**: When the decision was made
 - **Status**: Proposed/Accepted/Deprecated/Superseded
@@ -18,7 +19,7 @@ We use a lightweight format:
 
 ## Current ADRs
 
-- [0001-k3s-cluster-architecture.md](0001-k3s-cluster-architecture.md) - K3s cluster choice
+- [0001-K3s-cluster-architecture.md](0001-k3s-cluster-architecture.md) - K3s cluster choice
 
 ## Creating New ADRs
 

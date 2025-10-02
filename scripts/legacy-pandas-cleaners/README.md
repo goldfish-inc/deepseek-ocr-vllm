@@ -25,7 +25,9 @@ Total: 7 scripts encoding ~50-100 unique cleaning patterns
 ## Pattern Categories
 
 ### 1. Locale-Specific Fixes
+
 **Example**: Spanish place names with embedded quotes
+
 ```python
 # From clean_esp_vessels.py:49
 spanish_article_pattern = r'([^;"]+)", (La|El|Los|Las|L\')\s'
@@ -33,7 +35,9 @@ spanish_article_pattern = r'([^;"]+)", (La|El|Los|Las|L\')\s'
 ```
 
 ### 2. Quote Escaping
+
 **Example**: Nordic quotes before commas
+
 ```python
 # From clean_dnk_robust.py:15
 pattern = r'(;[^;]*)",([ ][^;]*)'
@@ -41,7 +45,9 @@ pattern = r'(;[^;]*)",([ ][^;]*)'
 ```
 
 ### 3. Field Delimiter Repairs
+
 **Example**: Field count validation
+
 ```python
 # From clean_esp_vessels.py:66
 expected_fields = 41
@@ -50,14 +56,18 @@ if len(fields) != expected_fields:
 ```
 
 ### 4. Encoding Fixes
+
 **Example**: UTF-8 handling for special characters
+
 ```python
 # From clean_esp_vessels.py:27
 with open(input_file, 'r', encoding='utf-8', errors='replace')
 ```
 
 ### 5. Whitespace Normalization
+
 **Example**: Collapse multiple spaces
+
 ```python
 # From local_clean_all.py:12
 def collapse_whitespace(value: str) -> str:

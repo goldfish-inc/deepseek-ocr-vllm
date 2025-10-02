@@ -5,6 +5,7 @@
 ## Quick Navigation
 
 ### 🏗️ Architecture
+
 - [System Overview](./architecture/overview.md) - High-level architecture
 - [Current State](./architecture/current-state.md) - Current infrastructure status
 - [Data Architecture](./architecture/data-architecture.md) - Data flow and storage
@@ -15,18 +16,22 @@
 - [Project Plan](./architecture/project-plan.md) - Roadmap and milestones
 
 ### 📚 Setup Guides
+
 - [ESC Setup](./guides/setup/esc-setup.md) - Pulumi ESC configuration
 - [GitHub Token Setup](./guides/setup/github-token-setup.md) - GitHub authentication
 - [Secret Management](./guides/setup/secret-management.md) - Managing secrets
 - [Pulumi Free Tier](./guides/setup/pulumi-free-tier.md) - Free tier limitations
 
 ### 🚀 Deployment Guides
+
 - [V3 to V6 Migration](./guides/deployment/v3-to-v6-migration.md) - Migration guide
 - [SME Deployment](./guides/deployment/sme-deployment.md) - Subject Matter Expert deployment
 - [SME Readiness](./guides/deployment/sme-readiness.md) - Pre-deployment checklist
 
 ### ⚙️ Operations
+
 - [Operations Overview](./operations/overview.md) - Operational procedures
+- [ML Backend & Ingest](./operations/ml-backend-and-ingest.md) - Adapter, sink, and project auto‑provisioning
 - [Automated Updates](./operations/automated-updates.md) - Image update automation
 - [Version Monitoring](./operations/version-monitoring.md) - Version tracking
 - [Version Audit](./operations/version-audit.md) - Dependency audit
@@ -36,6 +41,7 @@
 - [Issues TODO](./operations/issues-todo.md) - Pending issues
 
 ### 🔧 Maintenance
+
 - [Infrastructure Fixes](./architecture/infrastructure-fixes.md) - Common fixes
 - [Infrastructure Quick Check](./architecture/infrastructure-quick-check.md) - Health checks
 - [Current Infrastructure Status](./architecture/current-infrastructure-status.md) - Live status
@@ -43,17 +49,20 @@
 - [Script Retirement](./operations/script-retirement.md) - Script deprecation
 
 ### 🤖 ML/AI Documentation
+
 - [ML Backend Connection](./ML_BACKEND_CONNECTION.md) - ML service integration
 - [Pandas Knowledge Extraction](./PANDAS_KNOWLEDGE_EXTRACTION.md) - Data extraction
 - [SME Workflow](./SME_WORKFLOW.md) - Expert workflow automation
 - [API Access](./API_ACCESS.md) - API authentication
 
 ### 📝 Architecture Decision Records (ADRs)
+
 *Coming soon - architectural decisions will be documented here*
 
 ## Key Components
 
 ### Infrastructure Stack
+
 - **K3s Cluster**: 3-node Kubernetes cluster
 - **Pulumi IaC**: TypeScript infrastructure as code
 - **Flux CD**: GitOps continuous deployment
@@ -62,6 +71,7 @@
 - **cert-manager**: TLS certificate management
 
 ### Monitoring & Automation
+
 - **Image Update Automation**: Automatic container updates
 - **Version Monitoring**: Dependency tracking
 - **Health Checks**: Cluster health monitoring
@@ -69,6 +79,7 @@
 ## Quick Commands
 
 ### Cluster Access
+
 ```bash
 # Establish SSH tunnel (REQUIRED)
 ssh -L 16443:localhost:6443 tethys -N &
@@ -81,6 +92,7 @@ kubectl get nodes
 ```
 
 ### GitOps Operations
+
 ```bash
 # Check Flux status
 kubectl get gitrepository,helmrelease -n flux-system
@@ -91,6 +103,7 @@ kubectl annotate gitrepository flux-system -n flux-system \
 ```
 
 ### Monitoring
+
 ```bash
 # Cluster health
 kubectl get pods --all-namespaces

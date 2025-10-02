@@ -1,10 +1,11 @@
 # Oceanid Cluster Bootstrap
 
-This Pulumi project bootstraps the **k3s Kubernetes cluster** with foundational infrastructure components. It manages in-cluster resources and requires kubeconfig access.
+This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational infrastructure components. It manages in-cluster resources and requires kubeconfig access.
 
 ## Scope
 
 **Managed Resources:**
+
 - **Flux CD**: GitOps continuous deployment
 - **Pulumi Kubernetes Operator (PKO)**: In-cluster Pulumi deployments
 - **Cloudflare Tunnel (cloudflared)**: Secure k8s API ingress
@@ -14,6 +15,7 @@ This Pulumi project bootstraps the **k3s Kubernetes cluster** with foundational 
 - **Triton Adapter**: ML inference bridge
 
 **NOT Managed Here:**
+
 - Cloud resources (DNS, Access, databases) → See `../cloud/`
 - Application workloads → Managed by Flux in `../clusters/`
 
@@ -40,7 +42,8 @@ pulumi up
 ```
 
 **Prerequisites:**
-- SSH tunnel to k3s control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access))
+
+- SSH tunnel to K3s control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access))
 - Valid kubeconfig at `~/.kube/k3s-config.yaml`
 - Pulumi CLI authenticated
 
@@ -68,12 +71,14 @@ sudo systemctl start pulumi-deployments-agent
 ```
 
 **Benefits:**
+
 - Automated deployments on git push
 - Audit trail in Pulumi Cloud
 - No local CLI dependencies
 - Centralized secret management
 
 **Tradeoffs:**
+
 - Agent must maintain cluster access
 - Requires paid Pulumi tier (or free tier quota)
 - Additional operational complexity
@@ -174,7 +179,7 @@ flux reconcile kustomization apps
 
 ## Common Operations
 
-### Update k3s Node Configuration
+### Update K3s Node Configuration
 
 ```bash
 # Edit node IPs or labels in src/index.ts
@@ -251,6 +256,7 @@ flux reconcile source git flux-system --with-source
 ## Migration Notes
 
 **2025-01-30:** Cloud resources migrated to separate `oceanid-cloud` stack:
+
 - Cloudflare DNS records → `cloud/`
 - CrunchyBridge database → `cloud/`
 - Cloudflare Access apps → `cloud/`
@@ -262,4 +268,5 @@ This stack now focuses exclusively on k8s cluster bootstrap.
 - [Cloud Infrastructure](../cloud/README.md) - DNS, Access, databases
 - [CLAUDE.md](../CLAUDE.md) - Cluster connection guide
 - [CURRENT_STATE.md](../CURRENT_STATE.md) - Component status
+
 # Test CI guard

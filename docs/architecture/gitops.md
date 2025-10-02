@@ -2,11 +2,12 @@
 
 ## Overview
 
-This guide implements a lightweight GitOps pattern using **FluxCD** and **Pulumi Kubernetes Operator (PKO)** - perfect for resource-constrained k3s clusters while maintaining full Pulumi + ESC integration.
+This guide implements a lightweight GitOps pattern using **FluxCD** and **Pulumi Kubernetes Operator (PKO)** - perfect for resource-constrained K3s clusters while maintaining full Pulumi + ESC integration.
 
 ## Why Flux + PKO?
 
 ### Perfect for Solo Operators
+
 - **Minimal footprint**: <200MB total RAM overhead
 - **No UI bloat**: Pure controller-based reconciliation
 - **Native Pulumi**: Keep existing IaC patterns
@@ -127,6 +128,7 @@ kubectl get pods -n flux-system
 ### Phase 2: Install Pulumi Kubernetes Operator
 
 Create `clusters/base/pulumi-system/namespace.yaml`:
+
 ```yaml
 apiVersion: v1
 kind: Namespace
@@ -137,6 +139,7 @@ metadata:
 ```
 
 Create `clusters/base/pulumi-system/helm-release.yaml`:
+
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: HelmRepository
@@ -177,6 +180,7 @@ spec:
 ### Phase 3: Configure ESC Integration
 
 Create `clusters/base/pulumi-system/esc-secret.yaml`:
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -192,6 +196,7 @@ stringData:
 ### Phase 4: Define Pulumi Stacks
 
 Create `clusters/base/stacks/cluster-stack.yaml`:
+
 ```yaml
 apiVersion: pulumi.com/v1
 kind: Stack
@@ -242,6 +247,7 @@ spec:
 ### Phase 5: Create Kustomization
 
 Create `clusters/tethys/kustomization.yaml`:
+
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -395,6 +401,7 @@ patches:
 ## Best Practices
 
 ### 1. Separate Configs by Concern
+
 ```
 clusters/
 ├── base/           # Shared configs
@@ -403,6 +410,7 @@ clusters/
 ```
 
 ### 2. Use ESC for All Secrets
+
 ```yaml
 # Never put secrets in Git
 # Always reference from ESC
@@ -415,6 +423,7 @@ envRefs:
 ```
 
 ### 3. Resource Limits for PKO
+
 ```yaml
 # Prevent PKO from consuming too much
 resources:
@@ -427,6 +436,7 @@ resources:
 ```
 
 ### 4. Gradual Rollout
+
 ```yaml
 # Use progressive delivery
 spec:
@@ -440,7 +450,7 @@ spec:
 - [ ] Bootstrap Flux on tethys
 - [ ] Deploy PKO via Flux
 - [ ] Create first Stack CR
-- [ ] Verify pulumi up runs
+- [ ] Verify Pulumi up runs
 - [ ] Move all Pulumi programs to Stack CRs
 - [ ] Set up CI for PR previews
 - [ ] Document runbooks
@@ -451,6 +461,7 @@ spec:
 ### Common Issues
 
 #### Flux not syncing
+
 ```bash
 # Check source status
 flux get sources git
@@ -460,6 +471,7 @@ flux reconcile source git flux-system --with-source
 ```
 
 #### PKO Stack stuck
+
 ```bash
 # Check Stack status
 kubectl get stack -A
@@ -473,6 +485,7 @@ kubectl apply -f clusters/base/stacks/cluster-stack.yaml
 ```
 
 #### Memory issues
+
 ```bash
 # Increase PKO limits temporarily
 kubectl edit stack oceanid-cluster -n pulumi-system

@@ -17,18 +17,21 @@ The Oceanid cluster implements a **Zero-Trust Security Architecture** following 
 ### 1. Edge Security (Cloudflare)
 
 #### WAF Protection
+
 - **Geo-blocking**: High-risk countries blocked (CN, RU, KP)
 - **Threat Scoring**: Challenge requests with score >30
 - **Attack Vector Blocking**: WordPress, XML-RPC endpoints
 - **Rate Limiting**: 100 requests/minute per IP
 
 #### DDoS Protection
+
 - **Security Level**: High
 - **Challenge TTL**: 1800 seconds
 - **Browser Verification**: Enabled
 - **HTTP/3 & QUIC**: Enabled for performance
 
 #### Zero Trust Access
+
 - **Email Verification**: Required for all access
 - **Session Duration**: 24 hours
 - **Binding Cookies**: HTTP-only, SameSite=lax
@@ -37,6 +40,7 @@ The Oceanid cluster implements a **Zero-Trust Security Architecture** following 
 ### 2. Network Security
 
 #### Firewall Configuration (UFW)
+
 ```bash
 # Default Policies
 - Deny all incoming
@@ -53,6 +57,7 @@ The Oceanid cluster implements a **Zero-Trust Security Architecture** following 
 ```
 
 #### Network Policies
+
 - **Default**: Deny all traffic
 - **Internal**: Allow trusted namespace communication
 - **Egress**: Restricted to required endpoints
@@ -61,6 +66,7 @@ The Oceanid cluster implements a **Zero-Trust Security Architecture** following 
 ### 3. Cluster Security
 
 #### RBAC Configuration
+
 ```yaml
 Roles:
 - cluster-admin: Full cluster access
@@ -70,11 +76,13 @@ Roles:
 ```
 
 #### Pod Security Standards
+
 - **Restricted**: Default for all namespaces
 - **Baseline**: For system namespaces
 - **Privileged**: Only for kube-system
 
 #### Secret Management
+
 - **Storage**: Pulumi ESC (encrypted)
 - **Rotation**: Automatic every 90 days
 - **Access**: RBAC-controlled
@@ -83,6 +91,7 @@ Roles:
 ### 4. Certificate Management
 
 #### TLS Certificates
+
 - **Provider**: Let's Encrypt via cert-manager
 - **Rotation**: Every 90 days
 - **Renewal**: 30 days before expiry
@@ -90,6 +99,7 @@ Roles:
 - **Minimum TLS**: v1.2
 
 #### SSH Keys
+
 - **Type**: ED25519
 - **Storage**: Pulumi ESC
 - **Rotation**: Every 90 days
@@ -99,6 +109,7 @@ Roles:
 ### 5. Monitoring & Compliance
 
 #### Sentry Integration
+
 - **Error Tracking**: 100% capture rate
 - **Performance**: 10% sampling
 - **Cluster Health**: 5-minute intervals
@@ -106,6 +117,7 @@ Roles:
 - **Resource Usage**: <150MB RAM total
 
 #### Compliance Checks
+
 - ✅ CIS Kubernetes Benchmark (partial)
 - ✅ Network segmentation
 - ✅ Automatic credential rotation
@@ -138,11 +150,13 @@ graph LR
 ### Key Rotation Process
 
 1. **Automatic Rotation** (Every 90 days)
+
    ```bash
    ./scripts/rotate-ssh-keys.sh
    ```
 
 2. **Manual Emergency Rotation**
+
    ```bash
    # Immediate rotation
    ./scripts/rotate-ssh-keys.sh --force
@@ -157,16 +171,19 @@ graph LR
 ### Adding New Nodes Securely
 
 1. **Generate node credentials**
+
    ```bash
    ssh-keygen -t ed25519 -f /tmp/newnode_key
    ```
 
 2. **Add to ESC**
+
    ```bash
    esc env set default/oceanid-cluster ssh.newnode_key "$(cat /tmp/newnode_key)" --secret
    ```
 
 3. **Update Pulumi configuration**
+
    ```typescript
    // Add to nodes.ts
    newnode: {
@@ -177,6 +194,7 @@ graph LR
    ```
 
 4. **Deploy with security policies**
+
    ```bash
    pulumi up --yes
    ```
@@ -197,21 +215,25 @@ graph LR
 ### Security Roadmap 2025
 
 #### Q1 2025
+
 - [ ] Implement Velero backup solution
 - [ ] Add Trivy image scanning
 - [ ] Deploy OPA for policy enforcement
 
 #### Q2 2025
+
 - [ ] Implement Cilium/Linkerd service mesh
 - [ ] Add KEDA for event-driven scaling
 - [ ] Integrate External Secrets Operator
 
 #### Q3 2025
+
 - [ ] Deploy ArgoCD for GitOps
 - [ ] Implement multi-region failover
 - [ ] Add security benchmarking automation
 
 #### Q4 2025
+
 - [ ] Achieve SOC2 compliance readiness
 - [ ] Implement zero-trust service mesh
 - [ ] Full SBOM generation pipeline
@@ -220,13 +242,14 @@ graph LR
 
 | Role | Contact | Responsibility |
 |------|---------|---------------|
-| Security Lead | admin@boathou.se | Overall security posture |
-| Infrastructure | devops@boathou.se | Cluster security |
-| Incident Response | security@boathou.se | Security incidents |
+| Security Lead | <admin@boathou.se> | Overall security posture |
+| Infrastructure | <devops@boathou.se> | Cluster security |
+| Incident Response | <security@boathou.se> | Security incidents |
 
 ## Security Tools
 
 ### Current Tools
+
 - **Pulumi**: Infrastructure as Code
 - **ESC**: Secret management
 - **Cloudflare**: WAF/DDoS protection
@@ -234,6 +257,7 @@ graph LR
 - **Sentry**: Error/security monitoring
 
 ### Planned Tools
+
 - **Trivy**: Container scanning
 - **OPA**: Policy enforcement
 - **Velero**: Backup/restore
@@ -255,18 +279,21 @@ graph LR
 ### For Developers
 
 1. **Never commit secrets**
+
    ```bash
    # Use ESC for all secrets
    esc env set default/oceanid-cluster my.secret "value" --secret
    ```
 
 2. **Use least-privilege service accounts**
+
    ```yaml
    serviceAccount: my-app-sa
    automountServiceAccountToken: false
    ```
 
 3. **Set resource limits**
+
    ```yaml
    resources:
      limits:
@@ -280,6 +307,7 @@ graph LR
 ### For Operations
 
 1. **Regular security updates**
+
    ```bash
    # Check for updates weekly
    kubectl get nodes -o wide
@@ -287,6 +315,7 @@ graph LR
    ```
 
 2. **Monitor security events**
+
    ```bash
    # Check Sentry dashboard daily
    # Review cluster events
@@ -294,6 +323,7 @@ graph LR
    ```
 
 3. **Audit access logs**
+
    ```bash
    # Review SSH access
    ssh root@node "grep sshd /var/log/auth.log | tail -20"
@@ -336,18 +366,21 @@ kubectl get pods --all-namespaces -o jsonpath='{.items[*].spec.securityContext}'
 ### Compromise Response
 
 1. **Isolate affected nodes**
+
    ```bash
    kubectl cordon node-name
    kubectl drain node-name --ignore-daemonsets
    ```
 
 2. **Rotate all credentials**
+
    ```bash
    ./scripts/rotate-ssh-keys.sh --emergency
    ./scripts/rotate-k3s-certs.sh --force
    ```
 
 3. **Review audit logs**
+
    ```bash
    kubectl logs -n kube-system -l component=kube-apiserver
    ```
@@ -360,17 +393,20 @@ kubectl get pods --all-namespaces -o jsonpath='{.items[*].spec.securityContext}'
 ### Disaster Recovery
 
 1. **Restore from backup**
+
    ```bash
    # Future: velero restore create --from-backup latest
    ```
 
 2. **Verify cluster health**
+
    ```bash
    kubectl get nodes
    kubectl get pods --all-namespaces
    ```
 
 3. **Validate security policies**
+
    ```bash
    kubectl get networkpolicies --all-namespaces
    kubectl get clusterrolebindings

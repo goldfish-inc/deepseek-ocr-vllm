@@ -3,6 +3,7 @@
 Use this when picking up work after a context reset. It restores your local tooling, verifies ESC/stack config, and validates pre‑labels end‑to‑end.
 
 ## 0) Prereqs
+
 - Pulumi CLI (logged in to Pulumi Cloud)
 - Node 20.x, pnpm 9.x
 - kubectl configured to reach the cluster (`cluster/kubeconfig.yaml` exists)
@@ -14,6 +15,7 @@ make build            # type-check Pulumi program
 ```
 
 ## 1) Select Stack + Attach ESC
+
 ```bash
 cd cluster
 pulumi stack select ryan-taylor/oceanid-cluster/prod
@@ -22,7 +24,9 @@ pulumi stack select ryan-taylor/oceanid-cluster/prod
 ```
 
 ## 2) Verify Required Config (from ESC)
+
 These should appear in `pulumi config` (secrets show as [secret]):
+
 - Cloudflare (provider): `cloudflareAccountId`, `cloudflareZoneId`, `cloudflareApiToken`
 - Cluster tunnel: `cloudflareTunnelId`, `cloudflareTunnelToken`, `cloudflareTunnelHostname`
 - Node tunnel (Calypso): `cloudflareNodeTunnelId`, `cloudflareNodeTunnelToken`, `cloudflareNodeTunnelHostname`
@@ -34,6 +38,7 @@ pulumi config
 ```
 
 If anything is missing, add it to ESC (examples):
+
 ```bash
 # NER labels (single-line JSON)
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:nerLabels "$(cat ner_labels.json)" --secret
@@ -42,6 +47,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:cloudflareNodeT
 ```
 
 ## 3) Recommended Flags
+
 ```bash
 # Use host connector + Triton only (stable path for SMEs)
 pulumi config set oceanid-cluster:enableCalypsoHostConnector true
@@ -53,14 +59,17 @@ pulumi config set oceanid-cluster:useExternalAdapter false
 ```
 
 ## 4) Apply
+
 ```bash
 pulumi up
 ```
 
 ## 5) Prepare Triton (once on Calypso)
+
 Pick one model path below. For SMEs we recommend DistilBERT for lower RAM/CPU while retaining good quality.
 
 Option A — DistilBERT (recommended)
+
 ```bash
 # Export DistilBERT to ONNX for token classification with 63 labels
 pip install --upgrade pip
@@ -77,6 +86,7 @@ ssh calypso 'sudo systemctl restart tritonserver'
 ```
 
 Option B — BERT base (larger)
+
 ```bash
 # Export and install BERT ONNX with 63 labels
 pip install --upgrade pip
@@ -93,6 +103,7 @@ ssh calypso 'sudo systemctl restart tritonserver'
 ```
 
 ## 6) Validate
+
 ```bash
 # Triton
 curl -sk https://gpu.<base>/v2/health/ready
@@ -106,39 +117,47 @@ curl -s -X POST http://localhost:9090/predict \
 ```
 
 ## 7) Troubleshooting Cheats
+
 - Host cloudflared (Calypso) token/auth
   - ssh calypso 'sudo journalctl -u cloudflared-node -f'
   - If you see “Invalid tunnel secret”, ensure `cloudflareNodeTunnelToken` belongs to the exact `cloudflareNodeTunnelId` in config.
 - Triton exit 125
   - Install NVIDIA driver + Container Toolkit on Calypso
-  - Confirm image pull: ssh calypso 'sudo docker pull ghcr.io/triton-inference-server/server:2.60.0-py3'
+  - Confirm image pull: ssh calypso 'sudo Docker pull ghcr.io/triton-inference-server/server:2.60.0-py3'
   - Confirm model path mounted and exists: /opt/triton/models
 - Adapter import errors
   - The adapter now runs with workingDir=/app and built‑in app; check pod logs: kubectl -n apps logs deploy/ls-triton-adapter -f
 
 ## 8) Optional — Re‑enable NodeTunnels (K8s)
+
 Once the node token handling is fully stable in the DaemonSet:
+
 ```bash
 pulumi config set oceanid-cluster:enableNodeTunnels true
 pulumi up
 ```
 
 ## 9) Optional — Enable App Stack (Postgres/MinIO/Airflow)
+
 ```bash
 pulumi config set oceanid-cluster:enableAppsStack true
 pulumi up
 ```
 
 ## 10) Optional — ZeroTrust for extra UIs
+
 - Identities:
+
 ```bash
 pulumi config set oceanid-cluster:accessAllowedEmailDomain your-company.com
 ```
+
 - SMEReadiness already handles Label Studio; generic helper can additionally protect Airflow/MinIO when enabled.
 
 ## 11) Intelligence Staging — Current State & Plan
 
 ### Current State Snapshot
+
 - GPU access (Calypso): Triton 2.60.0 (GHCR) on GPU with DistilBERT ONNX model ready
   - Local: `http://calypso:8000/v2/health/ready`
   - External: `https://gpu.<base>/v2/health/ready` (Cloudflare node tunnel)
@@ -155,6 +174,7 @@ pulumi config set oceanid-cluster:accessAllowedEmailDomain your-company.com
   - HF token: ESC `oceanid-cluster:hfAccessToken`
 
 ### Data Flow (Pre‑labels)
+
 ```mermaid
 flowchart LR
   subgraph Calypso [Calypso (GPU)]
@@ -177,6 +197,7 @@ flowchart LR
 ```
 
 ### Staging Architecture (Medallion)
+
 ```mermaid
 flowchart TB
   subgraph raw
@@ -209,33 +230,41 @@ flowchart TB
 ```
 
 ### Label Studio Webhook
+
 - Configure per project:
   - URL: `http://annotations-sink.apps.svc.cluster.local:8080/webhook`
   - Events: `ANNOTATION_CREATED`, `ANNOTATION_UPDATED`
   - Optional header: `X-Schema-Version: <value>`
 
 ### Postgres Targets (when enabled)
+
 - stage.documents(id, source_id, source_doc_id, collected_at, text, content_sha, metadata jsonb)
 - stage.extractions(id, document_id, label, value, start, end, confidence, db_mapping, annotator, updated_at)
 - Future: raw.<source>_documents per source, label.annotation_refs, curated.*
 
 ### External Postgres (CrunchyBridge)
+
 - Set `postgres_url` (secret) so the sink writes to CrunchyBridge:
+
 ```bash
 pulumi -C cluster config set --secret oceanid-cluster:postgres_url 'postgresql://<user>:<pass>@<host>:5432/<db>'
 pulumi -C cluster up
 ```
+
 - Apply schema migrations locally:
+
 ```bash
 export DATABASE_URL='postgresql://<user>:<pass>@<host>:5432/<db>'
 make db:migrate
 ```
 
 ### Evolution and Versioning
+
 - Change labels: update ESC NER_LABELS + re-export ONNX + adjust Triton config dims
 - Change schema: update ESC `schemaVersion`; annotations include this field; curated jobs consume it
 
 ### Quick Validation
+
 ```bash
 # Adapter health
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &

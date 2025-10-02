@@ -3,6 +3,7 @@
 ## Known Servers
 
 ### 1. RTX4090 GPU Server (Local)
+
 - **IP**: 192.168.2.248
 - **User**: rt
 - **Status**: Currently offline/not configured
@@ -10,24 +11,27 @@
 - **Next Steps**: Need to install Ubuntu 24.04 via bootable USB
 
 ### 2. Label Studio VPS
+
 - **Domain**: label.boathou.se
 - **IP**: 157.173.210.123
 - **User**: root (uses SSH password)
 - **Status**: Running (website accessible)
 - **Purpose**: ML data labeling platform
-- **API**: https://label.boathou.se/api/
+- **API**: <https://label.boathou.se/api/>
 - **Next Steps**: Need SSH password to connect and inventory
 
 ### 3. Oracle Cloud VPS Instances
+
 - Multiple accounts found in 1Password:
   - Holland Bloorview Oracle
-  - Oracle Personal (ryan@ryantaylor.me)
+  - Oracle Personal (<ryan@ryantaylor.me>)
   - Oracle Cloud (Consensas)
   - Oracle Cloud Free account - Celeste
 - **Status**: Need to identify which ones have active VPS instances
 - **Next Steps**: Need connection details (IPs/hostnames)
 
 ### 4. DigitalOcean Droplets
+
 - Found references to:
   - Digital Ocean Reporting Droplet
   - Other DigitalOcean accounts

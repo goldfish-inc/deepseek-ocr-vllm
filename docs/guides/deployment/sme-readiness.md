@@ -1,10 +1,12 @@
 # SME Readiness and Onboarding Plan
 
 ## Overview
-- Goal: Label Studio on k3s (VPS) using an external GPU backend on Calypso (Triton), all managed by Pulumi + ESC, exposed via Cloudflare. No L3 overlays.
+
+- Goal: Label Studio on K3s (VPS) using an external GPU backend on Calypso (Triton), all managed by Pulumi + ESC, exposed via Cloudflare. No L3 overlays.
 - Status: Infra wired end‑to‑end; ESC secrets flow; in‑cluster adapter bridges Label Studio → Triton; optional Cloudflare Access for UIs; NER schema integration ready.
 
 ## What’s Working
+
 - ZeroTrust Access for Label Studio via SMEReadiness.
 - Tunnels:
   - Cluster tunnel for in‑cluster services (e.g., `label.<base>`).
@@ -15,6 +17,7 @@
 - CI: Adapter type‑checks; OPA tests.
 
 ## ESC / Pulumi Config (secrets)
+
 - Cloudflare: `cloudflareAccountId`, `cloudflareApiToken`, `cloudflareZoneId`.
 - Cluster tunnel: `cloudflareTunnelId`, `cloudflareTunnelToken`, `cloudflareTunnelHostname`, `cloudflareTunnelTarget`.
 - Node tunnel: `cloudflareNodeTunnelId`, `cloudflareNodeTunnelToken` (token string or base64 credentials.json), `cloudflareNodeTunnelHostname`, `cloudflareNodeTunnelTarget`.
@@ -23,6 +26,7 @@
 - Optional: `sentry.dsn`, Postgres/MinIO credentials, HF token for DAGs.
 
 Set labels (recommended):
+
 ```bash
 # Single-line JSON file to avoid quoting issues
 cat > ner_labels.json <<'JSON'
@@ -33,6 +37,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:nerLabels "$(ca
 ```
 
 ## Validation / Smoke
+
 ```bash
 # Triton
 curl -sk https://gpu.<base>/v2/health/ready
@@ -47,12 +52,15 @@ curl -s -X POST http://localhost:9090/predict \
 ```
 
 ## SME Onboarding
+
 - Access Label Studio at `https://label.<base>` (optionally protected by Cloudflare Access).
 - Label Studio ML backend is preconfigured to the in‑cluster adapter.
 - SMEs can import cleaned data and use pre‑labeling (adapter → Triton), then export.
 
 ## Model Management on Calypso
+
 - BERT (NER with 63 labels):
+
 ```bash
 pip install optimum[exporters]
 optimum-cli export onnx --model bert-base-uncased --task token-classification bert_onnx/ --num_labels 63
@@ -63,25 +71,33 @@ sudo cp triton-models/bert-base-uncased/config.pbtxt /opt/triton/models/bert-bas
 # Ensure dims: [-1, -1, 63] in config.pbtxt
 sudo systemctl restart tritonserver
 ```
+
 - Docling‑Granite (Python backend): place `model.py` under `/opt/triton/models/docling_granite_python/1/` with BYTES inputs (`pdf_data`, `prompt`) → JSON output; restart Triton.
 
 ## NER Schema & Postprocessor
+
 - Mounted into adapter Pod if present in repo:
   - `adapter/ner/ner_config.py`, `adapter/ner/ner_postprocessor.py`, `adapter/ner/schema/ebisu_ner_schema_mapping.json`
 - Adapter maps indices → names via `NER_LABELS` and returns entities with offsets/confidence; can import your `create_postprocessor` if needed.
 
 ## Operational Runbook
+
 - Deploy:
+
 ```bash
 make deploy-simple   # minimal stack
 make deploy-calypso  # Triton + Calypso host connector
 ```
+
 - Restart:
+
 ```bash
 kubectl -n apps rollout restart deploy/ls-triton-adapter
 ssh calypso 'sudo systemctl restart tritonserver'
 ```
+
 - Logs:
+
 ```bash
 kubectl -n apps logs deploy/ls-triton-adapter -f
 ssh calypso 'sudo journalctl -u tritonserver -f'
@@ -89,21 +105,27 @@ ssh calypso 'sudo journalctl -u cloudflared-node -f'
 ```
 
 ## Cloudflare Access (UIs)
+
 - Optional and recommended for `label.<base>`, and for `airflow.<base>` / `minio.<base>` when `enableAppsStack=true`.
 - Enable Access for Label Studio:
+
 ```bash
 pulumi -C cluster config set oceanid-cluster:enableLabelStudioAccess true
 ```
+
 - Configure allowed identities:
+
 ```bash
 pulumi -C cluster config set oceanid-cluster:accessAllowedEmailDomain your-company.com
 # or specific emails
 pulumi -C cluster config set --path oceanid-cluster:accessAllowedEmails[0] user1@your-company.com
 pulumi -C cluster config set --path oceanid-cluster:accessAllowedEmails[1] user2@your-company.com
 ```
+
 - Access applies to hosts where enabled and identity rules are set.
 
 ## What’s Left to Go Live for SMEs
+
 1. Set NER labels secret via ESC (63‑label list) ✔
 2. Export/install BERT ONNX with 63 labels; update Triton config; restart ✔
 3. Validate LS → adapter → Triton pre‑labels flow ✔
@@ -112,6 +134,7 @@ pulumi -C cluster config set --path oceanid-cluster:accessAllowedEmails[1] user2
 6. (Optional) Enable app stack (Postgres/MinIO/Airflow) and verify Access on UIs; set app secrets in ESC.
 
 ## Key File References
+
 - Adapter (K8s): `cluster/src/components/lsTritonAdapter.ts`
 - Triton host service: `cluster/src/components/hostDockerService.ts`
 - Sentry config helper: `cluster/src/sentry-config.ts`
@@ -121,6 +144,7 @@ pulumi -C cluster config set --path oceanid-cluster:accessAllowedEmails[1] user2
 - Model configs: `triton-models/bert-base-uncased/config.pbtxt`, `triton-models/dockling-granite-python/...`
 
 ## Next Actions (optional)
+
 - Protect Label Studio behind Cloudflare Access
 - Bake tokenizer into adapter image or mount cache (offline‑ready)
 - Add schema‑aware evaluator tests in CI using your fixtures

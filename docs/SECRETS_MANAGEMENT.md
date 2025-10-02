@@ -9,6 +9,7 @@
 **ESC Environment:** `default/oceanid-cluster`
 
 All secrets, credentials, and configuration values are stored in Pulumi ESC and accessed via:
+
 - Pulumi config: `pulumi config get <key> --plaintext`
 - ESC CLI: `esc env get default/oceanid-cluster`
 - Runtime environment variables (injected by Pulumi)
@@ -41,6 +42,7 @@ pulumi -C cluster config get github_repo --plaintext
 ```
 
 **Stored in ESC as:**
+
 - `oceanid-cluster:github_token`
 - `oceanid-cluster:github_repo`
 
@@ -55,6 +57,7 @@ pulumi -C cluster config get cloudflareNodeTunnelToken --plaintext
 ```
 
 **Stored in ESC as:**
+
 - `oceanid-cluster:cloudflareTunnelToken`
 - `oceanid-cluster:cloudflareNodeTunnelToken`
 
@@ -104,7 +107,7 @@ pulumi -C cluster config get my-secret --plaintext
 
 ### Via ESC Web UI
 
-1. Navigate to https://app.pulumi.com
+1. Navigate to <https://app.pulumi.com>
 2. Go to Environments → `default/oceanid-cluster`
 3. Add secret under `pulumiConfig` section
 4. Click "Save"
@@ -181,7 +184,7 @@ psql $DATABASE_URL -f sql/migrations/V3__staging_tables_complete.sql
 
 ## Security Best Practices
 
-### ✅ DO:
+### ✅ DO
 
 - **Store all secrets in ESC** - Database URLs, API tokens, credentials
 - **Use `--secret` flag** - Encrypt sensitive values with `pulumi config set --secret`
@@ -189,7 +192,7 @@ psql $DATABASE_URL -f sql/migrations/V3__staging_tables_complete.sql
 - **Inject at runtime** - Let Pulumi inject env vars, don't embed in code
 - **Rotate regularly** - Update ESC values, Pulumi will propagate changes
 
-### ❌ DON'T:
+### ❌ DON'T
 
 - ❌ **Hardcode secrets in code** - Never embed credentials in source files
 - ❌ **Commit secrets to git** - `.env` files should be `.gitignore`d
@@ -204,6 +207,7 @@ psql $DATABASE_URL -f sql/migrations/V3__staging_tables_complete.sql
 **Note:** 1Password is acceptable for individual developer workflows but NOT for project deployment.
 
 Developers MAY use 1Password locally for:
+
 - Personal SSH keys
 - Local development credentials
 - Testing secrets
@@ -211,6 +215,7 @@ Developers MAY use 1Password locally for:
 But production deployments MUST use ESC exclusively.
 
 **Example local workflow:**
+
 ```bash
 # Developer's local machine (optional)
 export DATABASE_URL=$(op read "op://Personal/Dev Database/url")
@@ -271,6 +276,7 @@ pulumi -C cluster config --show-secrets | grep environment
 ### Permission Denied
 
 ESC access requires:
+
 - Pulumi account with access to `default/oceanid-cluster` environment
 - Organization membership in appropriate Pulumi org
 - Login: `pulumi login`
@@ -293,7 +299,7 @@ If ESC is unavailable and you need to access production:
 **Principle:** ESC is the single source of truth for all project secrets.
 
 - **Audit trail:** ESC tracks who accessed what and when
-- **Encryption:** All secrets encrypted at rest and in transit
+- **Encryption:** All secrets encrypted at REST and in transit
 - **Access control:** RBAC via Pulumi organizations
 - **Rotation:** Update ESC value, Pulumi propagates to all deployments
 - **Recovery:** ESC backups managed by Pulumi (no manual backup needed)

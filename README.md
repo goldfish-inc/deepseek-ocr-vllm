@@ -1,6 +1,6 @@
 # Oceanid Infrastructure
 
-Pulumi-powered GitOps stack for operating the Oceanid k3s fleet behind Cloudflare Zero Trust.
+Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflare Zero Trust.
 
 > **Status:** Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. New staging database pipeline in development (see [CURRENT_STATE.md](CURRENT_STATE.md) and issues #46-#50).
 
@@ -9,7 +9,7 @@ Pulumi-powered GitOps stack for operating the Oceanid k3s fleet behind Cloudflar
 | Project | Manages | Runs Where | Triggered By |
 |---------|---------|------------|--------------|
 | **[cloud/](cloud/)** | Cloudflare DNS/Access, CrunchyBridge PostgreSQL, ESC secrets | GitHub Actions (OIDC) | Push to `cloud/**` |
-| **[cluster/](cluster/)** | k3s bootstrap, Flux, PKO, Cloudflare tunnels | Local / Self-hosted runner | Manual `pulumi up` |
+| **[cluster/](cluster/)** | K3s bootstrap, Flux, PKO, Cloudflare tunnels | Local / Self-hosted runner | Manual `pulumi up` |
 | **[clusters/](clusters/)** | Application workloads (Label Studio, etc.) | Flux CD in-cluster | Push to `clusters/**` |
 | **[policy/](policy/)** | OPA security policies, TypeScript helpers | GitHub Actions CI | All PRs |
 
@@ -158,6 +158,7 @@ curl -s http://localhost:9090/health
 Adapter config
 
 - Set NER labels (optional) via Pulumi config:
+
   ```bash
   pulumi -C cluster config set oceanid-cluster:nerLabels '["O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"]'
   ```
@@ -178,7 +179,7 @@ This is the standardized path to the GPU workstation — do not reinvent this.
 - Host tunnel on Calypso: Pulumi `HostCloudflared` renders `/etc/cloudflared/config.yaml` and a systemd unit `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
 - Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds `/opt/triton/models`.
 - Adapter in cluster: `ls-triton-adapter` calls `TRITON_BASE_URL=https://gpu.<base>`.
- - When enabled, the adapter presents a Cloudflare Access service token so the public GPU endpoint is not exposed to the world.
+- When enabled, the adapter presents a Cloudflare Access service token so the public GPU endpoint is not exposed to the world.
 - Pulumi flags/keys: `enableCalypsoHostConnector=true`, `cloudflareNodeTunnelId|Token|Hostname`, optional `tritonImage`.
 
 Mermaid (request flow):
@@ -204,9 +205,10 @@ sequenceDiagram
   ```
 
   Admin commands (Calypso):
-  - Restart Triton: `sudo systemctl restart tritonserver`
-  - Restart tunnel: `sudo systemctl restart cloudflared-node`
-  - Model repo: `/opt/triton/models/<model>/1/model.onnx` (config.pbtxt in model dir)
+
+- Restart Triton: `sudo systemctl restart tritonserver`
+- Restart tunnel: `sudo systemctl restart cloudflared-node`
+- Model repo: `/opt/triton/models/<model>/1/model.onnx` (config.pbtxt in model dir)
 
 ### PDF Support (Docling‑Granite via Triton Python)
 
@@ -234,6 +236,7 @@ curl -s -X POST http://localhost:9090/predict \
 ```
 
 Label Studio integration
+
 - For automatic PDF pre‑labels from tasks, set the ML Model URL to the adapter's LS endpoint:
   - `http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls`
   - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
@@ -245,6 +248,7 @@ Label Studio integration
   This is automated via GitHub Actions and a host-side puller.
 
 Steps
+
 - Prepare labels JSON (ESC `nerLabels` order is the ground truth).
 - Train locally (requires Python, transformers, datasets):
   - `python scripts/ner_train.py --labels labels.json --data-dir ./local_annotations --out ./models/ner-distilbert`
@@ -254,6 +258,7 @@ Steps
   - `scp distilbert_onnx/model.onnx calypso:/tmp && ssh calypso 'sudo mkdir -p /opt/triton/models/distilbert-base-uncased/1 && sudo mv /tmp/model.onnx /opt/triton/models/distilbert-base-uncased/1/ && sudo systemctl restart tritonserver'`
 
 Notes
+
 - Keep `triton-models/distilbert-base-uncased/config.pbtxt` in sync with label count.
 - CI: `.github/workflows/train-ner.yml` runs nightly (or on demand) to train and publish `onnx/model.onnx` to `HF_MODEL_REPO` (set via GitHub Variables).
 - Calypso: a `model-puller` systemd timer fetches the latest ONNX from HF and drops a new version under `/opt/triton/models/distilbert-base-uncased/<n>/`.
@@ -273,6 +278,7 @@ See the detailed guide with diagrams: `docs/SME_WORKFLOW.md`.
 - Preferred for staging. Provide the connection URI via Pulumi config, then apply SQL migrations locally.
 
 Steps
+
 - Set the DB URL (secret):
   - `pulumi -C cluster config set --secret oceanid-cluster:postgres_url 'postgresql://<user>:<pass>@<host>:5432/<db>'`
 - Deploy the sink (reads `DATABASE_URL` from config):
@@ -284,6 +290,7 @@ Steps
   - `make db:psql`
 
 Notes
+
 - Migrations live under `sql/migrations/`; see `sql/README.md`.
 - If `postgres_url` is not set, the sink falls back to in-cluster Postgres when `postgres_password` is configured.
 
@@ -313,6 +320,7 @@ kubectl get nodes
 ```
 
 **Important Notes:**
+
 - The kubeconfig expects the API server at `https://localhost:16443`
 - The SSH tunnel forwards local port 16443 to the K3s API on tethys:6443
 - Kill any conflicting processes on port 16443 before establishing the tunnel
@@ -323,17 +331,20 @@ kubectl get nodes
 If you encounter "connection reset" or "connection refused" errors:
 
 1. Check for conflicting processes:
+
    ```bash
    lsof -i :16443
    pkill -f "ssh.*16443"  # Kill existing tunnels
    ```
 
 2. Re-establish the tunnel:
+
    ```bash
    ssh -L 16443:localhost:6443 -N tethys &
    ```
 
 3. Verify the tunnel is working:
+
    ```bash
    export KUBECONFIG=~/.kube/k3s-config.yaml
    kubectl get nodes

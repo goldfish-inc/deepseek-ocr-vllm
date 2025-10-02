@@ -52,6 +52,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         // You can opt into repository-provided apps by setting Pulumi config:
         //   pulumi config set oceanid-cluster:useExternalAdapter true
         const cfgPulumi = new pulumi.Config();
+        const useImageOnly = cfgPulumi.getBoolean("useImageOnly") ?? true;
         const useExternalAdapter = cfgPulumi.getBoolean("useExternalAdapter") ?? false;
         const externalApp = useExternalAdapter
             ? (readFirstExisting("adapter/app_with_ner.py") || readFirstExisting("adapter/app.py"))
@@ -454,10 +455,13 @@ async def predict_ls(request: Request):
         if (nerPost) cfgData["ner_ner_postprocessor.py"] = nerPost;
         if (nerSchema) cfgData["ner_schema_ebisu_ner_schema_mapping.json"] = nerSchema;
 
-        const cfg = new k8s.core.v1.ConfigMap(`${name}-code`, {
-            metadata: { name: `${serviceName}-code`, namespace },
-            data: cfgData,
-        }, { provider: k8sProvider, parent: this });
+        let cfg: k8s.core.v1.ConfigMap | undefined;
+        if (!useImageOnly) {
+            cfg = new k8s.core.v1.ConfigMap(`${name}-code`, {
+                metadata: { name: `${serviceName}-code`, namespace },
+                data: cfgData,
+            }, { provider: k8sProvider, parent: this });
+        }
 
         const sentry = getSentrySettings();
         // reuse cfgPulumi above
@@ -493,11 +497,21 @@ async def predict_ls(request: Request):
             envBase["CF_ACCESS_CLIENT_SECRET"] = finalCfSecret;
         }
 
-        // If Secret not provided, fall back to config/default
-        if (!nerLabelsSecret) {
-            envBase["NER_LABELS"] = (cfgPulumi.get("nerLabels") || JSON.stringify(defaultLabels));
+        // Build container env vars
+        const envVars: k8s.types.input.core.v1.EnvVar[] = Object.entries(envBase).map(([name, value]) => ({ name, value } as any));
+        if (nerLabelsSecret) {
+            // Use Secret value for NER_LABELS when provided
+            envVars.push({
+                name: "NER_LABELS",
+                valueFrom: { secretKeyRef: { name: (nerLabelsSecret as any).metadata.name, key: "ner-labels" } },
+            } as any);
+        } else {
+            // Fallback to config/default labels when Secret not provided
+            envVars.push({ name: "NER_LABELS", value: (cfgPulumi.get("nerLabels") || JSON.stringify(defaultLabels)) } as any);
         }
 
+        const deployDepends: pulumi.Input<pulumi.Resource>[] = [];
+        if (!useImageOnly && cfg) deployDepends.push(cfg);
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: serviceName, namespace },
             spec: {
@@ -507,27 +521,14 @@ async def predict_ls(request: Request):
                     metadata: { labels: { app: serviceName } },
                     spec: {
                         imagePullSecrets: [{ name: "ghcr-creds" }],
-                        volumes: [{
-                            name: "code",
-                            configMap: {
-                                name: cfg.metadata.name,
-                                items: [
-                                    { key: "app.py", path: "app.py" },
-                                    { key: "requirements.txt", path: "requirements.txt" },
-                                    ...(nerInit ? [{ key: "ner__init__.py", path: "ner/__init__.py" }] : []),
-                                    ...(nerConfig ? [{ key: "ner_ner_config.py", path: "ner/ner_config.py" }] : []),
-                                    ...(nerPost ? [{ key: "ner_ner_postprocessor.py", path: "ner/ner_postprocessor.py" }] : []),
-                                    ...(nerSchema ? [{ key: "ner_schema_ebisu_ner_schema_mapping.json", path: "ner/schema/ebisu_ner_schema_mapping.json" }] : []),
-                                ],
-                            },
-                        }],
+                        volumes: [],
                         containers: [{
                             name: "adapter",
                             image: (new pulumi.Config()).get("adapterImage") || "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main",
                             workingDir: "/app",
-                            env: Object.entries(envBase).map(([name, value]) => ({ name, value })),
+                            env: envVars as any,
                             envFrom: [],
-                            volumeMounts: [{ name: "code", mountPath: "/app" }],
+                            volumeMounts: [],
                             command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9090"],
                             ports: [{ containerPort: 9090, name: "http" }],
                             readinessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 5, periodSeconds: 10 },
@@ -537,27 +538,9 @@ async def predict_ls(request: Request):
                     },
                 },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [cfg] });
+        }, { provider: k8sProvider, parent: this, dependsOn: deployDepends });
 
-        // Patch env to reference Secret if present (valueFrom)
-        if (nerLabelsSecret) {
-            deploy.spec.apply(spec => {
-                if (!spec) return spec;
-                const c = spec.template?.spec?.containers?.[0];
-                if (c) {
-                    // Add NER_LABELS from secret
-                    const env = c.env ?? [];
-                    env.push({
-                        name: "NER_LABELS",
-                        valueFrom: {
-                            secretKeyRef: { name: nerLabelsSecret!.metadata.name, key: "ner-labels" },
-                        },
-                    } as any);
-                    c.env = env as any;
-                }
-                return spec;
-            });
-        }
+        // NER_LABELS now injected at creation time; no patching needed
 
         const svc = new k8s.core.v1.Service(`${name}-svc`, {
             metadata: { name: serviceName, namespace },

@@ -24,9 +24,11 @@
 ## ✅ Correct Approach
 
 ### 1. Store in 1Password
+
 All secrets start in 1Password for secure storage and backup.
 
 ### 2. Add to Pulumi ESC
+
 ```bash
 # Add secret from 1Password to Pulumi config
 op read "op://vault/item/field" | pulumi config set --secret --path category.secret_name
@@ -36,6 +38,7 @@ pulumi config set --secret --path category.secret_name
 ```
 
 ### 3. Use in Pulumi Components
+
 ```typescript
 // In your Pulumi component
 const cfg = new pulumi.Config();
@@ -62,6 +65,7 @@ new k8s.core.v1.Secret("my-secret", {
 ## 🔄 Secret Rotation
 
 ESC supports automatic secret rotation:
+
 1. Keys are rotated every 90 days by default
 2. ESC can generate SSH keys automatically
 3. Webhook notifications for rotation events
@@ -69,6 +73,7 @@ ESC supports automatic secret rotation:
 ## 🚨 Violations
 
 If you accidentally commit a secret:
+
 1. GitHub will block the push
 2. Rotate the secret immediately
 3. Update it in 1Password and ESC
@@ -77,6 +82,7 @@ If you accidentally commit a secret:
 ## 📝 Examples
 
 ### Adding a New API Token
+
 ```bash
 # Store in 1Password first
 op create item API --title "Service API Token" --vault Development \
@@ -88,6 +94,7 @@ op read "op://Development/Service API Token/credential" | \
 ```
 
 ### Creating a Kubernetes Secret
+
 ```typescript
 // WRONG - Hardcoded secret
 new k8s.core.v1.Secret("api-secret", {
@@ -116,6 +123,7 @@ new k8s.core.v1.Secret("api-secret", {
 ## 🔍 Verification
 
 Check that no secrets are hardcoded:
+
 ```bash
 # Scan for potential secrets
 grep -r "token\|key\|password\|secret" --include="*.yaml" --include="*.ts" .

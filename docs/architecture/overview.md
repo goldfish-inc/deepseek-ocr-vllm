@@ -131,6 +131,7 @@ sequenceDiagram
 ```
 
 Component ownership:
+
 - Pulumi `HostCloudflared` ensures systemd unit + config on Calypso.
 - Pulumi `HostDockerService` ensures `tritonserver.service` with GPU flags.
 - DNS `gpu.<base>` CNAME is created when NodeTunnels are disabled (host connector path) or by NodeTunnels component otherwise.
@@ -197,7 +198,8 @@ graph LR
 ## Component Overview
 
 ### Core Infrastructure
-- **k3s**: Lightweight Kubernetes distribution
+
+- **K3s**: Lightweight Kubernetes distribution
 - **Cloudflare Tunnel**: Secure ingress without exposed IPs
 - **Gateway API**: Modern ingress management (2025 standard)
 - **cert-manager**: Automatic TLS certificate management
@@ -212,13 +214,15 @@ graph LR
 | Calypso | GPU Worker | 192.168.2.68 | Local | RTX 4090, 32GB RAM | ML/AI workloads |
 
 ### Security Features
+
 - **Zero-Trust Architecture**: No implicit trust
 - **Network Segmentation**: Namespace isolation
-- **Automatic Rotation**: 90-day SSH, 90-day TLS, 365-day k3s
+- **Automatic Rotation**: 90-day SSH, 90-day TLS, 365-day K3s
 - **External Monitoring**: Sentry (no cluster overhead)
-- **Firewall Layers**: CloudFlare WAF + UFW + NetworkPolicies
+- **Firewall Layers**: Cloudflare WAF + UFW + NetworkPolicies
 
 ### Infrastructure as Code
+
 - **Pulumi**: TypeScript-based IaC
 - **ESC**: Environment, Secrets, Configuration management
 - **GitOps Ready**: Prepared for ArgoCD/Flux integration
@@ -270,17 +274,20 @@ graph LR
 ## Resource Utilization
 
 ### Current Usage (Baseline)
+
 - **Control Plane**: ~500MB RAM, 0.5 CPU
 - **Worker Nodes**: ~300MB RAM each, 0.2 CPU
 - **Total Cluster**: ~1.4GB RAM, 1.1 CPU
 
 ### With Monitoring
+
 - **Sentry Relay**: 50MB RAM, 0.05 CPU
 - **Error Collector**: 32MB RAM, 0.01 CPU
 - **Health Reporter**: 32MB RAM, 0.01 CPU
 - **Total Monitoring**: ~114MB RAM, 0.07 CPU
 
 ### Reserved for Applications
+
 - **Available RAM**: ~6GB across cluster
 - **Available CPU**: ~4 cores
 - **GPU**: RTX 4090 (dedicated for ML)
@@ -288,11 +295,13 @@ graph LR
 ## High Availability Considerations
 
 ### Current Limitations
+
 - Single control plane (Tethys)
 - No etcd backup automation
 - Manual disaster recovery
 
 ### Future Improvements
+
 1. Add HA control plane nodes
 2. Implement Velero for backups
 3. Multi-region deployment

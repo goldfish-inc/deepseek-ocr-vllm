@@ -162,7 +162,15 @@
       "Bash(aws s3 ls:*)",
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl -n apps get deploy ls-triton-adapter)",
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl -n apps get deploy ls-triton-adapter -o yaml)",
-      "Bash(KUBECONFIG=$HOME/.kube/k3s-config.yaml kubectl -n apps get deploy ls-triton-adapter -o yaml)"
+      "Bash(KUBECONFIG=$HOME/.kube/k3s-config.yaml kubectl -n apps get deploy ls-triton-adapter -o yaml)",
+      "Bash(KUBECONFIG=$HOME/.kube/k3s-config.yaml kubectl get pods -n apps)",
+      "Bash(docker pull:*)",
+      "Bash(docker run:*)",
+      "Bash(docker login:*)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy -n apps)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy -n apps --request-timeout=10s)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl delete deploy annotations-sink ls-triton-adapter -n apps)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,pods -n apps)"
     ],
     "deny": [],
     "ask": []

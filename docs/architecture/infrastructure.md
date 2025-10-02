@@ -5,6 +5,7 @@
 ## Production Servers
 
 ### 1. Hostinger VPS 1 - Consensas (Label Studio)
+
 - **Provider**: Hostinger
 - **Location**: Boston, US
 - **IP**: 157.173.210.123
@@ -14,7 +15,7 @@
 - **Resources**: 4 CPU cores, 16GB RAM, 200GB Disk (20% used)
 - **Uptime**: 8 hours
 - **Services Running**:
-  - Label Studio ML Platform (https://label.boathou.se)
+  - Label Studio ML Platform (<https://label.boathou.se>)
   - 1Password Connect (op-connect)
   - 1Password Sync (op-sync)
   - PostgreSQL (goldfish-postgres)
@@ -25,6 +26,7 @@
 - **Root Password**: L3ILgj#0T8cZQtaHmNAQ
 
 ### 2. Hostinger VPS 2 - Blog Server
+
 - **Provider**: Hostinger
 - **Location**: Unknown
 - **IP**: 191.101.1.3
@@ -43,6 +45,7 @@
 - **SSH Key**: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKnjlzq5LFq8l5BeKmsk8mhXM3bUZx/jMno7WxiLV90O
 
 ### 3. RTX 4090 Workstation (Local)
+
 - **Location**: Local Network
 - **IP**: 192.168.2.68
 - **Hardware**: NVIDIA RTX 4090 GPU
@@ -56,17 +59,20 @@
 ## Infrastructure Summary
 
 ### Active Production Services
+
 1. **Label Studio** - ML data labeling platform (VPS 1)
 2. **1Password Connect** - Secret management API (VPS 1)
 3. **Ghost Blog** - Content management (VPS 2)
 4. **PostgreSQL** - Database for Label Studio (VPS 1)
 
 ### Resource Utilization
+
 - **VPS 1 (Label Studio)**: 20% disk usage, moderate memory usage
 - **VPS 2 (Blog)**: 11% disk usage, light load (0.15 avg)
 - **Total Resources**: 8 CPU cores, 32GB RAM, 400GB storage across VPS
 
 ### Costs
+
 - **Hostinger VPS 1**: Paid until 2027-02-01
 - **Hostinger VPS 2**: Check expiration in Hostinger panel
 - **RTX 4090**: Local (electricity only)
@@ -74,6 +80,7 @@
 ## Proposed HashiCorp Stack Deployment
 
 ### Recommended Architecture
+
 ```
 ┌─────────────────────────────────────────┐
 │   HashiCorp Vault (Secret Management)    │
@@ -91,6 +98,7 @@
 ```
 
 ### Why VPS 2 for Vault?
+
 1. **Stability**: 50+ days uptime shows reliability
 2. **Resources**: Only 11% disk used, light CPU load
 3. **Separation**: Keep Vault separate from production Label Studio
@@ -144,9 +152,11 @@ done
 ## Backup Strategy
 
 ### Current Backups
+
 - Unknown - need to check if backups are configured
 
 ### Recommended Backup Plan
+
 1. **Database Backups**: Daily PostgreSQL and MySQL dumps
 2. **File Backups**: Weekly full backups of Docker volumes
 3. **Configuration**: Store all configs in Git

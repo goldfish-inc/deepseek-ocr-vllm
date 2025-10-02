@@ -9,6 +9,7 @@ This document confirms the Pulumi ESC (Environments, Secrets, and Configuration)
 All required secrets and configuration values are properly configured in the ESC environment.
 
 ### Cloudflare Configuration
+
 - ✅ **API Token**: Encrypted and stored
 - ✅ **Account ID**: `8fa97474778c8a894925c148ca829739`
 - ✅ **Tunnel ID**: `6ff4dfd7-2b77-4a4f-84d9-3241bea658dc`
@@ -16,24 +17,29 @@ All required secrets and configuration values are properly configured in the ESC
 - ✅ **Origin CA Key**: Encrypted and stored
 
 ### Kubernetes/K3s Configuration
+
 - ✅ **K3s Token**: Encrypted and stored
 - ✅ **Server URL**: `https://tethys.boathou.se:6443`
 - ✅ **Cluster Name**: `oceanid-cluster`
 
 ### Node Configuration
+
 - ✅ **Tethys**: IP `157.173.210.123`, hostname `srv712429`
 - ✅ **Styx**: IP `191.101.1.3`, hostname `srv712695`
 - ✅ **Calypso**: IP `192.168.2.80`, hostname `calypso`, GPU `rtx4090`
 - ✅ **Meliae**: IP `140.238.138.35`
 
 ### SSH Keys
+
 - ✅ **Tethys SSH Key**: Encrypted, ID `cm2z67lskn7lddqgrghd7dvn6m`
 - ✅ **Styx SSH Key**: Encrypted, ID `46scrxz74mmujzn7yuh2g7iisa`
 - ✅ **Calypso SSH Key**: Encrypted, ID `calypso_key_in_tmp`
 - ✅ **Rotation Schedule**: 90-day interval, next rotation `2025-12-25T16:54:53Z`
 
 ### Environment Variables
+
 The following environment variables are automatically set when using this ESC environment:
+
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_TUNNEL_TOKEN`
 - `CLOUDFLARE_TUNNEL_ID`
@@ -53,6 +59,7 @@ environment:
 ## Usage
 
 ### View Configuration
+
 ```bash
 # View all ESC configuration (secrets hidden)
 pulumi env get default/oceanid-cluster
@@ -63,6 +70,7 @@ pulumi config get clusterName
 ```
 
 ### Update Secrets
+
 ```bash
 # Update a secret value
 pulumi env set default/oceanid-cluster cloudflare.api_token --secret
@@ -72,6 +80,7 @@ pulumi env set default/oceanid-cluster cluster.name oceanid-cluster
 ```
 
 ### Stack Commands
+
 ```bash
 # Select the production stack
 pulumi stack select ryan-taylor/oceanid-cluster/prod
@@ -85,7 +94,7 @@ pulumi preview
 
 ## Security Notes
 
-1. All sensitive values are encrypted at rest in Pulumi Cloud
+1. All sensitive values are encrypted at REST in Pulumi Cloud
 2. Secrets are never exposed in logs or console output
 3. Access to ESC environments requires Pulumi Cloud authentication
 4. SSH keys rotate automatically every 90 days
@@ -102,6 +111,7 @@ To validate the ESC configuration is working:
 ## Troubleshooting
 
 If configuration values are not loading:
+
 1. Ensure you're authenticated: `pulumi whoami`
 2. Verify ESC environment exists: `pulumi env ls`
 3. Check stack imports ESC: `cat Pulumi.prod.yaml | grep environment`

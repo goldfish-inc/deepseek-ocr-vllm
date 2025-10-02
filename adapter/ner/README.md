@@ -144,20 +144,24 @@ The complete database schema mapping is in `schema/ebisu_ner_schema_mapping.json
 ## Maritime-Specific Features
 
 ### Vessel Name Detection
+
 - Recognizes prefixes: M/V, F/V, S/V
 - Handles multi-word vessel names
 - Tracks name changes as intelligence
 
 ### RFMO Recognition
+
 - All 14 major RFMOs configured
 - Pattern matching for codes and full names
 
 ### Gear Type Detection
+
 - FAO ISSCFG codes
 - Common abbreviations (PS, LL, GN)
 - Full names (purse seine, longline)
 
 ### Multi-label Support
+
 - Person → Vessel Master/Crew Member
 - Company → Operator/Beneficial Owner
 - Context-aware role detection

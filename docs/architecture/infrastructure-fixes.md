@@ -3,39 +3,47 @@
 ## 🚨 Critical Issues to Fix
 
 ### 1. Node Provisioning (Currently Manual)
-**Problem**: k3s installation done via SSH scripts
+
+**Problem**: K3s installation done via SSH scripts
 **Solution**: Use Pulumi Command provider to automate node provisioning
 
 ### 2. Security Issues
-**Problem**: Direct k3s API exposure, root passwords, keys in wrong places
+
+**Problem**: Direct K3s API exposure, root passwords, keys in wrong places
 **Solution**:
-- Route k3s API through Cloudflare tunnel
+
+- Route K3s API through Cloudflare tunnel
 - Use SSH keys only (no passwords)
 - Store all secrets in Pulumi ESC
 
 ### 3. Cloudflare Tunnel Not Working
-**Problem**: Tunnel running but not proxying k3s API
-**Solution**: Configure ingress rules for k3s API endpoint
+
+**Problem**: Tunnel running but not proxying K3s API
+**Solution**: Configure ingress rules for K3s API endpoint
 
 ### 4. Not Everything in IaC
+
 **Problem**: Manual node setup, DNS, networking
 **Solution**: Define everything in Pulumi TypeScript
 
 ## 📋 Implementation Plan
 
 ### Phase 1: Secure Existing Infrastructure
+
 - [x] Move SSH keys from /tmp to ~/.ssh/oceanid
 - [ ] Remove root passwords, enforce key-only auth
-- [ ] Configure Cloudflare tunnel for k3s API
+- [ ] Configure Cloudflare tunnel for K3s API
 - [ ] Add network policies
 
 ### Phase 2: Full Pulumi IaC Implementation
+
 - [ ] Create Pulumi resources for node provisioning
 - [ ] Add Cloudflare DNS management
 - [ ] Implement secret rotation with ESC
 - [ ] Add health checks and monitoring
 
 ### Phase 3: GitOps Workflow
+
 - [ ] GitHub Actions for Pulumi deployments
 - [ ] Automated secret rotation
 - [ ] Compliance scanning
@@ -43,6 +51,7 @@
 ## 🔧 Technical Implementation
 
 ### Node Provisioning with Pulumi
+
 ```typescript
 // Use Pulumi Command provider for remote provisioning
 import * as command from "@pulumi/command";
@@ -59,6 +68,7 @@ const k3sInstall = new command.remote.Command("install-k3s", {
 ```
 
 ### Cloudflare Tunnel Configuration
+
 ```typescript
 // Configure tunnel ingress for k3s API
 const tunnelIngress = new cloudflare.TunnelConfig("k3s-tunnel", {
@@ -76,6 +86,7 @@ const tunnelIngress = new cloudflare.TunnelConfig("k3s-tunnel", {
 ```
 
 ### ESC Secret Management
+
 ```yaml
 # Pulumi ESC configuration
 values:
@@ -93,9 +104,10 @@ values:
 ```
 
 ## 🎯 Success Criteria
+
 - [ ] All infrastructure defined in Pulumi code
 - [ ] No manual SSH commands needed
-- [ ] k3s API only accessible through Cloudflare tunnel
+- [ ] K3s API only accessible through Cloudflare tunnel
 - [ ] All secrets in ESC with rotation
 - [ ] GitHub Actions for continuous deployment
 - [ ] Zero hardcoded credentials

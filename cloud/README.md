@@ -5,13 +5,15 @@ This Pulumi project manages **cloud-only resources** for the Oceanid platform. I
 ## Scope
 
 **Managed Resources:**
-- **Cloudflare DNS**: CNAME records for k3s API endpoint and GPU node access
+
+- **Cloudflare DNS**: CNAME records for K3s API endpoint and GPU node access
 - **Cloudflare Access**: Zero Trust application gateways (Label Studio, etc.)
 - **CrunchyBridge**: Managed PostgreSQL 17 database cluster
 - **Pulumi ESC**: Shared secrets and configuration environment
 
 **NOT Managed Here:**
-- Kubernetes cluster resources (see `../cluster/` for k3s bootstrap)
+
+- Kubernetes cluster resources (see `../cluster/` for K3s bootstrap)
 - Application workloads (managed by Flux GitOps in `../clusters/`)
 
 ## Stack Configuration
@@ -163,6 +165,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerP
 ```
 
 Workflows:
+
 - `train-ner.yml` reads `hfAccessToken`, `hfDatasetRepo`, and `hfModelRepo` from ESC.
 - `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
 
@@ -185,6 +188,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUr
 ```
 
 Notes:
+
 - The cluster stack requires `labelStudioDbUrl` and sets `DATABASE_URL` for the Label Studio deployment.
 - You can also provision the DB via IaC by setting `oceanid-cloud:enableLabelStudioDb=true` and running `pulumi up` locally (not in GitHub Actions). Default is `false` for safety.
 
@@ -194,13 +198,13 @@ Notes:
 
 **IMPORTANT:** Database provisioning is **disabled by default** and uses `command.local.Command`, which requires psql installed locally. It **will not run in GitHub Actions**.
 
-#### Safety Guarantees:
+#### Safety Guarantees
 
 1. **Cluster never recreated on push**: `enableCrunchyBridgeProvisioning: true` with `protect: true` prevents deletion
 2. **Database never created on push**: `enableLabelStudioDb` defaults to `false`
 3. **Idempotent**: Safe to run multiple times (uses `IF NOT EXISTS` patterns)
 
-#### Manual Provisioning Steps:
+#### Manual Provisioning Steps
 
 ```bash
 cd cloud/
@@ -227,11 +231,12 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUr
 ```
 
 **Config Key Scoping:**
+
 - `oceanid-cloud:crunchyAdminUrl` - Admin credentials (CREATEDB privilege) for database provisioning
 - `oceanid-cloud:labelStudioOwnerPassword` - Password for `labelfish_owner` role
 - `oceanid-cluster:labelStudioDbUrl` - Runtime connection URL for Label Studio (used by cluster stack)
 
-#### What Gets Created:
+#### What Gets Created
 
 - Database: `labelfish`
 - Roles: `labelfish_owner`, `labelfish_rw`, `labelfish_ro`
@@ -239,7 +244,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUr
 - Extensions: `pgcrypto`, `citext`, `pg_trgm`, `btree_gist`
 - Sane defaults: UTC timezone, statement/lock timeouts, search_path
 
-#### Verification:
+#### Verification
 
 ```bash
 # Check database exists
@@ -281,6 +286,7 @@ new cloudflare.Record("k3s-cname", {
 ```
 
 To delete a protected resource:
+
 1. Remove `protect: true` from code
 2. Run `pulumi up` to apply protection change
 3. Run `pulumi destroy` or delete resource
@@ -349,6 +355,7 @@ gh run watch
 ```
 
 **When to use each:**
+
 - **Re-import:** Emergency fixes made in console, restoring state consistency
 - **Code change:** All planned infrastructure modifications (GitOps principle)
 
@@ -369,7 +376,7 @@ pulumi config set cloudflare:apiToken --secret <token>
 This stack was created by migrating resources from `oceanid-cluster` stack:
 
 1. **2025-01-30:** Imported CrunchyBridge cluster (ebisu)
-2. **2025-01-30:** Imported DNS records (k3s, gpu)
+2. **2025-01-30:** Imported DNS records (K3s, gpu)
 3. **2025-01-30:** Imported Label Studio Access app
 4. **2025-01-30:** Removed DNS creation from cluster stack
 

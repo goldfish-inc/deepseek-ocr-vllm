@@ -442,17 +442,18 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 `;
 
-    const requirements = `fastapi==0.114.0\nuvicorn==0.30.6\nhuggingface_hub==0.23.0\nasyncpg==0.29.0\n`;
-
-    const data: Record<string, string> = { "app.py": appPy, "requirements.txt": requirements };
-    // ConfigMap keys must be flat; map via items in the volume spec
-    const schemaKey = "schema_ebisu_ner_schema_mapping.json";
-    if (ebisuSchema) data[schemaKey] = ebisuSchema;
-
-    const code = new k8s.core.v1.ConfigMap(`${name}-code`, {
-      metadata: { name: `${serviceName}-code`, namespace },
-      data,
-    }, { provider: k8sProvider, parent: this });
+    const useImageOnly = (new pulumi.Config()).getBoolean("useImageOnly") ?? true;
+    let code: k8s.core.v1.ConfigMap | undefined;
+    let schemaKey = "schema_ebisu_ner_schema_mapping.json";
+    if (!useImageOnly) {
+      const requirements = `fastapi==0.114.0\nuvicorn==0.30.6\nhuggingface_hub==0.23.0\nasyncpg==0.29.0\n`;
+      const data: Record<string, string> = { "app.py": appPy, "requirements.txt": requirements };
+      if (ebisuSchema) data[schemaKey] = ebisuSchema;
+      code = new k8s.core.v1.ConfigMap(`${name}-code`, {
+        metadata: { name: `${serviceName}-code`, namespace },
+        data,
+      }, { provider: k8sProvider, parent: this });
+    }
 
     // Secret for HF token if provided
     let hfSecret: k8s.core.v1.Secret | undefined;
@@ -485,20 +486,16 @@ if __name__ == "__main__":
           metadata: { labels: { app: serviceName } },
           spec: {
             imagePullSecrets: [{ name: "ghcr-creds" }],
-            volumes: [{ name: "code", configMap: {
-              name: code.metadata.name,
-              items: [
-                { key: "app.py", path: "app.py" },
-                { key: "requirements.txt", path: "requirements.txt" },
-                ...(ebisuSchema ? [{ key: schemaKey, path: "schema/ebisu_ner_schema_mapping.json" }] : []),
-              ],
-            } }],
+            volumes: useImageOnly ? [] : [{ name: "code", configMap: { name: code!.metadata.name, items: [
+              { key: "app.py", path: "app.py" },
+              ...(ebisuSchema ? [{ key: schemaKey, path: "schema/ebisu_ner_schema_mapping.json" }] : []),
+            ] } }],
             containers: [{
               name: "sink",
               image: (new pulumi.Config()).get("sinkImage") || "ghcr.io/goldfish-inc/oceanid/annotations-sink:main",
               workingDir: "/app",
               env,
-              volumeMounts: [{ name: "code", mountPath: "/app" }],
+              volumeMounts: useImageOnly ? [] : [{ name: "code", mountPath: "/app" }],
               command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"],
               ports: [{ containerPort: 8080, name: "http" }],
               readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
@@ -508,7 +505,7 @@ if __name__ == "__main__":
           },
         },
       },
-    }, { provider: k8sProvider, parent: this, dependsOn: [code] });
+    }, { provider: k8sProvider, parent: this, dependsOn: (useImageOnly ? [] : [code!]) });
 
     const svc = new k8s.core.v1.Service(`${name}-svc`, {
       metadata: { name: serviceName, namespace },

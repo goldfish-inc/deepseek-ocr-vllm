@@ -7,10 +7,12 @@
 ## Core Separation of Concerns
 
 ### Staging Schema (`stage.*`)
+
 **Purpose:** Ingestion, heterogeneity, audit snapshots, processing logs
 **Pattern:** Rich JSONB snapshots + unstructured data + processing metadata
 
 ### Curated Schema (`curated.*`)
+
 **Purpose:** Clean, queryable intelligence for analytics/ML
 **Pattern:** Typed temporal rows + foreign keys + provenance links
 
@@ -19,10 +21,12 @@
 ## Why This Separation?
 
 ### 1. **Cost & Performance**
+
 - ❌ **Bad:** JSONB snapshots in curated bloat indexes and slow relational queries
 - ✅ **Good:** Temporal tables with typed columns + B-tree indices are 10-100x faster
 
 **Example - Query Performance:**
+
 ```sql
 -- SLOW: JSONB in curated (requires GIN index, slower than B-tree)
 SELECT * FROM curated.vessels
@@ -34,11 +38,13 @@ WHERE status = 'ACTIVE' AND valid_to IS NULL;
 ```
 
 ### 2. **Reproducibility & Audit Trail**
+
 - **Staging** carries promotion snapshots for rollback and audit
 - **Curated** keeps provenance pointers (source_document_id, content_sha)
 - Reproduce any curated fact by joining back to `stage.documents`
 
 ### 3. **Schema Evolution**
+
 - **Staging** JSONB accommodates heterogeneous sources without schema changes
 - **Curated** typed columns enable database-level constraints and validation
 
@@ -49,6 +55,7 @@ WHERE status = 'ACTIVE' AND valid_to IS NULL;
 ### ✅ Staging Schema - Where JSONB Belongs
 
 #### 1. Raw Document Storage
+
 ```sql
 -- stage.documents: Original content + metadata
 CREATE TABLE stage.documents (
@@ -72,6 +79,7 @@ CREATE TABLE stage.documents (
 ```
 
 #### 2. Processing Logs & Metrics
+
 ```sql
 -- stage.document_processing_log: Processing metadata
 CREATE TABLE stage.document_processing_log (
@@ -105,6 +113,7 @@ CREATE TABLE stage.document_processing_log (
 ```
 
 #### 3. Promotion Snapshots (Rollback Support)
+
 ```sql
 -- stage.promotion_log: Before/after snapshots for rollback
 CREATE TABLE stage.promotion_log (
@@ -137,6 +146,7 @@ CREATE TABLE stage.promotion_log (
 ```
 
 #### 4. Training Corpus Context
+
 ```sql
 -- stage.training_corpus: ML training examples with context
 CREATE TABLE stage.training_corpus (
@@ -155,6 +165,7 @@ CREATE TABLE stage.training_corpus (
 ```
 
 #### 5. Rule Chains & Cleaning History
+
 ```sql
 -- stage.csv_extractions: Cell-level cleaning with rule provenance
 CREATE TABLE stage.csv_extractions (
@@ -178,6 +189,7 @@ CREATE TABLE stage.csv_extractions (
 ### ✅ Curated Schema - Typed Temporal Facts Only
 
 #### 1. Temporal Tables (No JSONB)
+
 ```sql
 -- curated.vessel_authorizations: Typed temporal facts
 CREATE TABLE curated.vessel_authorizations (
@@ -213,6 +225,7 @@ CREATE TABLE curated.vessel_authorizations (
 ```
 
 #### 2. Provenance Links (FKs, Not Snapshots)
+
 ```sql
 -- curated.vessel_sanctions: Provenance via FK + hash
 CREATE TABLE curated.vessel_sanctions (
@@ -241,6 +254,7 @@ WHERE s.vessel_id = 123;
 ```
 
 #### 3. Current State Views (Instead of JSONB Snapshots)
+
 ```sql
 -- curated.v_vessels_current_state: Materialized current state
 CREATE VIEW curated.v_vessels_current_state AS
@@ -283,6 +297,7 @@ WHERE current_flag_alpha2 = 'CN' AND risk_level IN ('HIGH', 'CRITICAL');
 ## Acceptable JSONB Exceptions in Curated
 
 ### 1. Small Evidence Fields (2-4 KB)
+
 **Use case:** UI tooltips showing inline excerpts without joining to stage
 
 ```sql
@@ -304,6 +319,7 @@ CREATE TABLE curated.entity_confirmations (
 ```
 
 ### 2. Genuinely Rare/Unstable Attributes
+
 **Use case:** Attributes that don't justify typed columns yet
 
 ```sql
@@ -329,6 +345,7 @@ CREATE TABLE curated.vessel_info (
 ```
 
 ### 3. Complex Nested Structures (Rare)
+
 **Use case:** Catch limits with species → limit → period → area hierarchy
 
 ```sql
@@ -355,6 +372,7 @@ CREATE TABLE curated.vessel_info (
 ## Anti-Patterns to Avoid
 
 ### ❌ JSONB History Snapshots in Curated
+
 ```sql
 -- BAD: History snapshots in curated
 CREATE TABLE curated.vessels (
@@ -373,12 +391,14 @@ INSERT INTO curated.vessels (vessel_id, history) VALUES (
 ```
 
 **Why bad:**
+
 - Index bloat: GIN indices on large JSONB are 10x slower than B-tree on typed columns
 - No FK constraints: Can't validate RFMO codes, flag states, etc.
 - Schema drift: JSONB structure changes invisibly
 - Query complexity: JSONB path queries are harder to optimize
 
 **Fix:** Use temporal tables instead:
+
 ```sql
 -- GOOD: Temporal tables with typed columns
 CREATE TABLE curated.vessel_authorizations (...);
@@ -395,6 +415,7 @@ SELECT * FROM curated.vessel_flag_history WHERE vessel_id = 123 ORDER BY valid_f
 ---
 
 ### ❌ Duplicating Promotion Snapshots in Curated
+
 ```sql
 -- BAD: Duplicating promotion snapshots
 CREATE TABLE curated.vessels (
@@ -404,11 +425,13 @@ CREATE TABLE curated.vessels (
 ```
 
 **Why bad:**
+
 - Data duplication: Same snapshots in stage AND curated
 - Sync issues: Promotion snapshots belong in audit trail, not operational tables
 - Storage waste: Curated should be lean for fast analytics
 
 **Fix:** Keep snapshots in stage only:
+
 ```sql
 -- GOOD: Snapshots in staging
 CREATE TABLE stage.promotion_log (
@@ -429,6 +452,7 @@ CREATE TABLE curated.vessels (
 ## Data Retention Plan
 
 ### Staging Schema (Hot: 12-24 months, then archive)
+
 ```sql
 -- stage.documents: Archive old documents to object storage
 -- Keep content_sha constant for deduplication/lineage
@@ -444,6 +468,7 @@ CREATE TABLE curated.vessels (
 ```
 
 ### Curated Schema (Indefinite)
+
 ```sql
 -- curated.vessel_authorizations: Keep temporal facts indefinitely
 -- No JSONB snapshots → minimal storage growth
@@ -457,6 +482,7 @@ WHERE vessel_id = 123
 ```
 
 ### Optional: Append-Only Audit (Regulatory Compliance)
+
 ```sql
 -- audit.change_log: CDC-style append-only log (if required)
 CREATE TABLE audit.change_log (
@@ -479,7 +505,9 @@ CREATE TABLE audit.change_log (
 ## Practical Next Steps
 
 ### 1. Continue Using stage.promotion_log for Snapshots
+
 ✅ Already implemented in V3 migration:
+
 ```sql
 -- sql/migrations/V3__staging_tables_complete.sql:240
 CREATE TABLE stage.promotion_log (
@@ -492,7 +520,9 @@ CREATE TABLE stage.promotion_log (
 **Don't duplicate these in curated.**
 
 ### 2. Ensure Provenance in Every Curated Row
+
 ✅ Already implemented in V5 migration:
+
 ```sql
 -- sql/migrations/V5__curated_temporal_events.sql
 CREATE TABLE curated.vessel_authorizations (
@@ -502,22 +532,27 @@ CREATE TABLE curated.vessel_authorizations (
 ```
 
 **Always include:**
+
 - `source_document_id`: FK to stage.documents
 - `content_sha`: Deduplication + immutable lineage
 - `confidence`: ML model confidence score
 
 ### 3. Avoid Adding JSONB Columns to curated.*
+
 **Exception:** Small evidence fields (<4 KB) for UI tooltips
 
 **Instead of JSONB:**
+
 - Add typed column if field becomes frequent
 - Create related table for complex relationships
 - Keep ad-hoc metadata in `vessel_info` EAV pattern (key/value, not JSONB)
 
 ### 4. Historic Replay via CDC (If Needed)
+
 **Don't embed history JSON in curated.**
 
 **Options:**
+
 - CDC to external audit store (Kafka, S3, Elasticsearch)
 - Use temporal tables + time-travel queries
 - Join back to `stage.promotion_log` for promotion history
@@ -593,6 +628,7 @@ CREATE TABLE curated.vessel_authorizations (
 ## Summary
 
 **✅ DO:**
+
 - JSONB in staging: metadata, processing logs, promotion snapshots, error details, rule chains
 - Typed columns in curated: vessel_type, build_year, risk_level, authorized_gear_types[]
 - Temporal tables in curated: valid_from/valid_to for time-series queries
@@ -600,6 +636,7 @@ CREATE TABLE curated.vessel_authorizations (
 - Views for current state: v_vessels_current_state (no JSONB snapshots)
 
 **❌ DON'T:**
+
 - JSONB history snapshots in curated (use temporal tables)
 - Duplicate promotion snapshots in curated (keep in stage.promotion_log)
 - Large JSONB columns in curated (>4 KB bloats indices)

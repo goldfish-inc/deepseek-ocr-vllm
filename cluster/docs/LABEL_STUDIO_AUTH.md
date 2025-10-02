@@ -62,6 +62,7 @@ curl -H "Authorization: Token <your-jwt-token>" \
 **Cause**: The organization doesn't have `legacy_api_tokens_enabled` set to `true`.
 
 **Solution**:
+
 1. Ensure `LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN=true` is in deployment
 2. Restart Label Studio pod to apply changes
 3. Regenerate token if created before fix
@@ -73,6 +74,7 @@ curl -H "Authorization: Token <your-jwt-token>" \
 **Cause**: Token not included in request header or wrong format.
 
 **Solution**:
+
 - Use `Authorization: Token <token>` (not `Bearer`)
 - Ensure token has no extra whitespace/newlines
 - Verify token is actually sent in request
@@ -109,16 +111,17 @@ LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN = get_bool_env('LABEL_STUDIO_ENABLE_LEGACY_
 ### Feature Flag
 
 The JWT authentication system is controlled by feature flag:
+
 - `fflag__feature_develop__prompts__dia_1829_jwt_token_auth`
 
 When enabled (default in 1.21.0+), the `TokenAuthenticationPhaseout` class checks organization settings before allowing token auth.
 
 ## References
 
-- GitHub Issue: https://github.com/HumanSignal/label-studio/issues/7355
-- GitHub PR: https://github.com/HumanSignal/label-studio/pull/7413
-- Label Studio Docs: https://labelstud.io/guide/api.html
-- Oceanid Issue: https://github.com/goldfish-inc/oceanid/issues/58
+- GitHub Issue: <https://github.com/HumanSignal/label-studio/issues/7355>
+- GitHub PR: <https://github.com/HumanSignal/label-studio/pull/7413>
+- Label Studio Docs: <https://labelstud.io/guide/api.html>
+- Oceanid Issue: <https://github.com/goldfish-inc/oceanid/issues/58>
 
 ## Related Configuration
 
@@ -129,5 +132,6 @@ Label Studio is configured to use AWS S3 for persistent file storage. See S3 con
 ### Admin Credentials
 
 Admin credentials are managed via Pulumi ESC:
+
 - `labelStudioUsername` - Admin email
 - `labelStudioPassword` - Admin password (encrypted)

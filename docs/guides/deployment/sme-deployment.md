@@ -86,9 +86,9 @@ pulumi -C cluster stack output
 
 After deployment, SMEs can access:
 
-- **Label Studio**: https://label.boathou.se
-- **GPU Services**: https://gpu.boathou.se
-- **K3s API**: https://k3s.boathou.se
+- **Label Studio**: <https://label.boathou.se>
+- **GPU Services**: <https://gpu.boathou.se>
+- **K3s API**: <https://k3s.boathou.se>
 
 ## SME Authentication
 
@@ -96,7 +96,7 @@ After deployment, SMEs can access:
 
 Users with `@boathou.se` email addresses can authenticate via Cloudflare Access:
 
-1. Navigate to https://label.boathou.se
+1. Navigate to <https://label.boathou.se>
 2. Enter email address
 3. Receive one-time PIN via email
 4. Access Label Studio
@@ -224,6 +224,7 @@ pulumi -C cluster config get oceanid-cluster:accessAllowedEmailDomain
 ## Infrastructure as Code Benefits
 
 All configuration is:
+
 - **Version controlled**: Changes tracked in Git
 - **Declarative**: Desired state defined in code
 - **Idempotent**: Safe to run multiple times
