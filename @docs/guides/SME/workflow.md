@@ -18,6 +18,7 @@ Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Ac
 
 - Text: gets NER pre-labels (entities like VESSEL, IMO, FLAG, PORT, DATE).
 - PDFs: Docling text extraction + NER pre-labels.
+  - New: Draw boxes on pages (Rectangle tool) for TABLE/FIGURE/SECTION/SIGNATURE/STAMP. Boxes store to `stage.pdf_boxes` and are also converted to PDF-point coordinates for training.
 - CSVs: header-aware flattening + NER pre-labels (details below).
 - XLSX: header-aware flattening + NER pre-labels.
 - Images:
@@ -70,6 +71,16 @@ text,pdf,meta_id
 - Adjust spans and labels to be accurate and specific (e.g., prefer IMO over generic VESSEL where applicable).
 - Click Save/Submit. Your annotation is recorded immediately.
 
+### Draw Boxes on PDFs (Hybrid UI)
+
+- Open a PDF task. You’ll see a “PDF Page (Boxes)” section with an image preview and the rectangle tool.
+- Use the labels TABLE, FIGURE, SECTION, SIGNATURE, or STAMP for regions of interest.
+- Save.
+
+What happens under the hood:
+- Label Studio provides page images for the UI only; the system stores normalized box geometry and converts it to PDF-point coordinates using the original PDF size.
+- Your boxes land in `stage.pdf_boxes` and can be queried directly (latest rows in `stage.v_pdf_boxes_latest`).
+
 ## Where Your Work Goes
 
 ```mermaid
@@ -84,6 +95,8 @@ flowchart LR
   - `stage.documents`: task text and metadata (project/task IDs, source).
   - `stage.extractions`: the cleaned spans (label, value, offsets, confidence).
   - `stage.table_ingest`: raw table rows (CSV/XLSX) ingested on task creation via webhook.
+  - `stage.pdf_boxes`: page regions you draw (both percent and PDF-point coordinates when available).
+  - `stage.v_pdf_boxes_latest`: latest box rows for quick QA per page/label.
   - Views for QA/ops: `stage.v_documents_freshness`, `stage.v_duplicates`.
 
 ## Label Set (What You’ll See)
@@ -132,4 +145,3 @@ flowchart LR
 - Don’t:
   - Upload sensitive content without clearance.
   - Introduce ad-hoc labels without checking the project schema.
-

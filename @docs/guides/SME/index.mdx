@@ -11,6 +11,14 @@ Audience: Subject Matter Experts. This guide focuses only on what you need to do
 - Adjust spans and labels; Save/Submit
 - Optional: open DBeaver to browse `stage.*` views (read‑only)
 
+### Draw Boxes on PDFs
+
+- Open a PDF task and use "PDF Page (Boxes)" to draw rectangles.
+- Labels available: TABLE, FIGURE, SECTION, SIGNATURE, STAMP (ask if you need more).
+- Your boxes are stored in the database and converted to PDF‑point coordinates for model training.
+- Quick checks:
+  - `SELECT * FROM stage.v_pdf_boxes_latest ORDER BY created_at DESC LIMIT 50;`
+
 Need a new project or a custom label set? See Project Setup for SMEs: [project-setup.mdx](./project-setup.mdx)
 
 ## What You’ll Do

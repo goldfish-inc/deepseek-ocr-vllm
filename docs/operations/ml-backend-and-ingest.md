@@ -37,6 +37,14 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
 - Project `NER_Data`: provisioned automatically by Job with a full NER interface.
 - Labeling Interface mapping: the primary control is `<Labels name="label" toName="text" ...>`. An optional HTML Labels control (e.g., `name="label_html" toName="html"`) may exist for read‑only/auxiliary views—it's not required for CSV/XLSX flows.
 
+## PDF Boxes (Hybrid)
+
+- UI: Label Studio renders page images for box tools while still showing a pdf.js preview.
+- Storage: The sink writes box rows to `stage.pdf_boxes` on every annotation webhook.
+  - Fields include percent geometry and, when possible, PDF-point geometry (x_pt/y_pt/w_pt/h_pt) computed in-cluster using the source PDF page size.
+  - `stage.v_pdf_boxes_latest` view exposes the latest per unique box for QA.
+- Training: consume PDF-point geometry directly, or convert back to pixels at any DPI on demand.
+
 ## CSV/XLSX Handling
 
 - CSV: system reads rows; if header row detected, flattens as `Header: Value` lines for NER.

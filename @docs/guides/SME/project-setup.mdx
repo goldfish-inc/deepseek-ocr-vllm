@@ -61,6 +61,28 @@ If you see validation errors or missing predictions:
 - If there is also an HTML Labels block, ensure it has a unique `name` (e.g., `label_html`).
 - Make sure “Show predictions” and (optionally) “Auto‑annotation” are enabled under Annotation Settings.
 
+### Add PDF Page Boxes (optional)
+
+If your team wants to draw boxes on PDF pages, add the following controls. Keep names unique.
+
+```xml
+<Header value="PDF Page (Boxes)"/>
+<Image name="page" value="$image"/>
+<RectangleLabels name="bbox" toName="page">
+  <Label value="TABLE"/>
+  <Label value="FIGURE"/>
+  <Label value="SECTION"/>
+  <Label value="SIGNATURE"/>
+  <Label value="STAMP"/>
+  <!-- customize as needed -->
+  
+</RectangleLabels>
+```
+
+Notes:
+- The UI uses page images for drawing. The system converts saved boxes to PDF‑point coordinates for training.
+- PDFs must be uploaded/imported into LS (or via Cloud Storage) for `$image` to be populated.
+
 ### Interactive: Generate Full Labeling Interface from labels.json
 
 Paste your `labels.json` to generate the full Labeling Interface XML. Runs in your browser.

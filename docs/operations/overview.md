@@ -18,12 +18,15 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 
 ## Deploy
 
+Policy: Always deploy via Pulumi (no manual kubectl edits). This ensures changes are reproducible and audited.
+
 - Minimal, non‑disruptive deploy:
-  - `make deploy-simple`
-- Full deploy (enable provisioning + LB) once tunnels are stable:
-  - `pulumi config set oceanid-cluster:enableNodeProvisioning true`
-  - `pulumi config set oceanid-cluster:enableControlPlaneLB true`
-  - `pulumi up`
+  - `pulumi -C cluster preview`
+  - `pulumi -C cluster up`
+- Enable provisioning/LB once tunnels are stable:
+  - `pulumi -C cluster config set oceanid-cluster:enableNodeProvisioning true`
+  - `pulumi -C cluster config set oceanid-cluster:enableControlPlaneLB true`
+  - `pulumi -C cluster up`
 
 ## Validate
 
@@ -109,6 +112,8 @@ Notes:
 
 - The deprecated `ls-ml-autoconnect` service was removed to avoid coupling infra to a personal API token.
 - `ls-triton-adapter` stays running cluster‑wide as the shared inference endpoint.
+- PDF page images for box annotation are controlled by `PDF_CONVERT_TO_IMAGES` (set via Pulumi).
+  - If you change this setting or other env vars, redeploy with Pulumi (`pulumi -C cluster up`).
 
 ## Secrets & Config
 
