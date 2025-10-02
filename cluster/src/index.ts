@@ -330,7 +330,7 @@ def label_config_xml(labels):
         "<View>\n"
         "  <Header value=\"Document Text\"/>\n"
         "  <Text name=\"text\" value=\"$text\"/>\n"
-        "  <Labels name=\"ner\" toName=\"text\" showInline=\"true\">\n"
+        "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
         f"{tags}\n"
         "  </Labels>\n"
         "  <Relations name=\"rels\" toName=\"text\"/>\n"

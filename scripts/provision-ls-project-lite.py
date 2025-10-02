@@ -54,7 +54,7 @@ def label_config_xml(labels: List[str]) -> str:
         "<View>\n"
         "  <Header value=\"Document Text\"/>\n"
         "  <Text name=\"text\" value=\"$text\"/>\n"
-        "  <Labels name=\"ner\" toName=\"text\" showInline=\"true\">\n"
+        "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
         f"{label_tags}\n"
         "  </Labels>\n"
         "  <Relations name=\"rels\" toName=\"text\"/>\n"
@@ -134,4 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

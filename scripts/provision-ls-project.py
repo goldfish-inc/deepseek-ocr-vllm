@@ -65,7 +65,7 @@ def build_label_config(labels: List[str]) -> str:
 <View>
   <Header value="Document Text"/>
   <Text name="text" value="$text"/>
-  <Labels name="ner" toName="text" showInline="true">
+  <Labels name="label" toName="text" showInline="true">
 {label_tags}
   </Labels>
   <Relations name="rels" toName="text"/>
