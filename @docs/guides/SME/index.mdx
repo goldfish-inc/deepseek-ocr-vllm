@@ -2,6 +2,17 @@
 
 Audience: Subject Matter Experts. This guide focuses only on what you need to do: upload, annotate, and view the raw data in the staging database. Everything else is pre‑wired so you don’t need to worry about infrastructure.
 
+## SME Quickstart
+
+- Open Label Studio: `https://label.boathou.se` (Cloudflare Access)
+- Open project “NER_Data” (or your team project)
+- Verify labeling interface has one block: `<Labels name="label" toName="text" ...>`
+- Click a task → confirm pre‑labels appear inline
+- Adjust spans and labels; Save/Submit
+- Optional: open DBeaver to browse `stage.*` views (read‑only)
+
+Need a new project or a custom label set? See Project Setup for SMEs: [project-setup.mdx](./project-setup.mdx)
+
 ## What You’ll Do
 
 - Upload data to Label Studio (text, PDFs, CSV/XLSX, images with text).
@@ -39,6 +50,13 @@ Tips for high‑quality annotations:
 - Choose the most specific label (e.g., `IMO` vs. generic `VESSEL`).
 - Keep spans tight (no extra whitespace).
 - For CSV/XLSX, if your sheet has multiple useful fields, add a temporary `text` column in Excel/Sheets that concatenates them (no scripts needed).
+
+### SME Checklist (keep handy)
+
+- You see pre‑labels when opening a task
+- The Labels control name is `label` mapped to `text`
+- You’re not annotating HTML (HTML Labels are optional and can be read‑only)
+- Saved work appears in read‑only staging views (`stage.*`)
 
 ## Where Your Work Goes (Tables you’ll use)
 
