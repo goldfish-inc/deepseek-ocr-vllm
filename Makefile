@@ -103,3 +103,16 @@ ner:train:
 
 ner:export:
 	bash scripts/export_onnx.sh $(NER_OUT) distilbert_onnx 63
+
+# NER labels config helpers
+.PHONY: ner:labels-array ner:labels-sync
+
+ner:labels-array:
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
+	python3 scripts/ner_labels_from_labels_json.py > ner_labels.json
+	@echo "Wrote ner_labels.json (ordered label names)"
+
+ner:labels-sync: ner:labels-array
+	@cd cluster && pulumi stack select $(STACK)
+	@pulumi -C cluster config set oceanid-cluster:nerLabels "$(shell cat ner_labels.json)" --secret
+	@echo "Updated oceanid-cluster:nerLabels from ner_labels.json"

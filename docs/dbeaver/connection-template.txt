@@ -1,0 +1,11 @@
+Driver: PostgreSQL
+Host: p.<cluster-id>.db.postgresbridge.com
+Port: 5432
+Database: <db>
+User: <user>   # read-only
+Password: <password>
+SSL: Enabled
+
+Notes:
+- Replace placeholders with your credentials.
+- In DBeaver: Database → New Connection → PostgreSQL → fill the fields above.

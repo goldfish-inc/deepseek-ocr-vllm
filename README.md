@@ -13,13 +13,16 @@ Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflar
 | **[clusters/](clusters/)** | Application workloads (Label Studio, etc.) | Flux CD in-cluster | Push to `clusters/**` |
 | **[policy/](policy/)** | OPA security policies, TypeScript helpers | GitHub Actions CI | All PRs |
 
-**Key Principle:** Cloud resources (DNS, DB) are automated via CI. Cluster bootstrap requires kubeconfig and runs locally. Applications deploy via GitOps.
+**Key Principle:** Cloud resources (DNS, DB) are automated via CI.
+Cluster bootstrap requires kubeconfig and runs locally.
+Applications deploy via GitOps.
 
 ## Architecture Overview
 
-**Oceanid** serves as the **data processing + ML pipeline layer** that cleans and validates data before promotion to the **@ebisu globalDB** (maritime intelligence platform).
+**Oceanid** serves as the **data processing + ML pipeline layer** that cleans and validates data before promotion to
+the **@ebisu globalDB** (maritime intelligence platform).
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │ @oceanid: ETL + ML Pipeline (Staging)                       │
 │                                                              │
@@ -70,7 +73,9 @@ pulumi preview
 
 ### Required Pulumi Config / ESC Keys
 
-All sensitive values are expected to come from Pulumi ESC via `Pulumi.prod.yaml`. Populate the `default/oceanid-cluster` environment (or override via `pulumi config`) with the following keys before running `pulumi up`:
+All sensitive values are expected to come from Pulumi ESC via `Pulumi.prod.yaml`.
+Populate the `default/oceanid-cluster` environment (or override via `pulumi config`) with the following keys before
+running `pulumi up`:
 
 | Key | Description |
 | --- | ----------- |
@@ -93,7 +98,8 @@ All sensitive values are expected to come from Pulumi ESC via `Pulumi.prod.yaml`
 | `gitRepositoryBranch` | Branch Flux reconciles (default: `main`). |
 | `gitRepositoryPath` | Path within the repo containing the kustomizations (default: `clusters/tethys`). |
 
-Kubeconfig location and GitOps settings can also be supplied through conventional Pulumi config (`pulumi config set oceanid-cluster:kubeconfigPath ...`).
+Kubeconfig location and GitOps settings can also be supplied through conventional Pulumi config
+(`pulumi config set oceanid-cluster:kubeconfigPath ...`).
 
 Example resource override (set via `pulumi config set --path` or ESC JSON):
 
@@ -104,7 +110,7 @@ pulumi config set --path 'oceanid-cluster:cloudflareTunnelResources.limits.memor
 
 ## Repository Layout
 
-```
+```text
 .
 ├── cluster/
 │   ├── src/
@@ -176,8 +182,10 @@ kubectl get nodes
 This is the standardized path to the GPU workstation — do not reinvent this.
 
 - DNS: `gpu.<base>` (e.g., `gpu.boathou.se`) is a CNAME to the Cloudflare Node Tunnel target `TUNNEL_ID.cfargotunnel.com`.
-- Host tunnel on Calypso: Pulumi `HostCloudflared` renders `/etc/cloudflared/config.yaml` and a systemd unit `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
-- Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds `/opt/triton/models`.
+- Host tunnel on Calypso: Pulumi `HostCloudflared` renders `/etc/cloudflared/config.yaml` and a systemd unit
+  `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
+- Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds
+  `/opt/triton/models`.
 - Adapter in cluster: `ls-triton-adapter` calls `TRITON_BASE_URL=https://gpu.<base>`.
 - When enabled, the adapter presents a Cloudflare Access service token so the public GPU endpoint is not exposed to the world.
 - Pulumi flags/keys: `enableCalypsoHostConnector=true`, `cloudflareNodeTunnelId|Token|Hostname`, optional `tritonImage`.
@@ -204,7 +212,7 @@ sequenceDiagram
   AD-->>LS: pre-labels
   ```
 
-  Admin commands (Calypso):
+Admin commands (Calypso):
 
 - Restart Triton: `sudo systemctl restart tritonserver`
 - Restart tunnel: `sudo systemctl restart cloudflared-node`
@@ -272,7 +280,8 @@ For SMEs working with multi-format data:
 - v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically in-cluster and import clean tasks into Label Studio.
 
 See the detailed guide with diagrams: `docs/SME_WORKFLOW.md`.
-For DB access and staging table workflows, see `@docs/guides/SME/index.md`.
+For DB access and staging table workflows, see `@docs/guides/SME/index.mdx`.
+For docs-site SQLPlayground setup and the `staging` alias, see `docs/operations/sqlplayground-connection.mdx`.
 
 ## External Postgres (CrunchyBridge)
 

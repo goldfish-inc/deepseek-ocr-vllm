@@ -2,9 +2,11 @@
 
 Audience: Subject Matter Experts working with text, PDFs, images, and CSVs.
 
-Goal: Show what to upload, how pre-labels appear, how to save, and where your work goes. CSVs are supported now (v1). Your existing pandas spreadsheet cleaners will be integrated next (v2) so you won’t run them manually.
+Goal: Show what to upload, how pre-labels appear, how to save, and where your work goes.
+CSVs are supported now (v1).
+Your existing pandas spreadsheet cleaners will be integrated next (v2) so you won’t run them manually.
 
-Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Accessing Raw Data (Staging)](../@docs/guides/SME/index.md)
+Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Accessing Raw Data (Staging)](../@docs/guides/SME/index.mdx)
 
 ## What You Do
 
@@ -47,7 +49,7 @@ sequenceDiagram
 - Keep all other columns; they are preserved as metadata for provenance and later use.
 - Examples:
 
-```
+```csv
 text,pdf,meta_id
 "Vessel IMO 9395044 entered Singapore on 2024-09-01",,doc-123
 ,"https://example.com/report.pdf",doc-124
@@ -58,7 +60,8 @@ text,pdf,meta_id
   - Mapping: map your text column to “text”; keep pdf/url columns (no special mapping required).
   - The ML backend is already wired to our adapter; open a task to see pre-labels.
 - Best practices:
-  - If rows don’t have a single “text” column, create a temporary text column (in Excel/Sheets, no scripts) that combines the most useful fields (e.g., “Vessel {VESSEL_NAME} (IMO {IMO}) arrived {DATE} at {PORT}”).
+  - If rows don’t have a single “text” column, create a temporary text column (in Excel/Sheets, no scripts)
+    that combines the most useful fields (e.g., “Vessel {VESSEL_NAME} (IMO {IMO}) arrived {DATE} at {PORT}”).
   - For PDFs, ensure the pdf/url column contains a working HTTPS link.
   - For XLSX, the system reads all sheets/cells and generates header-aware “Header: Value” lines for NER.
 
@@ -85,7 +88,8 @@ flowchart LR
 
 ## Label Set (What You’ll See)
 
-- Entities aligned to our schema, e.g., VESSEL, VESSEL_NAME, IMO, MMSI, IRCS, FLAG, PORT, ORGANIZATION, PERSON, COMPANY, HS_CODE, SPECIES, DATE, LOCATION, RISK_LEVEL, etc.
+- Entities aligned to our schema, e.g., VESSEL, VESSEL_NAME, IMO, MMSI, IRCS, FLAG, PORT, ORGANIZATION, PERSON,
+  COMPANY, HS_CODE, SPECIES, DATE, LOCATION, RISK_LEVEL, etc.
 - These labels map downstream to curated tables so your work supports analytics and intelligence.
 
 ## Quality Loop (Why Your Edits Matter)
@@ -111,8 +115,10 @@ flowchart LR
 ## Coming in v2: Your Pandas Cleaners, Integrated
 
 - What changes for you:
-  - You won’t run scripts locally. The system will run your existing pandas cleaners automatically in the cluster.
-  - Cleaners will normalize per-country spreadsheets (encodings, delimiters, dates), compose a high-signal text column, and import clean tasks to LS on a schedule or on demand.
+  - You won’t run scripts locally.
+    The system will run your existing pandas cleaners automatically in the cluster.
+  - Cleaners will normalize per-country spreadsheets (encodings, delimiters, dates), compose a high-signal text column,
+    and import clean tasks to LS on a schedule or on demand.
 - What stays the same:
   - You keep using LS to review pre-labels, correct spans, and save.
   - Your work still flows to the HF dataset and Postgres stage for QA and downstream use.

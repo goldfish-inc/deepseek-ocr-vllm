@@ -112,6 +112,7 @@ pulumi -C cluster up
 ## ML Backend Configuration (Auto‑provisioned)
 
 Project `NER_Data` is auto‑provisioned in‑cluster:
+
 - ML backend wired to `http://ls-triton-adapter.apps.svc.cluster.local:9090`
 - Full NER label interface applied from ESC/labels.json
 - Webhooks registered for `TASK_CREATED` → sink `/ingest` (writes raw CSV/XLSX rows)

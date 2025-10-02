@@ -1,0 +1,87 @@
+# SQLPlayground Staging Connection
+
+This page explains how the docs site exposes a read‑only Postgres connection alias (`staging`) to power the SQLPlayground blocks used in SME guides.
+
+## Goals
+
+- Provide safe, read‑only access to a subset of the staging database for interactive docs.
+- Keep credentials out of client bundles and version control.
+- Make usage simple for authors: `<SQLPlayground connection="staging" readOnly defaultQuery={...} />`.
+
+## Recommended Setup
+
+- Create a dedicated Postgres user with read‑only privileges on the `stage` schema and selected views/tables.
+- Provision a DSN/URL as a site secret (not checked into git):
+  - Example env var name: `DOCS_SQL_STAGING_URL` (postgresql://user:pass@host:5432/db)
+- Implement the SQLPlayground server handler to read from the env var and execute queries server‑side.
+- Enforce read‑only at the server layer (reject `INSERT/UPDATE/DELETE/ALTER`, allow `SELECT`, limit runtime and result size).
+- Map the alias `staging` → `DOCS_SQL_STAGING_URL` in server config.
+
+```mermaid
+flowchart LR
+  U[Docs Viewer] --> P[SQLPlayground UI]
+  P --> H[Server Handler]
+  H -->|TLS| DB[(CrunchyBridge Postgres)]
+  H -. env var .-> S[DOCS_SQL_STAGING_URL]
+```
+
+## Minimal Policy
+
+- SQL allowlist: only `SELECT` statements; everything else rejected.
+- Result limits: e.g., `LIMIT 500` enforced server‑side when missing.
+- Timeout: cancel queries > 5s.
+- Schema scope: restrict to `stage.*` and approved views.
+
+## Example (Pseudo‑Code)
+
+```ts
+// /api/sqlplayground/[alias].ts
+import { Pool } from 'pg';
+
+const CONNECTIONS = {
+  staging: process.env.DOCS_SQL_STAGING_URL!,
+};
+
+export default async function handler(req, res) {
+  const { alias } = req.query;
+  const sql = String(req.body?.query || '').trim();
+  if (!CONNECTIONS[alias]) return res.status(404).json({ error: 'Unknown alias' });
+
+  // Simple read-only guard
+  if (!/^select\s/i.test(sql)) return res.status(400).json({ error: 'Read-only: SELECT only' });
+
+  // Ensure limit
+  const normalized = /limit\s+\d+\s*;?$/i.test(sql) ? sql : `${sql}\nLIMIT 500;`;
+
+  const pool = new Pool({ connectionString: CONNECTIONS[alias], ssl: { rejectUnauthorized: false } });
+  try {
+    const r = await pool.query({ text: normalized, rowMode: 'array' });
+    res.json({ columns: r.fields.map(f => f.name), rows: r.rows });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  } finally {
+    pool.end();
+  }
+}
+```
+
+## Docs Author Usage
+
+- Use the component with `connection="staging"` and `readOnly` for visual cues:
+
+```mdx
+<SQLPlayground
+  title="Recent document stats"
+  connection="staging"
+  readOnly
+  defaultQuery={`SELECT *\nFROM stage.v_document_processing_stats\nORDER BY last_processed_at DESC NULLS LAST\nLIMIT 50;`}
+/>
+```
+
+## Operational Notes
+
+- Rotate the read‑only password on a schedule (monthly/quarterly).
+- The database account must only have `SELECT` on `stage.*` and specific views; no write privileges.
+- Consider caching common queries (e.g., stats view) to reduce DB load.
+- In incident mode, disable the handler or the alias quickly via env/feature flag.
+
