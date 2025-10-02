@@ -62,6 +62,22 @@ async def _maybe_init_pg():
                 meta jsonb,
                 created_at timestamptz default now()
             );
+            create table if not exists stage.pdf_boxes (
+                id bigserial primary key,
+                document_id bigint references stage.documents(id) on delete cascade,
+                external_task_id text,
+                label text,
+                page int,
+                x_pct double precision,
+                y_pct double precision,
+                w_pct double precision,
+                h_pct double precision,
+                image_width int,
+                image_height int,
+                image_url text,
+                annotator text,
+                created_at timestamptz default now()
+            );
             """)
     except Exception:
         _pg_pool = None
@@ -161,13 +177,62 @@ async def webhook(req: Request):
         hf_ok = True
     except Exception:
         hf_ok = False
-    # Insert spans/doc into PG (spans omitted here; adapter delivers spans via other path)
+    # Insert doc + any rectangle labels (image boxes) into PG
     if _pg_pool is not None:
         try:
             async with _pg_pool.acquire() as conn:
-                await conn.execute(
-                    "insert into stage.documents(external_id, source, content) values($1,$2,$3)",
-                    doc["metadata"].get("task_id"), "label_studio", text or "")
+                task_id = doc["metadata"].get("task_id")
+                # Ensure a document row exists and capture id
+                doc_id = await conn.fetchval("select id from stage.documents where external_id=$1", task_id)
+                if not doc_id:
+                    doc_id = await conn.fetchval(
+                        "insert into stage.documents(external_id, source, content) values($1,$2,$3) returning id",
+                        task_id, "label_studio", text or ""
+                    )
+                # Parse rectangle labels if present
+                ann = payload.get("annotation") or {}
+                results = ann.get("result") or []
+                if isinstance(results, list):
+                    data = (task.get("data") or {}) if isinstance(task, dict) else {}
+                    image_url = None
+                    for key in ("image", "image_url", "img", "file", "file_upload"):
+                        v = data.get(key)
+                        if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                            image_url = v
+                            break
+                    for r in results:
+                        try:
+                            if not isinstance(r, dict):
+                                continue
+                            if (r.get("type") or "").lower() != "rectanglelabels":
+                                continue
+                            val = r.get("value") or {}
+                            # LS reports percentages 0-100
+                            x_pct = float(val.get("x", 0.0))
+                            y_pct = float(val.get("y", 0.0))
+                            w_pct = float(val.get("width", 0.0))
+                            h_pct = float(val.get("height", 0.0))
+                            labels = val.get("rectanglelabels") or []
+                            label = labels[0] if labels else None
+                            if label is None:
+                                continue
+                            img_w = int(r.get("original_width") or 0)
+                            img_h = int(r.get("original_height") or 0)
+                            page = int((data.get("page") or data.get("page_number") or 0) or 0)
+                            await conn.execute(
+                                """
+                                insert into stage.pdf_boxes(
+                                    document_id, external_task_id, label, page,
+                                    x_pct, y_pct, w_pct, h_pct,
+                                    image_width, image_height, image_url, annotator
+                                ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                                """,
+                                doc_id, str(task_id), str(label), page,
+                                x_pct, y_pct, w_pct, h_pct,
+                                img_w, img_h, image_url, str(annotator)
+                            )
+                        except Exception:
+                            continue
         except Exception:
             pass
     return {"ok": True, "hf_commit": hf_ok}
@@ -255,4 +320,3 @@ async def ingest(req: Request):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
-
