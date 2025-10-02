@@ -32,6 +32,7 @@
 
 - [Operations Overview](./operations/overview.md) - Operational procedures
 - [ML Backend & Ingest](./operations/ml-backend-and-ingest.md) - Adapter, sink, and project auto‑provisioning
+- [Image Versioning & Rollbacks](./operations/image-versioning.md) - SHA‑pinned images and rollback flow
 - [Automated Updates](./operations/automated-updates.md) - Image update automation
 - [Version Monitoring](./operations/version-monitoring.md) - Version tracking
 - [Version Audit](./operations/version-audit.md) - Dependency audit

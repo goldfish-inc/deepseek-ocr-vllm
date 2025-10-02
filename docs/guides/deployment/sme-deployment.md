@@ -109,11 +109,14 @@ pulumi -C cluster config set oceanid-cluster:smeAdditionalEmails '["user1@exampl
 pulumi -C cluster up
 ```
 
-## ML Backend Configuration
+## ML Backend Configuration (Auto‑provisioned)
 
-The adapter is automatically configured as the ML backend for Label Studio.
+Project `NER_Data` is auto‑provisioned in‑cluster:
+- ML backend wired to `http://ls-triton-adapter.apps.svc.cluster.local:9090`
+- Full NER label interface applied from ESC/labels.json
+- Webhooks registered for `TASK_CREATED` → sink `/ingest` (writes raw CSV/XLSX rows)
 
-### Testing the Adapter
+### Testing the Adapter (health + setup)
 
 ```bash
 # Port-forward to test locally
@@ -121,6 +124,8 @@ kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
 
 # Health check
 curl http://localhost:9090/health
+curl -X GET http://localhost:9090/setup
+curl -X POST http://localhost:9090/setup -H 'Content-Type: application/json' -d '{}'
 
 # NER prediction (once BERT model is deployed)
 curl -X POST http://localhost:9090/predict \
@@ -128,7 +133,7 @@ curl -X POST http://localhost:9090/predict \
   -d '{"model":"bert-base-uncased","task":"ner","text":"MV Ocean Warrior IMO 1234567"}'
 ```
 
-## BERT Model Deployment
+## Model Deployment (Triton)
 
 ### Install ONNX Model on Calypso
 
@@ -139,7 +144,7 @@ ssh oceanid@192.168.2.80
 # Create model directory
 sudo mkdir -p /opt/triton/models/bert-base-uncased/1
 
-# Copy your 63-label BERT ONNX model
+# Copy your 63‑label BERT ONNX model
 sudo cp bert-ner-63labels.onnx /opt/triton/models/bert-base-uncased/1/model.onnx
 
 # Restart Triton
@@ -184,6 +189,9 @@ kubectl logs -n apps deployment/label-studio --tail=100
 
 # Adapter logs
 kubectl logs -n apps deployment/ls-triton-adapter --tail=100
+
+# Sink logs (ingest/webhook)
+kubectl logs -n apps deployment/annotations-sink --tail=100
 ```
 
 ## Troubleshooting
@@ -207,8 +215,14 @@ kubectl get ingress -n apps
 # Verify adapter is running
 kubectl get pods -n apps -l app=ls-triton-adapter
 
-# Check environment variables
-kubectl describe deployment/label-studio -n apps | grep ML_BACKEND
+# Health & setup
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+curl -s http://localhost:9090/health
+curl -s -X GET http://localhost:9090/setup
+curl -s -X POST http://localhost:9090/setup -H 'Content-Type: application/json' -d '{}'
+
+# NER_LABELS env (must be present)
+kubectl -n apps get deploy ls-triton-adapter -o jsonpath='{.spec.template.spec.containers[0].env[*]}' | tr ' ' '\n' | grep NER_LABELS -A1
 ```
 
 ### Cloudflare Access Issues
@@ -220,6 +234,14 @@ pulumi -C cluster stack output smeAccess
 # Check email domain configuration
 pulumi -C cluster config get oceanid-cluster:accessAllowedEmailDomain
 ```
+
+## Image Versioning (GHCR, private)
+
+- Images are built with immutable git SHA tags and pulled from GHCR:
+  - Adapter: `ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:<sha>`
+  - Sink: `ghcr.io/goldfish-inc/oceanid/annotations-sink:<sha>`
+- The cluster uses an imagePullSecret (apps/ghcr-creds) created from ESC credentials.
+- Rollback: set `adapterImage` / `sinkImage` in ESC to a prior SHA and `pulumi -C cluster up`.
 
 ## Infrastructure as Code Benefits
 

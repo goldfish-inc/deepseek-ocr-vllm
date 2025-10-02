@@ -318,20 +318,15 @@ curl http://localhost:8080/health | jq
 
 ### 3. Test End-to-End Flow
 
-**CSV ingestion test:**
+**CSV/XLSX ingestion test (via Label Studio):**
 
 ```bash
-# Place test CSV in watched directory
-cp data/raw/vessels/SEAFO_vessels_2025-08-26.csv /data/incoming/
+# Import a CSV or XLSX file into the NER_Data project in Label Studio
+# The sink /ingest endpoint will write raw rows to stage.table_ingest and flattened text to stage.documents
 
-# Monitor processing
-psql $DATABASE_URL -c "SELECT * FROM stage.document_processing_log ORDER BY triggered_at DESC LIMIT 5;"
-
-# Check extractions
-psql $DATABASE_URL -c "SELECT document_id, column_name, raw_value, cleaned_value, confidence FROM stage.csv_extractions LIMIT 10;"
-
-# Review queue (low confidence)
-psql $DATABASE_URL -c "SELECT * FROM stage.v_review_queue LIMIT 10;"
+# Check ingest counts
+psql $DATABASE_URL -c "SELECT count(*) FROM stage.table_ingest;"
+psql $DATABASE_URL -c "SELECT count(*) FROM stage.documents;"
 ```
 
 **NER extraction test:**
