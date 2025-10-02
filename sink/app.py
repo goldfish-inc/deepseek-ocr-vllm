@@ -19,6 +19,14 @@ except Exception:
 
 from huggingface_hub import HfApi, create_repo, CommitOperationAdd
 import httpx, csv, io, zipfile, xml.etree.ElementTree as ET
+try:
+    import requests  # type: ignore
+except Exception:
+    requests = None
+try:
+    import pypdf  # type: ignore
+except Exception:
+    pypdf = None
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 HF_REPO = os.getenv("HF_REPO", "goldfish-inc/oceanid-annotations")
@@ -78,10 +86,23 @@ async def _maybe_init_pg():
                 image_url text,
                 pdf_url text,
                 annotator text,
+                -- PDF-point geometry (computed best-effort)
+                page_width_pt double precision,
+                page_height_pt double precision,
+                x_pt double precision,
+                y_pt double precision,
+                w_pt double precision,
+                h_pt double precision,
                 created_at timestamptz default now()
             );
             alter table stage.pdf_boxes add column if not exists project_id text;
             alter table stage.pdf_boxes add column if not exists pdf_url text;
+            alter table stage.pdf_boxes add column if not exists page_width_pt double precision;
+            alter table stage.pdf_boxes add column if not exists page_height_pt double precision;
+            alter table stage.pdf_boxes add column if not exists x_pt double precision;
+            alter table stage.pdf_boxes add column if not exists y_pt double precision;
+            alter table stage.pdf_boxes add column if not exists w_pt double precision;
+            alter table stage.pdf_boxes add column if not exists h_pt double precision;
             do $$ begin
               execute 'create or replace view stage.v_pdf_boxes_latest as '
                 || 'with ranked as ('
@@ -215,6 +236,26 @@ async def webhook(req: Request):
                         if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
                             image_url = v
                             break
+                    pdf_url = None
+                    for key in ("pdf_url","pdf","document","url"):
+                        v = data.get(key)
+                        if isinstance(v, str) and (v.startswith("http://") or v.startswith("https://")):
+                            pdf_url = v
+                            break
+                    # Best-effort PDF page size resolver
+                    def _pdf_page_size(url: str, page_index0: int):
+                        if not url or requests is None or pypdf is None:
+                            return None
+                        try:
+                            r = requests.get(url, timeout=10)
+                            r.raise_for_status()
+                            reader = pypdf.PdfReader(io.BytesIO(r.content))
+                            if 0 <= page_index0 < len(reader.pages):
+                                mb = reader.pages[page_index0].mediabox
+                                return float(mb.width), float(mb.height)
+                        except Exception:
+                            return None
+                        return None
                     for r in results:
                         try:
                             if not isinstance(r, dict):
@@ -234,17 +275,29 @@ async def webhook(req: Request):
                             img_w = int(r.get("original_width") or 0)
                             img_h = int(r.get("original_height") or 0)
                             page = int((data.get("page") or data.get("page_number") or 0) or 0)
+                            # Compute PDF-point coords if possible
+                            width_pt = height_pt = x_pt = y_pt = w_pt = h_pt = None
+                            if pdf_url:
+                                sz = _pdf_page_size(pdf_url, max(page-1, 0))
+                                if sz:
+                                    width_pt, height_pt = sz
+                                    w_pt = (w_pct/100.0) * width_pt
+                                    h_pt = (h_pct/100.0) * height_pt
+                                    x_pt = (x_pct/100.0) * width_pt
+                                    y_pt = height_pt - ((y_pct/100.0) * height_pt) - h_pt
                             await conn.execute(
                                 """
                                 insert into stage.pdf_boxes(
-                                    document_id, external_task_id, label, page,
+                                    document_id, external_task_id, project_id, label, page,
                                     x_pct, y_pct, w_pct, h_pct,
-                                    image_width, image_height, image_url, annotator
-                                ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                                    image_width, image_height, image_url, pdf_url, annotator,
+                                    page_width_pt, page_height_pt, x_pt, y_pt, w_pt, h_pt
+                                ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
                                 """,
-                                doc_id, str(task_id), str(label), page,
+                                doc_id, str(task_id), str(project_id) if project_id is not None else None, str(label), page,
                                 x_pct, y_pct, w_pct, h_pct,
-                                img_w, img_h, image_url, str(annotator)
+                                img_w, img_h, image_url, pdf_url, str(annotator),
+                                width_pt, height_pt, x_pt, y_pt, w_pt, h_pt
                             )
                         except Exception:
                             continue
