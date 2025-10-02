@@ -48,6 +48,19 @@ Minimal interface (paste into Settings → Labeling Interface):
 
 Tip: Keep spans tight and choose specific labels (e.g., IMO vs. VESSEL).
 
+### Notes on HTML and Tables
+
+- Use the Text control for all primary annotations. The Labels control should be named `label` and mapped to `toName="text"`.
+- HTML Labels are optional and not required for CSV/XLSX. Our adapter flattens CSV/XLSX rows to plain text (e.g., `Header: Value` lines) before pre‑labeling, so `label`→`text` is sufficient.
+- If your project includes an HTML/HyperText view for reference, keep it read‑only or (if annotating HTML) use a distinct control name such as `label_html` mapped to `toName="html"`. Do not duplicate the name `label` across multiple controls; Label Studio will reject the config with “Label config contains non‑unique names”.
+
+### Verify Your Mapping (optional)
+
+If you see validation errors or missing predictions:
+- Open Settings → Labeling Interface and confirm there is exactly one `<Labels name="label" toName="text" ...>` block.
+- If there is also an HTML Labels block, ensure it has a unique `name` (e.g., `label_html`).
+- Make sure “Show predictions” and (optionally) “Auto‑annotation” are enabled under Annotation Settings.
+
 ### Interactive: Generate Full Labeling Interface from labels.json
 
 Paste your `labels.json` to generate the full Labeling Interface XML. Runs in your browser.
@@ -184,4 +197,3 @@ If your project title is different or you prefer ID‑based targeting, use `scri
 - Backend test fails: confirm URL and that the adapter is reachable in cluster; try again
 - No predictions: ensure the Model is connected and Auto‑annotation/Show predictions are enabled
 - Webhooks missing: ask ops to re‑register; tasks and annotations should trigger sink endpoints
-

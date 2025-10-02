@@ -4,18 +4,18 @@ This document explains how Label Studio authentication is configured in the Ocea
 
 ## Authentication Architecture
 
-Label Studio 1.21.0 uses **JWT-based Personal Access Tokens (PAT)** as the default authentication method, replacing legacy API tokens. However, the API still supports legacy token authentication when enabled.
+Label Studio 1.21.0 uses **JWT-based Personal Access Tokens (PAT)** as the default authentication method, replacing legacy API tokens. PATs act as refresh tokens; clients exchange a PAT for a short‑lived access token used with Bearer auth. The API can also support legacy token authentication when enabled.
 
 ### Token Types
 
 1. **Personal Access Tokens (JWT)** - Default in v1.21.0+
    - Created via UI: `https://label.boathou.se/user/account/personal-access-token`
    - Format: JWT token (starts with `eyJ...`)
-   - Requires organization setting: `legacy_api_tokens_enabled = true`
+   - Usage: exchange PAT for access token via `/api/token/refresh`, then use `Authorization: Bearer <access>`
 
-2. **Legacy API Tokens** - Supported but disabled by default
+2. **Legacy API Tokens** - Optional and disabled by default
    - Simpler token format
-   - Backward compatible with older Label Studio versions
+   - Backward compatible with older Label Studio versions; requires `LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN=true`
 
 ## Configuration
 
@@ -43,29 +43,47 @@ env: [
 
 ## API Usage
 
-Once configured, use tokens with the `Token` authentication scheme:
+Recommended (PAT refresh → Bearer):
 
 ```bash
-# Get your token from: https://label.boathou.se/user/account/personal-access-token
+# 1) Get PAT (refresh token) from the UI
+PAT='<your PAT>'
 
-# Use with API
-curl -H "Authorization: Token <your-jwt-token>" \
+# 2) Exchange PAT → access token (5 min expiry)
+ACCESS=$(curl -s -X POST https://label.boathou.se/api/token/refresh \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh\": \"$PAT\"}" | jq -r .access)
+
+# 3) Use access token with Bearer auth
+curl -H "Authorization: Bearer $ACCESS" \
+     https://label.boathou.se/api/projects/
+```
+
+Ops tip (ESC):
+
+```bash
+# Retrieve PAT from Pulumi ESC
+PAT=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioPat --value string --show-secrets)
+```
+
+Legacy scheme (if enabled):
+
+```bash
+curl -H "Authorization: Token <legacy-api-token>" \
      https://label.boathou.se/api/projects/
 ```
 
 ## Troubleshooting
 
-### "Invalid token" Error
+### 401 / Invalid token
 
-**Symptom**: API returns `{"detail": "Invalid token."}`
+Symptoms:
+- `{"detail": "Given token not valid for any token type"}` (expired access token)
+- `{"detail": "Invalid token."}` (using PAT directly with Bearer or using legacy scheme without enabling it)
 
-**Cause**: The organization doesn't have `legacy_api_tokens_enabled` set to `true`.
-
-**Solution**:
-
-1. Ensure `LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN=true` is in deployment
-2. Restart Label Studio pod to apply changes
-3. Regenerate token if created before fix
+Fixes:
+- Always refresh the PAT to get a short‑lived access token; then use `Authorization: Bearer <access>`
+- If you need legacy tokens, enable `LABEL_STUDIO_ENABLE_LEGACY_API_TOKEN=true` and use `Authorization: Token <legacy-token>`
 
 ### "Authentication credentials were not provided"
 
@@ -84,13 +102,9 @@ curl -H "Authorization: Token <your-jwt-token>" \
 ### Authentication Flow
 
 1. User creates PAT in Label Studio UI
-2. JWT token is generated and stored in database
-3. API request includes `Authorization: Token <jwt>`
-4. `TokenAuthenticationPhaseout` class validates:
-   - Token exists in database
-   - Organization has `legacy_api_tokens_enabled = true`
-   - User/org is active
-5. If valid, request proceeds; otherwise 401
+2. Client exchanges PAT at `/api/token/refresh` for a short‑lived access token
+3. API request includes `Authorization: Bearer <access>`
+4. On expiry, client refreshes access token using PAT
 
 ### Django Configuration
 
