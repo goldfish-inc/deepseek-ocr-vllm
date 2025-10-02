@@ -66,6 +66,7 @@ async def _maybe_init_pg():
                 id bigserial primary key,
                 document_id bigint references stage.documents(id) on delete cascade,
                 external_task_id text,
+                project_id text,
                 label text,
                 page int,
                 x_pct double precision,
@@ -75,9 +76,23 @@ async def _maybe_init_pg():
                 image_width int,
                 image_height int,
                 image_url text,
+                pdf_url text,
                 annotator text,
                 created_at timestamptz default now()
             );
+            alter table stage.pdf_boxes add column if not exists project_id text;
+            alter table stage.pdf_boxes add column if not exists pdf_url text;
+            do $$ begin
+              execute 'create or replace view stage.v_pdf_boxes_latest as '
+                || 'with ranked as ('
+                || '  select pb.*, d.external_id, '
+                || '         row_number() over (partition by pb.document_id, pb.page, pb.label, pb.x_pct, pb.y_pct, pb.w_pct, pb.h_pct '
+                || '                           order by pb.created_at desc) as rn '
+                || '  from stage.pdf_boxes pb '
+                || '  left join stage.documents d on d.id = pb.document_id'
+                || ') '
+                || 'select * from ranked where rn = 1';
+            exception when others then null; end $$;
             """)
     except Exception:
         _pg_pool = None
