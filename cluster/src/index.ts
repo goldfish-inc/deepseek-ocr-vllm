@@ -521,9 +521,10 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
 (() => {
     const cfg = new pulumi.Config();
     const pgUrl = cfg.getSecret("postgres_url");
-    if (!pgUrl) return;
+    const enableDbVerify = cfg.getBoolean("enableDbVerify") ?? false;
+    if (!pgUrl || !enableDbVerify) return;
     new k8s.batch.v1.Job("db-verify-ingest", {
-        metadata: { name: "db-verify-ingest", namespace: "apps" },
+        metadata: { name: "db-verify-ingest", namespace: "apps", annotations: { "pulumi.com/skipAwait": "true" } },
         spec: {
             backoffLimit: 0,
             template: {
