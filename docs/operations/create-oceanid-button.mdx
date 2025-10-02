@@ -1,0 +1,94 @@
+# Create Oceanid Button (Label Studio Header)
+
+Goal: Add a "Create Oceanid" button next to the default Create button in Label Studio that provisions a standard Oceanid NER project. Optionally enable TaBERT (experimental).
+
+Two options:
+
+## Option A — Docs Launcher (fast)
+
+- Expose the Project Bootstrapper service at a public route via Cloudflare (e.g., `https://oceanid.boathou.se/create`).
+- Add a link/button in the docs UI that calls the endpoint and redirects to the new project.
+
+Example launcher (docs MDX):
+
+```jsx live
+async function createProject(tabert=false){
+  const title = prompt('Project title', 'Oceanid NER ' + new Date().toISOString().slice(0,10));
+  if (!title) return;
+  const r = await fetch('https://oceanid.boathou.se/create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, description: tabert? 'TABERT experimental': '', tabert })
+  });
+  const data = await r.json();
+  if (data.project_url) window.location.href = data.project_url;
+  else alert('Failed: ' + JSON.stringify(data));
+}
+
+<div style={{display:'flex', gap: 8}}>
+  <button onClick={()=>createProject(false)}>Create Oceanid</button>
+  <button onClick={()=>createProject(true)}>Create Oceanid (TaBERT)</button>
+  </div>
+```
+
+## Option B — Header Injection (Cloudflare Worker)
+
+- Use a Cloudflare Worker HTMLRewriter to append a "Create Oceanid" button in Label Studio’s `/projects` page toolbar.
+- The button calls the bootstrapper endpoint and then redirects to the created project.
+
+Worker (TypeScript) sketch:
+
+```ts
+export default {
+  async fetch(req: Request, env: any, ctx: ExecutionContext) {
+    const url = new URL(req.url);
+    const origin = await fetch(req);
+    if (url.pathname === '/projects' && origin.headers.get('content-type')?.includes('text/html')) {
+      const rewriter = new HTMLRewriter().on('div:has(> a[href="/projects/create"])', new Toolbar(env));
+      return rewriter.transform(origin);
+    }
+    return origin;
+  }
+}
+
+class Toolbar {
+  constructor(private env: any) {}
+  element(el: Element) {
+    el.append(`<button id="create-oceanid" style="margin-left:8px">Create Oceanid</button>`, {html: true});
+    el.append(`<button id="create-oceanid-tabert" style="margin-left:4px">TaBERT (exp)</button>`, {html: true});
+    el.append(`<script>(function(){
+      async function go(tabert){
+        const title = prompt('Project title', 'Oceanid NER ' + new Date().toISOString().slice(0,10));
+        if(!title) return;
+        const r = await fetch('${this.env.PROJECT_BOOTSTRAPPER_URL}/create', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ title, description: tabert?'TABERT experimental':'', tabert })
+        });
+        const d = await r.json(); if(d.project_url) location.href=d.project_url; else alert('Failed: '+JSON.stringify(d));
+      }
+      document.getElementById('create-oceanid').onclick = ()=>go(false);
+      document.getElementById('create-oceanid-tabert').onclick = ()=>go(true);
+    })();</script>`, {html: true});
+  }
+}
+```
+
+Configure via Pulumi (cloud/): bind `PROJECT_BOOTSTRAPPER_URL` to the bootstrapper’s public URL.
+
+## Backend: Project Bootstrapper
+
+The cluster component `ProjectBootstrapper` deploys a small FastAPI service that:
+- Creates a Label Studio project
+- Applies the NER Labeling Interface from `NER_LABELS_JSON`
+- Connects DistilBERT NER backend (and TaBERT if requested)
+- Ensures webhooks to the annotations sink
+
+Code: `cluster/src/components/projectBootstrapper.ts`
+
+Expose it with DNS/Access as needed (e.g., `oceanid.boathou.se/create`).
+
+## Recommended Path (now)
+
+- Enable the Bootstrapper service and expose it at `oceanid.boathou.se/create`.
+- Add the Docs Launcher buttons in `@docs/guides/SME/index.mdx` and point SMEs there.
+- Next, add the Cloudflare Worker to inject the header buttons in Label Studio.
+

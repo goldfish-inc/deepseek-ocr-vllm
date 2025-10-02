@@ -14,6 +14,7 @@ import { PostgresDatabase } from "./components/postgresDatabase";
 // =============================================================================
 
 const cfg = new pulumi.Config();
+const cloudflareAccountId = cfg.get("cloudflareAccountId");
 
 // =============================================================================
 // CRUNCHYBRIDGE POSTGRESQL 17 DATABASE
@@ -198,3 +199,63 @@ export const gpuAccessAppId = gpuAccessApp?.id;
 // PULUMI ESC
 // =============================================================================
 // ESC environment remains default/oceanid-cluster (shared with bootstrap project)
+
+// =============================================================================
+// LABEL STUDIO: "Create Oceanid" header button via Cloudflare Worker (optional)
+// =============================================================================
+
+const enableLsHeaderButton = cfg.getBoolean("enableLsHeaderButton") ?? false;
+const projectBootstrapperUrl = cfg.get("projectBootstrapperUrl");
+
+if (enableLsHeaderButton) {
+    if (!cloudflareAccountId) {
+        throw new Error("cloudflareAccountId not set; required for Workers");
+    }
+    if (!projectBootstrapperUrl) {
+        throw new Error("projectBootstrapperUrl not set; required to create Oceanid projects");
+    }
+
+    const workerName = "ls-header-injector";
+    const workerScriptContent = `
+export default {
+  async fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    const res = await fetch(req);
+    const ct = res.headers.get('content-type') || '';
+    // Only rewrite HTML for Project list and overview pages
+    if (!ct.includes('text/html') || !/^\/projects(\/.*)?$/.test(url.pathname)) {
+      return res;
+    }
+    const bootstrapUrl = ${JSON.stringify(projectBootstrapperUrl)};
+    class ButtonInjector {
+      element(el) {
+        el.after(`<button id="create-oceanid" style="margin-left:8px" class="ls-button primary">Create Oceanid<\/button>`, { html: true });
+        el.after(`<button id="create-oceanid-tabert" style="margin-left:4px" class="ls-button">TaBERT (exp)<\/button>`, { html: true });
+      }
+    }
+    class ScriptInjector {
+      element(el) {
+        el.append(`<script>(function(){\n  async function go(tabert){\n    const d=new Date().toISOString().slice(0,10);\n    const title=prompt('Project title','Oceanid NER '+d);\n    if(!title) return;\n    const r=await fetch('${projectBootstrapperUrl}/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title, description: tabert?'TABERT experimental':'', tabert})});\n    try{const data=await r.json(); if(data.project_url){ location.href=data.project_url; } else { alert('Failed: '+JSON.stringify(data)); }}catch(e){ alert('Failed to parse response'); }\n  }\n  addEventListener('click', function(e){\n    const t=e.target;\n    if(t && t.id==='create-oceanid'){ e.preventDefault(); go(false); }\n    if(t && t.id==='create-oceanid-tabert'){ e.preventDefault(); go(true); }\n  }, true);\n})();</script>`, { html: true });
+      }
+    }
+    return new HTMLRewriter()
+      .on('a[href="/projects/create"]', new ButtonInjector())
+      .on('body', new ScriptInjector())
+      .transform(res);
+  }
+}
+`;
+
+    const lsHeaderWorker = new cloudflare.WorkerScript("lsHeaderInjector", {
+        name: workerName,
+        content: workerScriptContent,
+        accountId: cloudflareAccountId,
+    });
+
+    // Route all Label Studio HTML through the worker
+    new cloudflare.WorkerRoute("lsHeaderRoute", {
+        zoneId: cloudflareZoneId,
+        pattern: "label.boathou.se/*",
+        scriptName: lsHeaderWorker.name,
+    }, { dependsOn: [lsHeaderWorker] });
+}

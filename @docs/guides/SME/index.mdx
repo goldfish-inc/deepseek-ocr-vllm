@@ -94,7 +94,7 @@ flowchart LR
     AD[Adapter]
     TR[Triton GPU]
   end
-  subgraph DB[(CrunchyBridge Postgres - staging)]
+  subgraph DB[CrunchyBridge Postgres - staging]
     D[(stage.documents)]
     E[(stage.extractions)]
     C[(stage.csv_extractions)]
@@ -252,7 +252,7 @@ flowchart TB
     A2[Access App: GPU]
   end
 
-  subgraph CB[(CrunchyBridge Postgres\nstaging database)]
+  subgraph CB[CrunchyBridge Postgres - staging database]
     S1[Schema: stage]
     S2[Schema: curated]
   end

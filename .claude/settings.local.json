@@ -170,7 +170,12 @@
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy -n apps)",
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy -n apps --request-timeout=10s)",
       "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl delete deploy annotations-sink ls-triton-adapter -n apps)",
-      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,pods -n apps)"
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,pods -n apps)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy -n apps -l app=label-studio -o yaml)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy,svc -n apps -l 'app in (label-studio,ls-ml-backend,ls-triton-adapter)' -o wide)",
+      "Bash(KUBECONFIG=~/.kube/k3s-config.yaml kubectl get deploy label-studio -n apps -o jsonpath='{.spec.template.spec.containers[0].env[*]}')",
+      "Bash(KUBECONFIG=$HOME/.kube/k3s-config.yaml kubectl get deploy label-studio -n apps -o yaml)",
+      "Bash(KUBECONFIG=$HOME/.kube/k3s-config.yaml kubectl rollout status deployment/label-studio -n apps)"
     ],
     "deny": [],
     "ask": []
