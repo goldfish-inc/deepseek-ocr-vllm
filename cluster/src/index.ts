@@ -522,7 +522,9 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
     const cfg = new pulumi.Config();
     const pgUrl = cfg.getSecret("postgres_url");
     const enableDbVerify = cfg.getBoolean("enableDbVerify") ?? false;
-    if (!pgUrl || !enableDbVerify) return;
+    const verifyCmd = enableDbVerify
+        ? "echo 'now:' && psql \"$DATABASE_URL\" -t -c 'select now();' && echo 'table_ingest:' && psql \"$DATABASE_URL\" -t -c 'select count(*) from stage.table_ingest;'"
+        : "echo 'db-verify disabled via config'; exit 0";
     new k8s.batch.v1.Job("db-verify-ingest", {
         metadata: { name: "db-verify-ingest", namespace: "apps", annotations: { "pulumi.com/skipAwait": "true" } },
         spec: {
@@ -534,8 +536,8 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
                     containers: [{
                         name: "psql",
                         image: "postgres:16-alpine",
-                        command: ["sh", "-lc", "echo 'now:' && psql \"$DATABASE_URL\" -t -c 'select now();' && echo 'table_ingest:' && psql \"$DATABASE_URL\" -t -c 'select count(*) from stage.table_ingest;'"],
-                        env: [{ name: "DATABASE_URL", value: pgUrl as any }] as any,
+                        command: ["sh", "-lc", verifyCmd],
+                        env: pgUrl ? ([{ name: "DATABASE_URL", value: pgUrl as any }] as any) : ([] as any),
                     }],
                 },
             },
