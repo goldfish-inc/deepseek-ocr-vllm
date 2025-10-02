@@ -5,9 +5,9 @@ This index highlights what SMEs and operators need for launch. Legacy architectu
 ## SME Quick Links
 
 - SME Guide (interactive): @docs/guides/SME/index.mdx
-- SME Workflow overview: docs/SME_WORKFLOW.md
-- DBeaver setup (read-only): docs/dbeaver/README.md
-- Saved queries: docs/dbeaver/snippets/sme_saved_queries.sql
+- SME Workflow overview: @docs/guides/SME/workflow.md
+- DBeaver setup (read-only): @docs/guides/SME/dbeaver/README.md
+- Saved queries: @docs/guides/SME/dbeaver/snippets/sme_saved_queries.sql
 
 ## ML Backend
 

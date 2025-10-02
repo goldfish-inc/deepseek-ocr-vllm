@@ -279,7 +279,7 @@ For SMEs working with multi-format data:
 - v1 (current): Pre-labels for Text and PDFs. CSVs work when a row has a `text` column or a `pdf`/`url` column. Images require conversion to PDF or OCR to enable pre-labels.
 - v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically in-cluster and import clean tasks into Label Studio.
 
-See the detailed guide with diagrams: `docs/SME_WORKFLOW.md`.
+See the detailed guide with diagrams: `@docs/guides/SME/workflow.md`.
 For DB access and staging table workflows, see `@docs/guides/SME/index.mdx`.
 For docs-site SQLPlayground setup and the `staging` alias, see `docs/operations/sqlplayground-connection.mdx`.
 

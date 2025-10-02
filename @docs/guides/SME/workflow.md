@@ -6,7 +6,7 @@ Goal: Show what to upload, how pre-labels appear, how to save, and where your wo
 CSVs are supported now (v1).
 Your existing pandas spreadsheet cleaners will be integrated next (v2) so you won’t run them manually.
 
-Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Accessing Raw Data (Staging)](../@docs/guides/SME/index.mdx)
+Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Accessing Raw Data (Staging)](./index.mdx)
 
 ## What You Do
 
@@ -132,3 +132,4 @@ flowchart LR
 - Don’t:
   - Upload sensitive content without clearance.
   - Introduce ad-hoc labels without checking the project schema.
+
