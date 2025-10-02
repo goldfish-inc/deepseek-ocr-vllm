@@ -116,3 +116,15 @@ ner:labels-sync: ner:labels-array
 	@cd cluster && pulumi stack select $(STACK)
 	@pulumi -C cluster config set oceanid-cluster:nerLabels "$(shell cat ner_labels.json)" --secret
 	@echo "Updated oceanid-cluster:nerLabels from ner_labels.json"
+
+# Restart the LS adapter to pick up label changes
+.PHONY: ner:adapter-restart ner:labels-apply
+
+ner:adapter-restart:
+	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required"; exit 1; }
+	kubectl -n apps rollout restart deploy/ls-triton-adapter
+	kubectl -n apps rollout status deploy/ls-triton-adapter --timeout=180s
+
+# Full workflow: sync labels to Pulumi + restart adapter
+ner:labels-apply: ner:labels-sync ner:adapter-restart
+	@echo "✅ NER labels synced and adapter restarted"
