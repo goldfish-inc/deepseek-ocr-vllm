@@ -2,7 +2,7 @@
 
 Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflare Zero Trust.
 
-> **Status:** Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. New staging database pipeline in development (see [CURRENT_STATE.md](CURRENT_STATE.md) and issues #46-#50).
+> Status: Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. Staging database pipeline is active for SME launch.
 
 ## Infrastructure Ownership
 
@@ -52,7 +52,7 @@ the **@ebisu globalDB** (maritime intelligence platform).
 - **@oceanid**: "How was this document cleaned?" (ETL metadata, ML model versions, human corrections)
 - **@ebisu**: "What do we know about this vessel?" (domain intelligence, entity relationships, temporal changes)
 
-See [CURRENT_STATE.md](CURRENT_STATE.md) for detailed component status and [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
+See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
 
 ## Getting Started
 
