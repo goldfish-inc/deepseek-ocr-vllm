@@ -1,0 +1,117 @@
+name: Deploy Cluster
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Images"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      adapter_image:
+        description: 'Adapter image tag (leave empty to use latest SHA)'
+        required: false
+      sink_image:
+        description: 'Sink image tag (leave empty to use latest SHA)'
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only run if build workflow succeeded or manually triggered
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Get the commit that triggered the build workflow
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.17.1'
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v5
+        with:
+          pulumi-version: '3.198.0'
+
+      - name: Install ESC CLI
+        run: |
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+
+      - name: Configure Pulumi access
+        run: |
+          pulumi login
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Determine image tags
+        id: images
+        run: |
+          # Use manual input if provided, otherwise use commit SHA
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+
+          ADAPTER_IMAGE="${{ inputs.adapter_image }}"
+          if [ -z "$ADAPTER_IMAGE" ]; then
+            ADAPTER_IMAGE="ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:${COMMIT_SHA}"
+          fi
+
+          SINK_IMAGE="${{ inputs.sink_image }}"
+          if [ -z "$SINK_IMAGE" ]; then
+            SINK_IMAGE="ghcr.io/goldfish-inc/oceanid/annotations-sink:${COMMIT_SHA}"
+          fi
+
+          echo "adapter_image=${ADAPTER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "sink_image=${SINK_IMAGE}" >> $GITHUB_OUTPUT
+
+          echo "Will deploy:"
+          echo "  Adapter: ${ADAPTER_IMAGE}"
+          echo "  Sink: ${SINK_IMAGE}"
+
+      - name: Update ESC config with new image tags
+        run: |
+          esc env set default/oceanid-cluster \
+            "pulumiConfig.oceanid-cluster:adapterImage" \
+            "${{ steps.images.outputs.adapter_image }}" \
+            --plaintext
+
+          esc env set default/oceanid-cluster \
+            "pulumiConfig.oceanid-cluster:sinkImage" \
+            "${{ steps.images.outputs.sink_image }}" \
+            --plaintext
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: cluster
+
+      - name: Build cluster code
+        run: pnpm build
+        working-directory: cluster
+
+      - name: Deploy with Pulumi
+        run: |
+          pulumi stack select prod
+          pulumi up --yes --skip-preview
+        working-directory: cluster
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment completed. New images:"
+          echo "  Adapter: ${{ steps.images.outputs.adapter_image }}"
+          echo "  Sink: ${{ steps.images.outputs.sink_image }}"

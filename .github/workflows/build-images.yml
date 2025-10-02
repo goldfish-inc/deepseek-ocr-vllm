@@ -18,11 +18,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build adapter image
+      - name: Build and push adapter image
         run: |
-          IMAGE=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main
-          docker build -t "$IMAGE" adapter
-          docker push "$IMAGE"
+          # Use git SHA for immutable tag
+          SHA_TAG=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:${{ github.sha }}
+          MAIN_TAG=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main
+
+          # Build with SHA tag
+          docker build -t "$SHA_TAG" adapter
+          docker push "$SHA_TAG"
+
+          # Also tag and push as :main for convenience
+          docker tag "$SHA_TAG" "$MAIN_TAG"
+          docker push "$MAIN_TAG"
 
   build-sink:
     runs-on: ubuntu-latest
@@ -30,8 +38,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Build sink base image
+      - name: Build and push sink image
         run: |
-          IMAGE=ghcr.io/goldfish-inc/oceanid/annotations-sink:main
-          docker build -t "$IMAGE" sink
-          docker push "$IMAGE"
+          # Use git SHA for immutable tag
+          SHA_TAG=ghcr.io/goldfish-inc/oceanid/annotations-sink:${{ github.sha }}
+          MAIN_TAG=ghcr.io/goldfish-inc/oceanid/annotations-sink:main
+
+          # Build with SHA tag
+          docker build -t "$SHA_TAG" sink
+          docker push "$SHA_TAG"
+
+          # Also tag and push as :main for convenience
+          docker tag "$SHA_TAG" "$MAIN_TAG"
+          docker push "$MAIN_TAG"
