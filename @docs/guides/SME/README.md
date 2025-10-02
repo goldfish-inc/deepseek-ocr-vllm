@@ -9,6 +9,7 @@ Central hub for Subject Matter Expert documentation. Start here, then dive into 
 - DBeaver self‑serve: `./dbeaver/README.md`
 - Connection template: `./dbeaver/connection-template.txt`
 - Saved queries: `./dbeaver/snippets/sme_saved_queries.sql`
+- Project setup (Label Studio): `./project-setup.mdx`
 - Docs‑site SQLPlayground setup (read‑only staging): `../../operations/sqlplayground-connection.mdx`
 
 ## Quick Start
@@ -32,4 +33,3 @@ make ner:labels-apply
 ```
 
 - Schema updates: small staging views or typed columns are fine; follow the patterns in the guide.
-
