@@ -4,6 +4,8 @@ Audience: Subject Matter Experts working with text, PDFs, images, and CSVs.
 
 Goal: Show what to upload, how pre-labels appear, how to save, and where your work goes. CSVs are supported now (v1). Your existing pandas spreadsheet cleaners will be integrated next (v2) so you won’t run them manually.
 
+Related guide (DB access + tables): [SME Guide — Uploading, Annotating, and Accessing Raw Data (Staging)](../@docs/guides/SME/index.md)
+
 ## What You Do
 
 - Open Label Studio at `label.<base>` (Cloudflare Access).

@@ -272,6 +272,7 @@ For SMEs working with multi-format data:
 - v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically in-cluster and import clean tasks into Label Studio.
 
 See the detailed guide with diagrams: `docs/SME_WORKFLOW.md`.
+For DB access and staging table workflows, see `@docs/guides/SME/index.md`.
 
 ## External Postgres (CrunchyBridge)
 

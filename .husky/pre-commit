@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+# Check markdown linting
+echo "🔍 Checking markdown files..."
+pnpm run lint:md || {
+  echo "❌ Markdown linting failed. Run 'pnpm run lint:md:fix' to fix automatically."
+  exit 1
+}
+
+echo "✅ All pre-commit checks passed!"
