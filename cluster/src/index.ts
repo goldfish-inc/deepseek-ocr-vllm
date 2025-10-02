@@ -443,7 +443,7 @@ if __name__ == "__main__":
     const provConfig = new k8s.core.v1.ConfigMap("ls-provisioner-code", {
         metadata: { name: "ls-provisioner-code", namespace: "apps" },
         data: { "provision.py": provisionerCode },
-    }, { provider: k8sProvider });
+    }, { provider: k8sProvider, ignoreChanges: ["spec"] as any });
 
     const provSecret = new k8s.core.v1.Secret("ls-provisioner-secret", {
         metadata: { name: "ls-provisioner-secret", namespace: "apps" },
@@ -536,7 +536,7 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
                     containers: [{
                         name: "psql",
                         image: "postgres:16-alpine",
-                        command: ["sh", "-lc", verifyCmd],
+                        command: ["sh", "-c", verifyCmd],
                         env: pgUrl ? ([{ name: "DATABASE_URL", value: pgUrl as any }] as any) : ([] as any),
                     }],
                 },
