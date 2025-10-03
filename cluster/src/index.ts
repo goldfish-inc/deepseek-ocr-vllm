@@ -22,6 +22,7 @@ import { NodeTunnels } from "./components/nodeTunnels";
 import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
+import { ProjectBootstrapper } from "./components/projectBootstrapper";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -292,7 +293,14 @@ const labelStudio = new LabelStudio("label-studio", {
 // - Connects ML backend
 // - Applies full NER labeling interface from ESC/labels.json
 // - Imports a sample text task (for verification)
+// Gate behind config to avoid surprises on every deploy
 (() => {
+    const cfg = new pulumi.Config();
+    const enableLsProvisionerJob = cfg.getBoolean("enableLsProvisionerJob");
+    // Default true to preserve current behavior; set to false to disable
+    if (enableLsProvisionerJob === false) {
+        return;
+    }
     const cfgLS = new pulumi.Config();
     const lsPat = cfgLS.getSecret("labelStudioPat");
     if (!lsPat) {
@@ -479,6 +487,11 @@ if __name__ == "__main__":
 
 // Verification: List webhooks and confirm NER_Data exists (runs once)
 (() => {
+    const cfg = new pulumi.Config();
+    const enableLsVerifyJob = cfg.getBoolean("enableLsVerifyJob");
+    if (enableLsVerifyJob === false) {
+        return;
+    }
     const cfgLS = new pulumi.Config();
     const lsPat = cfgLS.getSecret("labelStudioPat");
     if (!lsPat) return;
@@ -577,6 +590,26 @@ const annotationsSink = new AnnotationsSink("annotations-sink", {
     dbUrl,
     schemaVersion,
 });
+
+// Project Bootstrapper service: creates Label Studio projects via API with ML backend + webhooks
+const enableProjectBootstrapperService = cfg.getBoolean("enableProjectBootstrapperService") ?? false;
+let projectBootstrapper: ProjectBootstrapper | undefined;
+if (enableProjectBootstrapperService) {
+    const lsPat = cfg.getSecret("labelStudioPat");
+    const nerLabelsJson = cfg.get("nerLabels");
+
+    projectBootstrapper = new ProjectBootstrapper("project-bootstrapper", {
+        k8sProvider,
+        namespace: "apps",
+        labelStudioUrl: "https://label.boathou.se", // External URL for webhooks
+        labelStudioPat: lsPat as any,
+        nerBackendUrl: lsAdapter.serviceUrl,
+        sinkIngestUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/ingest`,
+        sinkWebhookUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
+        nerLabelsJson: nerLabelsJson as any,
+        allowedOrigins: ["https://label.boathou.se"],
+    });
+}
 
 // Optional: host-level Cloudflared connector on Calypso for GPU access
 const enableCalypsoHostConnector = cfg.getBoolean("enableCalypsoHostConnector") ?? true;

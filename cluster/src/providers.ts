@@ -8,14 +8,13 @@ import * as cloudflare from "@pulumi/cloudflare";
 import { clusterConfig } from "./config";
 
 // Guard against running cluster stack in GitHub Actions
-// This stack requires kubeconfig access and should run locally or on self-hosted runners
+// This stack must run on a machine that has kubeconfig access, typically via
+// Pulumi Deployments with a self-hosted agent. Do not run from GitHub runners.
 if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
     throw new Error(
-        "❌ CLUSTER STACK CANNOT RUN IN GITHUB ACTIONS\n\n" +
-        "This stack manages Kubernetes resources and requires kubeconfig access.\n" +
-        "It MUST run locally or on a self-hosted runner with cluster access.\n\n" +
-        "For cloud resources (Cloudflare, CrunchyBridge), use the 'oceanid-cloud' stack instead.\n" +
-        "See cloud/README.md for details."
+        "❌ Cluster stack cannot run in GitHub Actions.\n\n" +
+        "Use Pulumi Deployments with a self-hosted agent (pool: oceanid-cluster),\n" +
+        "or run locally for break-glass only. Cloud resources live in the 'cloud/' stack."
     );
 }
 

@@ -19,71 +19,46 @@ This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational 
 - Cloud resources (DNS, Access, databases) → See `../cloud/`
 - Application workloads → Managed by Flux in `../clusters/`
 
-## Important: Deployment Model
+## Deployment Model (Default)
 
-**This stack CANNOT run in GitHub Actions** due to kubeconfig requirements.
+This stack is deployed by Pulumi Deployments using a self‑hosted agent with kubeconfig access. Do not run `pulumi up` locally or from GitHub Actions.
 
-### Local Deployment (Current)
+### Pulumi Deployments Agent (Required)
+
+Install once on a host that can reach the cluster (e.g., tethys):
+
+```bash
+# 1) Install agent and register to pool
+pulumi deployments agent install \
+  --token "<Pulumi Agent Token>" \
+  --pool oceanid-cluster
+
+# 2) Enable on boot
+sudo systemctl enable pulumi-deployments-agent
+sudo systemctl start pulumi-deployments-agent
+```
+
+Pulumi Cloud configuration:
+- Stack: `ryan-taylor/oceanid-cluster/prod`
+- Deployments: Enabled
+- Deployment pool: `oceanid-cluster`
+- Trigger: Push to `main`
+- Work directory: `cluster/`
+
+Monitoring:
+- Pulumi Cloud → Deployments → Runs
+
+### Manual Fallback (Discouraged)
+
+For break‑glass only (coord with ops):
 
 ```bash
 cd cluster/
-
-# Install dependencies
-pnpm install
-
-# Build TypeScript
-pnpm build
-
-# Preview changes
-pulumi preview
-
-# Deploy changes
-pulumi up
+pnpm install && pnpm build
+PULUMI_CONFIG_PASSPHRASE=… pulumi up
 ```
 
-**Prerequisites:**
-
-- SSH tunnel to K3s control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access))
-- Valid kubeconfig at `~/.kube/k3s-config.yaml`
-- Pulumi CLI authenticated
-
-### Self-Hosted Deployment (Future)
-
-For automated cluster bootstrap, use **Pulumi Deployments** with a self-hosted agent:
-
-```bash
-# On a machine with cluster access (e.g., tethys control plane)
-
-# 1. Install Pulumi Deployments agent
-pulumi deployments agent install \
-  --token $(op read "op://Infrastructure/Pulumi Agent/token") \
-  --pool oceanid-cluster
-
-# 2. Configure agent to run on startup
-sudo systemctl enable pulumi-deployments-agent
-sudo systemctl start pulumi-deployments-agent
-
-# 3. Update stack settings in Pulumi Cloud console
-# Settings → Deployments → Enable
-# Deployment pool: oceanid-cluster
-# Trigger: Git push to main
-# Work directory: cluster/
-```
-
-**Benefits:**
-
-- Automated deployments on git push
-- Audit trail in Pulumi Cloud
-- No local CLI dependencies
-- Centralized secret management
-
-**Tradeoffs:**
-
-- Agent must maintain cluster access
-- Requires paid Pulumi tier (or free tier quota)
-- Additional operational complexity
-
-See [Pulumi Deployments docs](https://www.pulumi.com/docs/pulumi-cloud/deployments/) for setup details.
+Prereqs: SSH tunnel to control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access)) and kubeconfig at `~/.kube/k3s-config.yaml`.
 
 ## Stack Configuration
 
@@ -163,7 +138,7 @@ pulumi stack output labelStudioHostname
 
 ## GitOps Workflow
 
-**This stack bootstraps GitOps; applications deploy via Flux:**
+This stack bootstraps GitOps; applications deploy via Flux:
 
 1. Modify manifests in `clusters/tethys/`
 2. Commit and push to `main`

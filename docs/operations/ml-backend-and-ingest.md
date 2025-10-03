@@ -34,7 +34,7 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
 - ML Backend URL: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
 - Health: `/health`
 - Setup: `/setup` (GET/POST)
-- Project `NER_Data`: provisioned automatically by Job with a full NER interface.
+- Project `NER_Data`: can be provisioned automatically by a one‑off Job (gated by Pulumi config `enableLsProvisionerJob`) with a full NER interface.
 - Labeling Interface mapping: the primary control is `<Labels name="label" toName="text" ...>`. An optional HTML Labels control (e.g., `name="label_html" toName="html"`) may exist for read‑only/auxiliary views—it's not required for CSV/XLSX flows.
 
 ## PDF Boxes (Hybrid)
@@ -72,3 +72,4 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
   - `select count(*) from stage.table_ingest;`
   - `select count(*) from stage.documents;`
 - Labeling Interface validation error “Label config contains non‑unique names”: Ensure only one Labels block uses `name="label"`. If an HTML Labels block is present, use a different name like `label_html`.
+- Provisioner/verify jobs: disable with Pulumi config `enableLsProvisionerJob=false` or `enableLsVerifyJob=false` if you want to manage projects purely via UI.

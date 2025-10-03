@@ -1,25 +1,20 @@
-# Oceanid Infrastructure - Claude AI Instructions
+# Oceanid Infrastructure – Agent Instructions
 
-This file contains specific instructions for AI assistants working with the Oceanid K3s infrastructure.
+This file contains specific instructions for AI assistants working with the Oceanid infrastructure and deployment workflows.
 
-## ⚠️ CRITICAL: NO MANUAL PULUMI OPERATIONS
+## CRITICAL: Do Not Apply Manually
 
-**NEVER run Pulumi commands manually (`pulumi up`, `pulumi preview`, `pulumi destroy`, etc.)**
+Never run Pulumi applies by hand (`pulumi up`, `pulumi destroy`, etc.). All infrastructure changes must go through automated deployments:
 
-All infrastructure changes MUST go through GitHub Actions to prevent drift:
-1. Commit code changes to git
-2. Push to `main` branch
-3. GitHub Actions workflow automatically runs `pulumi up`
-4. Monitor via `gh run watch`
+- Cloud stack (`cloud/`): Deployed by GitHub Actions with OIDC.
+- Cluster stack (`cluster/`): Deployed by Pulumi Deployments using a self‑hosted agent that has kubeconfig access. Do not attempt to run cluster applies from GitHub runners.
 
-**Manual Pulumi operations create state drift and break GitOps workflow!**
+Allowed local Pulumi commands (read/config only):
+- `pulumi config set` – write config (committed to git when applicable)
+- `pulumi config get` – read config
+- `pulumi stack output` – read‑only outputs
 
-The ONLY allowed local Pulumi commands:
-- `pulumi config set` - for configuration (gets committed to git)
-- `pulumi config get` - for reading config
-- `pulumi stack output` - for viewing outputs (read-only)
-
-## Critical Connection Setup
+## Critical Connection Setup (for debugging only)
 
 ### K3s Cluster Access
 
@@ -141,31 +136,21 @@ cloudflared: ">=1.0.0"  # Track latest
 # Manual review required for major versions
 ```
 
-## Development Workflow
+## Deployment Workflow (Authoritative)
 
-### Making Infrastructure Changes:
+Use a single push‑to‑deploy flow across both stacks:
 
-1. **Modify Pulumi Components**:
-   ```bash
-   cd cluster/
-   pnpm build
-   pulumi preview  # Review changes
-   pulumi up      # Apply changes
-   ```
+1) Commit and push changes to `main`.
+   - Cloud resources are applied by GitHub Actions (`cloud-infrastructure.yml`).
+   - Cluster resources are applied by Pulumi Deployments via the self‑hosted agent (configured in Pulumi Cloud).
 
-2. **Update GitOps Manifests**:
-   ```bash
-   # Edit clusters/tethys/*.yaml
-   git add clusters/
-   git commit -m "update: cluster configuration"
-   git push
-   ```
+2) Monitor deployments:
+   - Cloud: GitHub Actions UI.
+   - Cluster: Pulumi Cloud → Deployments → Runs (agent pool: `oceanid-cluster`).
 
-3. **Force Flux Reconciliation**:
-   ```bash
-   kubectl annotate gitrepository flux-system -n flux-system \
-     reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-   ```
+3) Verify with kubectl only if necessary (debugging). Do not apply via CLI.
+
+Manual fallback is discouraged; if absolutely needed for break‑glass, coordinate with ops.
 
 ### Testing Changes:
 ```bash

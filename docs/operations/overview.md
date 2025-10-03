@@ -16,17 +16,18 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 - Adapter: calls `TRITON_BASE_URL=https://gpu.<base>` and presents Cloudflare Access service token when enabled.
 - Pulumi ownership: `HostCloudflared` and `HostDockerService` components render/update these units.
 
-## Deploy
+## Deployment Model
 
-Policy: Always deploy via Pulumi (no manual kubectl edits). This ensures changes are reproducible and audited.
+- Cloud resources (`cloud/`): Deployed by GitHub Actions with OIDC on push to `main`.
+- Cluster resources (`cluster/`): Deployed by Pulumi Deployments using a self‑hosted agent (pool: `oceanid-cluster`). Do not run `pulumi up` from GitHub runners.
 
-- Minimal, non‑disruptive deploy:
-  - `pulumi -C cluster preview`
-  - `pulumi -C cluster up`
-- Enable provisioning/LB once tunnels are stable:
-  - `pulumi -C cluster config set oceanid-cluster:enableNodeProvisioning true`
-  - `pulumi -C cluster config set oceanid-cluster:enableControlPlaneLB true`
-  - `pulumi -C cluster up`
+Monitor deployments:
+- Cloud: GitHub Actions → cloud-infrastructure
+- Cluster: Pulumi Cloud → Deployments → Runs (stack `ryan-taylor/oceanid-cluster/prod`)
+
+Agent setup (once, on a host with kubeconfig):
+- Install agent and register to pool `oceanid-cluster`
+- Enable service on boot and confirm it’s online in Pulumi Cloud
 
 ## Validate
 
@@ -96,7 +97,7 @@ flowchart LR
 
 ## Label Studio ML Backend (Auto‑provisioned)
 
-- Project `NER_Data` is auto‑provisioned in‑cluster by a one‑off Job:
+- Project `NER_Data` can be auto‑provisioned in‑cluster by a one‑off Job (gated by config `enableLsProvisionerJob`):
   - Connects ML backend: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
   - Applies a full NER labeling interface from ESC/labels.json
   - Registers task‑create webhooks to the sink `/ingest`
@@ -113,6 +114,7 @@ Notes:
 - The deprecated `ls-ml-autoconnect` service was removed to avoid coupling infra to a personal API token.
 - `ls-triton-adapter` stays running cluster‑wide as the shared inference endpoint.
 - PDF page images for box annotation are controlled by `PDF_CONVERT_TO_IMAGES` (set via Pulumi).
+- LS provision verification job is also gated via config `enableLsVerifyJob`.
   - If you change this setting or other env vars, redeploy with Pulumi (`pulumi -C cluster up`).
 
 ## Secrets & Config
