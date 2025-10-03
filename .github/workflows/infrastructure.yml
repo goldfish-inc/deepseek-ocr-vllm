@@ -98,11 +98,10 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
-      - name: Setup kubeconfig for K3s cluster
+      - name: Install ESC CLI
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Pulumi Cloud (OIDC)
         id: pulumi-login
@@ -111,6 +110,14 @@ jobs:
           organization: ${{ env.PULUMI_ORGANIZATION }}
           requested-token-type: urn:pulumi:token-type:access_token:personal
           scope: user:ryan-taylor
+
+      - name: Setup kubeconfig from ESC
+        run: |
+          mkdir -p $HOME/.kube
+          esc env get ${{ env.ESC_ENVIRONMENT }} --value kubeconfig | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.access-token }}
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -156,11 +163,10 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
-      - name: Setup kubeconfig for K3s cluster
+      - name: Install ESC CLI
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
 
       - name: Authenticate to Pulumi Cloud (OIDC)
         id: pulumi-login
@@ -169,6 +175,14 @@ jobs:
           organization: ${{ env.PULUMI_ORGANIZATION }}
           requested-token-type: urn:pulumi:token-type:access_token:personal
           scope: user:ryan-taylor
+
+      - name: Setup kubeconfig from ESC
+        run: |
+          mkdir -p $HOME/.kube
+          esc env get ${{ env.ESC_ENVIRONMENT }} --value kubeconfig | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.access-token }}
 
       - name: Pulumi up
         uses: pulumi/actions@v5
