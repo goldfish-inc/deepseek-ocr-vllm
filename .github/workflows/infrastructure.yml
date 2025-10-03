@@ -114,8 +114,10 @@ jobs:
       - name: Setup kubeconfig from ESC
         run: |
           mkdir -p $HOME/.kube
-          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string | base64 -d > $HOME/.kube/config
+          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string > $HOME/.kube/config.b64
+          base64 -d < $HOME/.kube/config.b64 > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
+          rm $HOME/.kube/config.b64
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -177,8 +179,10 @@ jobs:
       - name: Setup kubeconfig from ESC
         run: |
           mkdir -p $HOME/.kube
-          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string | base64 -d > $HOME/.kube/config
+          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string > $HOME/.kube/config.b64
+          base64 -d < $HOME/.kube/config.b64 > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
+          rm $HOME/.kube/config.b64
 
       - name: Pulumi up
         uses: pulumi/actions@v5
