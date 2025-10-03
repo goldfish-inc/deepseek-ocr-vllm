@@ -116,8 +116,6 @@ jobs:
           mkdir -p $HOME/.kube
           esc env get ${{ env.ESC_ENVIRONMENT }} --value kubeconfig | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.token }}
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -181,8 +179,6 @@ jobs:
           mkdir -p $HOME/.kube
           esc env get ${{ env.ESC_ENVIRONMENT }} --value kubeconfig | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ steps.pulumi-login.outputs.token }}
 
       - name: Pulumi up
         uses: pulumi/actions@v5
