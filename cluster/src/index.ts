@@ -518,10 +518,10 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
 })();
 
 // Verification: DB ingest check (stage.table_ingest)
+// Temporarily disabled to avoid blocking deploys. Re-enable behind config in future.
+/*
 (() => {
     const cfg = new pulumi.Config();
-    // Temporarily disabled to avoid blocking deploys. Re-enable behind config in future.
-    return;
     const pgUrl = cfg.getSecret("postgres_url");
     const enableDbVerify = cfg.getBoolean("enableDbVerify") ?? false;
     const verifyCmd = enableDbVerify
@@ -546,8 +546,7 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
         },
     }, { provider: k8sProvider });
 })();
-
- 
+*/
 
 // SME Readiness - Configure boathou.se domain with Cloudflare Access
 // NOTE: Access app creation is now managed by cloud stack to prevent duplication

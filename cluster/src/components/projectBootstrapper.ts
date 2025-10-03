@@ -85,11 +85,23 @@ def _labels() -> list[str]:
     return ["VESSEL_NAME","IMO","MMSI","IRCS","PORT","DATE","COMPANY","FLAG"]
 
 def _label_config_xml(labels: list[str]) -> str:
+    """
+    Generate Label Studio config that works with CSV tasks (data blocks only, no meta).
+    Uses flexible field references that work with any CSV column structure.
+    """
     inner = "\n".join([f"    <Label value=\"{l}\"/>" for l in labels])
+
+    # Generic config that works with both text tasks and CSV row tasks
+    # Does NOT reference $meta, only $data fields
     return (
         "<View>\n"
-        "  <Header value=\"Document Text\"/>\n"
-        "  <Text name=\"text\" value=\"$text\"/>\n"
+        "  <Header value=\"Vessel Record - NER Annotation\"/>\n"
+        "\n"
+        "  <!-- Text display: works with CSV rows converted to text -->\n"
+        "  <Text name=\"text\" value=\"$text\" granularity=\"word\" \n"
+        "        highlightColor=\"#ff0000\"/>\n"
+        "\n"
+        "  <!-- NER entity labels -->\n"
         "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
         f"{inner}\n"
         "  </Labels>\n"
