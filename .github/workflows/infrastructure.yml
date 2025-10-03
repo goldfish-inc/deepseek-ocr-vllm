@@ -98,11 +98,6 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
-      - name: Install ESC CLI
-        run: |
-          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
-          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
-
       - name: Authenticate to Pulumi Cloud (OIDC)
         id: pulumi-login
         uses: pulumi/auth-actions@v1
@@ -111,13 +106,37 @@ jobs:
           requested-token-type: urn:pulumi:token-type:access_token:personal
           scope: user:ryan-taylor
 
-      - name: Setup kubeconfig from ESC
+      - name: Setup SSH tunnel to K3s cluster
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TETHYS_SSH_KEY }}" > ~/.ssh/tethys_key
+          chmod 600 ~/.ssh/tethys_key
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/tethys_key -L 16443:localhost:6443 -N rt@157.173.210.123 &
+          sleep 5
+
+      - name: Setup kubeconfig for tunneled connection
         run: |
           mkdir -p $HOME/.kube
-          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string --show-secrets > $HOME/.kube/config.b64
-          base64 -d < $HOME/.kube/config.b64 > $HOME/.kube/config
+          cat > $HOME/.kube/config << 'EOF'
+          apiVersion: v1
+          kind: Config
+          current-context: default
+          clusters:
+          - cluster:
+              server: https://localhost:16443
+              insecure-skip-tls-verify: true
+            name: default
+          contexts:
+          - context:
+              cluster: default
+              user: default
+            name: default
+          users:
+          - name: default
+            user:
+              token: ${{ secrets.K3S_TOKEN }}
+          EOF
           chmod 600 $HOME/.kube/config
-          rm $HOME/.kube/config.b64
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -163,11 +182,6 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
-      - name: Install ESC CLI
-        run: |
-          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
-          echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
-
       - name: Authenticate to Pulumi Cloud (OIDC)
         id: pulumi-login
         uses: pulumi/auth-actions@v1
@@ -176,13 +190,37 @@ jobs:
           requested-token-type: urn:pulumi:token-type:access_token:personal
           scope: user:ryan-taylor
 
-      - name: Setup kubeconfig from ESC
+      - name: Setup SSH tunnel to K3s cluster
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TETHYS_SSH_KEY }}" > ~/.ssh/tethys_key
+          chmod 600 ~/.ssh/tethys_key
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/tethys_key -L 16443:localhost:6443 -N rt@157.173.210.123 &
+          sleep 5
+
+      - name: Setup kubeconfig for tunneled connection
         run: |
           mkdir -p $HOME/.kube
-          esc env get ${{ env.ESC_ENVIRONMENT }} kubeconfig --value string --show-secrets > $HOME/.kube/config.b64
-          base64 -d < $HOME/.kube/config.b64 > $HOME/.kube/config
+          cat > $HOME/.kube/config << 'EOF'
+          apiVersion: v1
+          kind: Config
+          current-context: default
+          clusters:
+          - cluster:
+              server: https://localhost:16443
+              insecure-skip-tls-verify: true
+            name: default
+          contexts:
+          - context:
+              cluster: default
+              user: default
+            name: default
+          users:
+          - name: default
+            user:
+              token: ${{ secrets.K3S_TOKEN }}
+          EOF
           chmod 600 $HOME/.kube/config
-          rm $HOME/.kube/config.b64
 
       - name: Pulumi up
         uses: pulumi/actions@v5
