@@ -7,40 +7,69 @@ import triton_python_backend_utils as pb_utils
 class TritonPythonModel:
     def initialize(self, args):
         self.ready = True
-        self._pdf_backend = None
+        self._converter = None
         try:
-            import pypdf  # type: ignore
-            self._pdf_backend = "pypdf"
-        except Exception:
-            try:
-                import pdfminer  # type: ignore
-                self._pdf_backend = "pdfminer"
-            except Exception:
-                self._pdf_backend = None
+            from docling.document_converter import DocumentConverter
+            self._converter = DocumentConverter()
+        except Exception as e:
+            print(f"[WARN] Docling not available, falling back to basic extraction: {e}")
+            self._converter = None
 
-    def _extract_text_from_pdf(self, pdf_bytes: bytes) -> str:
-        if not pdf_bytes:
-            return ""
-        if self._pdf_backend == "pypdf":
-            try:
-                import pypdf  # type: ignore
-                reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-                parts = []
-                for page in reader.pages:
-                    try:
-                        parts.append(page.extract_text() or "")
-                    except Exception:
-                        continue
-                return "\n".join([p for p in parts if p])
-            except Exception:
-                pass
-        if self._pdf_backend == "pdfminer":
-            try:
-                from pdfminer.high_level import extract_text  # type: ignore
-                return extract_text(io.BytesIO(pdf_bytes)) or ""
-            except Exception:
-                pass
-        return ""
+    def _extract_with_docling(self, pdf_bytes: bytes) -> dict:
+        """Extract PDF content using Docling with table/formula support."""
+        if not pdf_bytes or self._converter is None:
+            return {"text": "", "tables": [], "formulas": [], "metadata": {}}
+
+        try:
+            # Convert PDF bytes to Docling document
+            result = self._converter.convert(io.BytesIO(pdf_bytes))
+
+            # Extract structured content
+            extracted_text = []
+            tables = []
+            formulas = []
+
+            for element in result.document.iterate_items():
+                if element.type == "table":
+                    # Extract table as markdown or OTSL
+                    table_md = element.export_to_markdown()
+                    tables.append({
+                        "content": table_md,
+                        "bbox": element.prov.bbox if hasattr(element, "prov") else None,
+                        "page": element.prov.page if hasattr(element, "prov") else None,
+                    })
+                    extracted_text.append(f"\n[TABLE]\n{table_md}\n")
+
+                elif element.type == "formula":
+                    # Extract formulas as LaTeX
+                    formula_latex = element.text or ""
+                    formulas.append({
+                        "latex": formula_latex,
+                        "bbox": element.prov.bbox if hasattr(element, "prov") else None,
+                        "page": element.prov.page if hasattr(element, "prov") else None,
+                    })
+                    extracted_text.append(f"\n[FORMULA] ${formula_latex}$\n")
+
+                else:
+                    # Regular text blocks
+                    extracted_text.append(element.text or "")
+
+            full_text = "\n".join(extracted_text)
+
+            return {
+                "text": full_text,
+                "tables": tables,
+                "formulas": formulas,
+                "metadata": {
+                    "num_pages": len(result.document.pages),
+                    "num_tables": len(tables),
+                    "num_formulas": len(formulas),
+                },
+            }
+
+        except Exception as e:
+            print(f"[WARN] Docling extraction failed: {e}")
+            return {"text": "", "tables": [], "formulas": [], "metadata": {}, "error": str(e)}
 
     def _get_bytes(self, request, name):
         t = pb_utils.get_input_tensor_by_name(request, name)
@@ -74,8 +103,20 @@ class TritonPythonModel:
             except Exception:
                 pass
 
-            extracted = self._extract_text_from_pdf(pdf_bytes) if pdf_bytes is not None else (text or "")
-            preview = (extracted or "").strip()[:2000]
+            # Extract PDF with Docling (tables, formulas, text)
+            if pdf_bytes is not None:
+                extraction = self._extract_with_docling(pdf_bytes)
+                extracted_text = extraction["text"]
+                tables = extraction["tables"]
+                formulas = extraction["formulas"]
+                metadata = extraction["metadata"]
+            else:
+                extracted_text = text or ""
+                tables = []
+                formulas = []
+                metadata = {}
+
+            preview = (extracted_text or "").strip()[:2000]
 
             response_text = preview
             if prompt:
@@ -84,20 +125,25 @@ class TritonPythonModel:
             result = {
                 "ok": True,
                 "model": "docling_granite_python",
+                "backend": "docling" if self._converter else "fallback",
                 "received": {
                     "pdf_data": pdf_bytes is not None,
                     "prompt": prompt is not None,
                     "text": text is not None,
                 },
                 "document": {
-                    "chars": int(len(extracted)) if extracted is not None else 0,
+                    "chars": int(len(extracted_text)) if extracted_text else 0,
                     "preview": preview,
+                    "num_tables": len(tables),
+                    "num_formulas": len(formulas),
                 },
+                "tables": tables,
+                "formulas": formulas,
+                "metadata": metadata,
                 "output": {
                     "text": response_text,
                     "format": "text/plain",
                 },
-                "message": "Replace with real Docling/Granite inference when dependencies are available.",
             }
 
             payload = json.dumps(result).encode("utf-8")
