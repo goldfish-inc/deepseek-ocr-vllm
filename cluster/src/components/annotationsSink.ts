@@ -370,6 +370,31 @@ async def ingest(req: Request):
                         else:
                             lines = [", ".join(r) for r in rows]
                     doc_text = "\n".join(lines)[:5000]
+            elif url and url.lower().endswith(".pdf"):
+                # PDF extraction via Triton Docling model
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    r = await client.get(url)
+                    r.raise_for_status()
+                    pdf_bytes = r.content
+
+                    # Call Triton adapter for PDF extraction
+                    # Adapter URL: http://ls-triton-adapter.apps.svc.cluster.local:9090
+                    adapter_url = os.getenv("TRITON_ADAPTER_URL", "http://ls-triton-adapter.apps.svc.cluster.local:9090")
+                    triton_resp = await client.post(
+                        f"{adapter_url}/predict",
+                        json={"pdf_data": pdf_bytes.hex()},  # hex-encode for JSON transport
+                        timeout=120.0
+                    )
+
+                    if triton_resp.status_code == 200:
+                        result = triton_resp.json()
+                        doc_text = result.get("output", {}).get("text", "")
+                        # TODO: Store tables/formulas to stage.pdf_extractions when schema ready
+                        tables_data = result.get("tables", [])
+                        formulas_data = result.get("formulas", [])
+                    else:
+                        print(f"[WARN] Triton adapter failed for PDF: {triton_resp.status_code}")
+                        doc_text = f"[PDF extraction failed: {url}]"
             elif text:
                 doc_text = str(text)
             else:
