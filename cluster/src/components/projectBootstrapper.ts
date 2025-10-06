@@ -82,17 +82,17 @@ def _labels():
             pass
     return ["VESSEL_NAME","IMO","MMSI","IRCS","PORT","DATE","COMPANY","FLAG"]
 
-def _label_config_xml(labels):
-    inner = "\n".join([f"    <Label value=\"{l}\"/>" for l in labels])
-    return (
-        "<View>\n"
-        "  <Header value=\"Vessel Record - NER Annotation\"/>\n"
-        "  <Text name=\"text\" value=\"$text\" granularity=\"word\"/>\n"
-        "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
-        f"{inner}\n"
-        "  </Labels>\n"
-        "</View>"
-    )
+    def _label_config_xml(labels):
+        # Use triple quotes to avoid escaping XML quotes inside Python strings
+        inner = "\n".join([f'    <Label value="{l}"/>' for l in labels])
+        xml = f"""<View>
+  <Header value="Vessel Record - NER Annotation"/>
+  <Text name="text" value="$text" granularity="word"/>
+  <Labels name="label" toName="text" showInline="true">
+{inner}
+  </Labels>
+</View>"""
+        return xml
 
 def _http(method: str, url: str, headers=None, data=None):
     headers = headers or {}
