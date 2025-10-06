@@ -92,11 +92,11 @@ jobs:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
           echo "🔧 Ensuring required extensions are installed..."
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
             CREATE EXTENSION IF NOT EXISTS pgcrypto;
             CREATE EXTENSION IF NOT EXISTS postgis;
             CREATE EXTENSION IF NOT EXISTS btree_gist;
-SQL
+          SQL
           echo "✅ Extensions ensured"
 
       - name: Check existing migrations
