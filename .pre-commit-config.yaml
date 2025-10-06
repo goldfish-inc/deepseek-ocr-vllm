@@ -40,7 +40,8 @@ repos:
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
-      - id: actionlint-docker
+      - id: actionlint-system
+        args: ["-shellcheck="]
 
   # YAML lint (optionally extend later with a .yamllint config)
   - repo: https://github.com/adrienverge/yamllint

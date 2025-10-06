@@ -127,7 +127,8 @@ if [ -f "adapter/requirements.txt" ]; then
   . .venv/bin/activate
   pip install -q -r adapter/requirements.txt
 
-  export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+  current_dir="$(pwd)"
+  export PYTHONPATH="${PYTHONPATH}:${current_dir}"
 
   if pytest -q adapter/tests; then
     echo "✅ Adapter unit tests passed"

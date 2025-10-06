@@ -27,6 +27,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install pre-commit
 
+      - name: Install actionlint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash
+          sudo mv ./actionlint /usr/local/bin/
+
       - name: Run pre-commit
         run: |
           pre-commit run --all-files --show-diff-on-failure
