@@ -1,0 +1,53 @@
+repos:
+  # Core hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # Shell syntax + best practices
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        name: shellcheck (scripts)
+        types_or: [shell]
+        files: ^(scripts/|.*\.sh)$
+        args: ["--severity=style", "--format=gcc"]
+
+  # Strict Bash syntax check (catches here-doc terminator mistakes)
+  - repo: local
+    hooks:
+      - id: bash-n-syntax
+        name: bash -n
+        entry: bash
+        args: ["-n"]
+        language: system
+        types_or: [shell]
+        files: ^(scripts/|.*\.sh)$
+
+  # Shell formatter (keeps heredoc and indent consistent)
+  - repo: https://github.com/mvdan/sh
+    rev: v3.8.0
+    hooks:
+      - id: shfmt
+        args: ["-i", "2", "-ci", "-bn", "-sr"]
+        files: ^(scripts/|.*\.sh)$
+
+  # GitHub Actions workflow linter (lints run: sections; integrates with shellcheck if present)
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+        additional_dependencies: []
+
+  # YAML lint (optionally extend later with a .yamllint config)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        files: ^(.*\.ya?ml)$
+        args: ["-d", "{extends: default, rules: {line-length: disable}}"]
+

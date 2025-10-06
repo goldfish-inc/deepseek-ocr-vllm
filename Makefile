@@ -1,6 +1,6 @@
 # Simple task runner for the Oceanid workspace
 
-.PHONY: install build lint test preview up destroy refresh clean hooks format
+.PHONY: install build lint test preview up destroy refresh clean hooks format pre-commit
 
 STACK ?= ryan-taylor/oceanid-cluster/prod
 
@@ -42,6 +42,11 @@ hooks:
 	git config core.hooksPath .githooks
 	chmod +x .githooks/pre-commit
 	@echo "Git hooks installed. Next commit will run type/checks and OPA tests."
+
+pre-commit:
+	@command -v pre-commit >/dev/null 2>&1 || { echo "Installing pre-commit..."; python3 -m pip install --user pre-commit || pipx install pre-commit; }
+	pre-commit install
+	@echo "pre-commit installed. Hooks configured from .pre-commit-config.yaml"
 
 
 # Minimal deploy for current architecture (no SSH provisioning or LB)
