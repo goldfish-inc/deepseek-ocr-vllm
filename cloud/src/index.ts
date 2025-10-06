@@ -229,13 +229,13 @@ export default {
     const bootstrapUrl = ${JSON.stringify(projectBootstrapperUrl)};
     class ButtonInjector {
       element(el) {
-        el.after(`<button id="create-oceanid" style="margin-left:8px" class="ls-button primary">Create Oceanid<\/button>`, { html: true });
-        el.after(`<button id="create-oceanid-tabert" style="margin-left:4px" class="ls-button">TaBERT (exp)<\/button>`, { html: true });
+        el.after(\`<button id="create-oceanid" style="margin-left:8px" class="ls-button primary">Create Oceanid</button>\`, { html: true });
+        el.after(\`<button id="create-oceanid-tabert" style="margin-left:4px" class="ls-button">TaBERT (exp)</button>\`, { html: true });
       }
     }
     class ScriptInjector {
       element(el) {
-        el.append(`<script>(function(){\n  async function go(tabert){\n    const d=new Date().toISOString().slice(0,10);\n    const title=prompt('Project title','Oceanid NER '+d);\n    if(!title) return;\n    const r=await fetch('${projectBootstrapperUrl}/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title, description: tabert?'TABERT experimental':'', tabert})});\n    try{const data=await r.json(); if(data.project_url){ location.href=data.project_url; } else { alert('Failed: '+JSON.stringify(data)); }}catch(e){ alert('Failed to parse response'); }\n  }\n  addEventListener('click', function(e){\n    const t=e.target;\n    if(t && t.id==='create-oceanid'){ e.preventDefault(); go(false); }\n    if(t && t.id==='create-oceanid-tabert'){ e.preventDefault(); go(true); }\n  }, true);\n})();</script>`, { html: true });
+        el.append(\`<script>(function(){\\n  async function go(tabert){\\n    const d=new Date().toISOString().slice(0,10);\\n    const title=prompt('Project title','Oceanid NER '+d);\\n    if(!title) return;\\n    const r=await fetch('${projectBootstrapperUrl}/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title, description: tabert?'TABERT experimental':'', tabert})});\\n    try{const data=await r.json(); if(data.project_url){ location.href=data.project_url; } else { alert('Failed: '+JSON.stringify(data)); }}catch(e){ alert('Failed to parse response'); }\\n  }\\n  addEventListener('click', function(e){\\n    const t=e.target;\\n    if(t && t.id==='create-oceanid'){ e.preventDefault(); go(false); }\\n    if(t && t.id==='create-oceanid-tabert'){ e.preventDefault(); go(true); }\\n  }, true);\\n})();</script>\`, { html: true });
       }
     }
     return new HTMLRewriter()
