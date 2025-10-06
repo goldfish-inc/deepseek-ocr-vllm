@@ -14,6 +14,47 @@ Allowed local Pulumi commands (read/config only):
 - `pulumi config get` – read config
 - `pulumi stack output` – read‑only outputs
 
+## SSH and Authentication
+
+### Git/GitHub Authentication
+
+**SSH Keys (No 1Password SSH Agent)**:
+- 1Password SSH agent is **disabled** to avoid biometric prompts
+- Using standard SSH keys stored in `~/.ssh/`
+- Claude Code has dedicated SSH key: `~/.ssh/claude-code-gh`
+- Configuration in `~/.zshrc`:
+  ```bash
+  # 1Password SSH Agent (disabled - using standard SSH keys)
+  # export SSH_AUTH_SOCK="..."
+  # source "$HOME/.config/op/plugins.sh"  # disabled
+  ```
+
+**Git Operations**:
+```bash
+# Standard git push (uses default SSH keys)
+git push origin main
+
+# Or use Claude Code's dedicated key explicitly
+GIT_SSH_COMMAND="ssh -i ~/.ssh/claude-code-gh" git push origin main
+```
+
+**GitHub CLI**:
+- Uses `gh auth` token (not SSH)
+- Works without 1Password prompts
+- Token stored in keychain
+
+### 1Password CLI
+
+**Still Used For**:
+- Pulumi ESC secret access
+- Database credentials
+- API tokens in ESC environments
+
+**Not Used For**:
+- SSH authentication (disabled)
+- Git operations (disabled)
+- GitHub CLI (uses token)
+
 ## Critical Connection Setup (for debugging only)
 
 ### K3s Cluster Access
