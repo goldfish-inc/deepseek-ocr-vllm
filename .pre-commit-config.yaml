@@ -29,8 +29,8 @@ repos:
         files: ^(scripts/|.*\.sh)$
 
   # Shell formatter (keeps heredoc and indent consistent)
-  - repo: https://github.com/mvdan/sh
-    rev: v3.8.0
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-1
     hooks:
       - id: shfmt
         args: ["-i", "2", "-ci", "-bn", "-sr"]
@@ -40,8 +40,7 @@ repos:
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
-      - id: actionlint
-        additional_dependencies: []
+      - id: actionlint-docker
 
   # YAML lint (optionally extend later with a .yamllint config)
   - repo: https://github.com/adrienverge/yamllint
