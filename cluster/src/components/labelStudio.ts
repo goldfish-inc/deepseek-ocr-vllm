@@ -83,15 +83,11 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "PDF_CONVERT_TO_IMAGES", value: "true" },
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
-                                    // PostgreSQL configuration - Label Studio needs individual env vars
-                                    // Reading from ESC configuration
-                                    ...(dbUrl && postgresConfig ? [
+                                    // PostgreSQL configuration - Use DATABASE_URL for Django
+                                    // Label Studio uses Django's database configuration
+                                    ...(dbUrl ? [
+                                        { name: "DATABASE_URL", value: dbUrl },
                                         { name: "DJANGO_DB", value: "default" },
-                                        { name: "POSTGRE_NAME", value: postgresConfig.database },
-                                        { name: "POSTGRE_USER", value: postgresConfig.user },
-                                        { name: "POSTGRE_PASSWORD", value: postgresConfig.password },
-                                        { name: "POSTGRE_HOST", value: postgresConfig.host },
-                                        { name: "POSTGRE_PORT", value: String(postgresConfig.port || 5432) },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
