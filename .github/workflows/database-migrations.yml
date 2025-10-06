@@ -34,7 +34,7 @@ permissions:
 
 jobs:
   migrate:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     timeout-minutes: 30
 
     steps:
@@ -45,15 +45,25 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
+          # Add PostgreSQL apt repository for PG 17
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-16
+          sudo apt-get install -y wget gnupg
+
+          # Remove existing keyring if present
+          sudo rm -f /usr/share/keyrings/postgresql-keyring.gpg
+
+          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --batch --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
           psql --version
 
       - name: Configure Pulumi ESC access
         uses: pulumi/auth-actions@v1
         with:
           organization: ryan-taylor
-          requested-token-type: urn:pulumi:token-type:access_token:organization
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
 
       - name: Export database URL from ESC
         id: esc
@@ -63,15 +73,15 @@ jobs:
           export PATH="$HOME/.pulumi/bin:$PATH"
 
           # Get database URL from ESC (encrypted)
-          DATABASE_URL=$(esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:postgres_url)
+          DATABASE_URL=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url --value string --show-secrets)
 
           # Mask secret in logs
           echo "::add-mask::$DATABASE_URL"
-          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_OUTPUT
+          echo "DATABASE_URL=$DATABASE_URL" >> "$GITHUB_OUTPUT"
 
           if [ -z "$DATABASE_URL" ]; then
             echo "ℹ️ No DATABASE_URL found in ESC. Skipping migrations gracefully."
-            echo "SKIP=true" >> $GITHUB_OUTPUT
+            echo "SKIP=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Verify database connection
@@ -114,7 +124,7 @@ jobs:
 
           if [ "$SCHEMA_EXISTS" = "t" ]; then
             echo "✅ control.schema_versions exists"
-            psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schema_versions ORDER BY activated_at;"
+            psql "$DATABASE_URL" -c "SELECT version, applied_at, notes FROM control.schema_versions ORDER BY applied_at;"
           else
             echo "⚠️  control.schema_versions does not exist (first migration)"
           fi

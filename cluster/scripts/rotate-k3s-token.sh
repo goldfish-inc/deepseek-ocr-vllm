@@ -59,7 +59,7 @@ WORKER_NODES=("191.101.1.3" "192.168.2.80")
 WORKER_KEYS=("$HOME/.ssh/oceanid/styx_key" "$HOME/.ssh/oceanid/calypso_key")
 WORKER_USERS=("root" "oceanid")
 
-for i in ${!WORKER_NODES[@]}; do
+for i in "${!WORKER_NODES[@]}"; do
     NODE_IP=${WORKER_NODES[$i]}
     NODE_KEY=${WORKER_KEYS[$i]}
     NODE_USER=${WORKER_USERS[$i]}

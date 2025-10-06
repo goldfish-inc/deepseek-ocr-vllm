@@ -1,5 +1,16 @@
 #!/usr/bin/env sh
 
+# Run pre-commit framework (includes yamllint, shellcheck, etc.)
+if command -v pre-commit >/dev/null 2>&1; then
+  echo "🔍 Running pre-commit hooks..."
+  pre-commit run --hook-stage pre-commit || {
+    echo "❌ Pre-commit checks failed. Fix issues and try again."
+    exit 1
+  }
+else
+  echo "⚠️  pre-commit not installed, skipping framework checks"
+fi
+
 # Check markdown linting (staged files only)
 echo "🔍 Checking markdown files (staged)..."
 STAGED_MD_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.md$' || true)

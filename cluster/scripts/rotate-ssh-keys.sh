@@ -57,7 +57,8 @@ deploy_key_to_node() {
 
         # Remove old key
         echo "  → Removing old key from ${node_name}..."
-        local old_pub_key=$(ssh-keygen -y -f "$old_key_path" 2>/dev/null)
+        local old_pub_key
+        old_pub_key=$(ssh-keygen -y -f "$old_key_path" 2>/dev/null)
         ssh -i "$new_key_path" root@"$node_ip" "
             grep -v '$old_pub_key' ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp
             mv ~/.ssh/authorized_keys.tmp ~/.ssh/authorized_keys

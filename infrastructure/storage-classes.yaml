@@ -20,6 +20,6 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Retain
 allowedTopologies:
   - matchLabelExpressions:
-    - key: workload-type
-      values:
-      - gpu-compute
+      - key: workload-type
+        values:
+          - gpu-compute

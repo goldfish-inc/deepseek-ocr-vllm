@@ -106,6 +106,33 @@ esc env set default/oceanid-cluster \
   --secret
 ```
 
+## Running Migrations
+
+### From GitHub Actions (workflow_dispatch)
+
+Trigger manually from Actions tab - requires self-hosted runner with database access:
+```bash
+gh workflow run database-migrations.yml -f migration_version=all -f dry_run=false
+```
+
+### Manually from Local Machine
+
+Requires your IP to be whitelisted in CrunchyBridge firewall:
+
+```bash
+# Get database URL from ESC
+export DATABASE_URL=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url --value string --show-secrets)
+
+# Test connection
+psql "$DATABASE_URL" -c "SELECT version();"
+
+# Run specific migration
+psql "$DATABASE_URL" -f sql/migrations/V3__staging_tables_complete.sql
+
+# Check migration history
+psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schema_versions ORDER BY activated_at;"
+```
+
 ## Backups & Access
 
 - CrunchyBridge: enable automated backups; create a read‑only user for BI
@@ -122,5 +149,6 @@ esc env set default/oceanid-cluster \
 
 - **What database does the CI/CD workflow apply migrations to?** → The `database-migrations.yml` workflow uses `postgres_url` which points to the `postgres` database (not `labelfish`). It creates/updates schemas: `stage`, `control`, `curated`, `label`, `raw`.
 
-- **Where is the ebisu backend database?** → Ebisu backend uses the same CrunchyBridge analytics database (`postgres_url`) to read from curated schemas. Label Studio (deployed in oceanid cluster) is separate.
+- **Why do database migrations fail in GitHub Actions?** → The CrunchyBridge database has firewall rules that only allow specific IPs. GitHub Actions runners use dynamic IPs from large CIDR ranges. For security, we don't whitelist all GitHub IPs. Run migrations manually from an allowed IP or use workflow_dispatch with a self-hosted runner that has database access.
 
+- **Where is the ebisu backend database?** → Ebisu backend uses the same CrunchyBridge analytics database (`postgres_url`) to read from curated schemas. Label Studio (deployed in oceanid cluster) is separate.

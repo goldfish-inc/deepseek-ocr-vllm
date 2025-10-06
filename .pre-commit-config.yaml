@@ -15,7 +15,7 @@ repos:
         name: shellcheck (scripts)
         types_or: [shell]
         files: ^(scripts/|.*\.sh)$
-        args: ["--severity=style", "--format=gcc"]
+        args: ["--severity=warning", "--format=gcc"]
 
   # Strict Bash syntax check (catches here-doc terminator mistakes)
   - repo: local

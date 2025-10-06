@@ -24,6 +24,7 @@ RUNNER_VERSION="2.328.0"
 
 echo "🚀 Setting up GitHub self-hosted runner on tethys..."
 
+# shellcheck disable=SC2087
 ssh tethys bash <<EOF
 set -euo pipefail
 

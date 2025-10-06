@@ -35,7 +35,7 @@ jobs:
 
         # Install Pulumi CLI
         curl -fsSL https://get.pulumi.com/install.sh | sh
-        echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+        echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
 
     - name: 1. Prevent Shell Scripts in Forbidden Paths (Advisory)
       run: |
@@ -276,7 +276,8 @@ jobs:
           pip install -r adapter/requirements.txt
 
           # Add adapter to PYTHONPATH so tests can import it
-          export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+          CURRENT_DIR=$(pwd)
+          export PYTHONPATH="${PYTHONPATH}:${CURRENT_DIR}"
 
           if pytest -q adapter/tests; then
             echo "✅ Adapter unit tests passed"

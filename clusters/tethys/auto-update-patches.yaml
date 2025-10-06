@@ -48,8 +48,8 @@ metadata:
 spec:
   eventSeverity: info
   eventSources:
-  - kind: Kustomization
-    name: cert-manager-auto-update
+    - kind: Kustomization
+      name: cert-manager-auto-update
   providerRef:
     name: version-logger
   summary: "Image update applied successfully"

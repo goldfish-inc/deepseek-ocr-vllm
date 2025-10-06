@@ -108,8 +108,8 @@ jobs:
 
       - name: Setup kubeconfig for tunneled connection
         run: |
-          mkdir -p $HOME/.kube
-          cat > $HOME/.kube/config << 'EOF'
+          mkdir -p "$HOME/.kube"
+          cat > "$HOME/.kube/config" << 'EOF'
           apiVersion: v1
           kind: Config
           current-context: default
@@ -128,7 +128,7 @@ jobs:
             user:
               token: ${{ secrets.K3S_TOKEN }}
           EOF
-          chmod 600 $HOME/.kube/config
+          chmod 600 "$HOME/.kube/config"
 
       - name: Pulumi preview
         uses: pulumi/actions@v5
@@ -192,8 +192,8 @@ jobs:
 
       - name: Setup kubeconfig for tunneled connection
         run: |
-          mkdir -p $HOME/.kube
-          cat > $HOME/.kube/config << 'EOF'
+          mkdir -p "$HOME/.kube"
+          cat > "$HOME/.kube/config" << 'EOF'
           apiVersion: v1
           kind: Config
           current-context: default
@@ -212,7 +212,7 @@ jobs:
             user:
               token: ${{ secrets.K3S_TOKEN }}
           EOF
-          chmod 600 $HOME/.kube/config
+          chmod 600 "$HOME/.kube/config"
 
       - name: Pulumi up
         uses: pulumi/actions@v5
