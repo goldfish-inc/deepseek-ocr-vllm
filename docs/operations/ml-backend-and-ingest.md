@@ -4,13 +4,13 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
 
 ## Overview
 
-- Adapter: `ls-triton-adapter` (**Go service**, ~5Mi RAM) in namespace `apps`
+- Adapter: `ls-triton-adapter` (**Go service**, ~80Mi RAM) in namespace `apps`
   - Health: `/health` (200 OK)
   - Prediction: `/predict` (internal) and `/predict_ls` (Label Studio payloads)
   - Normalizes inputs for prelabels:
     - Text → NER
     - CSV → header‑aware flattening → NER (simplified in Go)
-- Sink: `annotations-sink` (**Go service**, ~5Mi RAM) in namespace `apps`
+- Sink: `annotations-sink` (**Go service**, ~50Mi RAM) in namespace `apps`
   - Health: `/health` (includes DB connectivity status)
   - Webhook: `/webhook` for annotation events (appends JSONL to HF dataset; writes spans to stage.extractions)
   - Ingest: `/ingest` for task‑create events (writes raw rows to `stage.table_ingest` and flattened text to `stage.documents`)

@@ -357,8 +357,17 @@ func main() {
 
 	handler := corsMiddleware(mux, cfg.AllowedOrigins)
 
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+	}
+
 	log.Printf("Starting project-bootstrapper on %s", cfg.ListenAddr)
-	if err := http.ListenAndServe(cfg.ListenAddr, handler); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
