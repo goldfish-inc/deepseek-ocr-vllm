@@ -80,11 +80,12 @@ jobs:
         echo "🔐 Scanning for hardcoded credentials..."
 
         # Patterns that indicate hardcoded credentials
+        # More specific patterns to avoid false positives in API paths and variable references
         CREDENTIAL_PATTERNS=(
-          "password.*=.*[\"'][^\"']{8,}[\"']"
-          "token.*=.*[\"'][^\"']{20,}[\"']"
-          "key.*=.*[\"'](?:ssh-|-----BEGIN)[^\"']+[\"']"
-          "secret.*=.*[\"'][^\"']{16,}[\"']"
+          "password[[:space:]]*=[[:space:]]*[\"'][^\"']{8,}[\"']"
+          "token[[:space:]]*=[[:space:]]*[\"'][a-zA-Z0-9_-]{20,}[\"']"
+          "key[[:space:]]*=[[:space:]]*[\"'](ssh-|-----BEGIN)[^\"']+[\"']"
+          "secret[[:space:]]*=[[:space:]]*[\"'][a-zA-Z0-9_-]{16,}[\"']"
           "K10[a-f0-9]{32}::server:[a-f0-9]{16}"
         )
 
