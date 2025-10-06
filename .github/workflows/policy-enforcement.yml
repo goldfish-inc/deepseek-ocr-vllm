@@ -190,7 +190,9 @@ jobs:
         echo "🛡️ Validating security practices..."
 
         # Check for proper secret handling in TypeScript files
-        SECURITY_VIOLATIONS=$(grep -r "console.log.*secret\|console.log.*token\|console.log.*password" cluster/src/ || true)
+        # Look for actual variable logging, not just mentions in strings
+        # Pattern: console.log(secret|token|password) or console.log("...", secret|token|password)
+        SECURITY_VIOLATIONS=$(grep -rE "console\.(log|error|warn|info)\([^)]*\b(secret|token|password)[^\"']" cluster/src/ | grep -v "console.log(\".*token.*\")" || true)
 
         if [ -n "$SECURITY_VIOLATIONS" ]; then
           echo "❌ Security violation: secrets being logged:"
