@@ -1,17 +1,9 @@
-name: infrastructure
+name: infrastructure (deprecated)
 
+# Deprecated: replaced by cluster-selfhosted.yml (self-hosted runner + OIDC)
+# This workflow is disabled to avoid fragile SSH tunneling from GitHub-hosted runners.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'cluster/**'
-      - '.github/workflows/infrastructure.yml'
-  pull_request:
-    paths:
-      - 'cluster/**'
-      - '.github/workflows/infrastructure.yml'
 
 concurrency:
   group: infrastructure-${{ github.ref }}
@@ -152,7 +144,7 @@ jobs:
 
   deploy:
     name: Pulumi Deploy
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: false # disabled
     needs: lint
     runs-on: ubuntu-latest
     permissions:

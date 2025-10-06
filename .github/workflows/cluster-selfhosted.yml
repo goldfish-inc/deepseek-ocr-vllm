@@ -1,0 +1,54 @@
+name: Deploy Cluster (Self-Hosted)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cluster/**'
+      - '.github/workflows/cluster-selfhosted.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      SELF_HOSTED: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        working-directory: cluster
+        run: |
+          npm ci
+
+      - name: Build cluster program
+        working-directory: cluster
+        run: npm run build
+
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
+
+      - name: Pulumi Up (cluster)
+        uses: pulumi/actions@v5
+        with:
+          command: up
+          stack-name: ryan-taylor/oceanid-cluster/prod
+          work-dir: cluster
+          refresh: true
+          diff: true

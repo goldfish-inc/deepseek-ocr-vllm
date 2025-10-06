@@ -81,5 +81,5 @@ jobs:
           echo "  Adapter: ${{ steps.images.outputs.adapter_image }}"
           echo "  Sink: ${{ steps.images.outputs.sink_image }}"
           echo ""
-          echo "Cluster applies are handled by Pulumi Deployments via the self-hosted agent (pool: oceanid-cluster)."
-          echo "Ensure the agent is online; pushes to main will trigger an apply for cluster/."
+          echo "Cluster applies are handled by a GitHub self-hosted runner on a host with kubeconfig access (e.g., tethys)."
+          echo "Ensure the runner is online; pushes to main that touch cluster/ will trigger an apply via cluster-selfhosted.yml."
