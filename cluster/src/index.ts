@@ -220,10 +220,14 @@ if (enableAppsStack) {
 
 // NOTE: CrunchyBridge PostgreSQL cluster now managed by oceanid-cloud stack
 
-const flux = new FluxBootstrap("gitops", {
-    cluster: clusterConfig,
-    k8sProvider,
-});
+const enableFluxBootstrap = cfg.getBoolean("enableFluxBootstrap") ?? false;
+let flux: FluxBootstrap | undefined;
+if (enableFluxBootstrap) {
+    flux = new FluxBootstrap("gitops", {
+        cluster: clusterConfig,
+        k8sProvider,
+    });
+}
 
 const pko = new PulumiOperator("pko", {
     cluster: clusterConfig,
@@ -234,7 +238,7 @@ const imageAutomation = new ImageAutomation("version-monitor", {
     cluster: clusterConfig,
     k8sProvider,
     fluxNamespace: "flux-system",
-}, { dependsOn: [flux] });
+}, { dependsOn: flux ? [flux] : [] });
 
 // Deploy node tunnels for bidirectional pod networking (especially for Calypso GPU node)
 const enableNodeTunnels = cfg.getBoolean("enableNodeTunnels") ?? true;
