@@ -587,15 +587,14 @@ const smeReadiness = new SMEReadiness("sme-ready", {
 // Annotations sink: receives LS webhooks, appends JSONL to HF dataset and upserts into Postgres
 const hfRepo = cfg.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
 const hfToken = cfg.getSecret("hfAccessToken");
-const pgPassword = cfg.getSecret("postgres_password");
-const postgresUrl = cfg.getSecret("postgres_url"); // External (e.g., CrunchyBridge)
-const dbUrl = (postgresUrl as any) || (pgPassword ? pulumi.interpolate`postgresql://postgres:${pgPassword}@postgres.apps.svc.cluster.local:5432/postgres` : undefined as any);
+// Use the same labelfish database as Label Studio
+const annotationsSinkDbUrl = labelStudioDbUrl; // Same database as Label Studio
 const schemaVersion = cfg.get("schemaVersion") || "1.0.0";
 const annotationsSink = new AnnotationsSink("annotations-sink", {
     k8sProvider,
     hfRepo,
     hfToken,
-    dbUrl,
+    dbUrl: annotationsSinkDbUrl,
     schemaVersion,
 });
 
