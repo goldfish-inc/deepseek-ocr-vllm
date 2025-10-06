@@ -17,6 +17,16 @@ jobs:
       with:
         fetch-depth: 0  # Full history for comprehensive checks
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
     - name: Install required tools
       run: |
         # Install policy checking tools
@@ -124,8 +134,11 @@ jobs:
 
         cd cluster/
 
+        # Install dependencies
+        pnpm install --frozen-lockfile
+
         # Check TypeScript compilation
-        if ! npm run build; then
+        if ! pnpm run build; then
           echo "❌ TypeScript compilation failed"
           exit 1
         fi
