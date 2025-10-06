@@ -73,9 +73,10 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
             namespace: namespaceName,
             createNamespace,
-            skipCrds: false,
+            // Skip CRDs - they're already managed by the initial Flux bootstrap
+            skipCrds: true,
             values: {
-                installCRDs: true,
+                installCRDs: false,
                 components: [
                     "source-controller",
                     "kustomize-controller",
