@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'adapter/**'
-      - 'sink/**'
+      - 'apps/ls-triton-adapter/**'
+      - 'apps/annotations-sink/**'
       - 'apps/project-bootstrapper/**'
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
   packages: write
 
 jobs:
-  build-adapter:
+  build-go-adapter:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,10 +28,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push adapter image
+      - name: Build and push Go adapter image
         uses: docker/build-push-action@v6
         with:
-          context: ./adapter
+          context: ./apps/ls-triton-adapter
           push: true
           tags: |
             ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:${{ github.sha }}
@@ -39,7 +39,7 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:buildcache
           cache-to: type=registry,ref=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:buildcache,mode=max
 
-  build-sink:
+  build-go-sink:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,10 +54,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push sink image
+      - name: Build and push Go sink image
         uses: docker/build-push-action@v6
         with:
-          context: ./sink
+          context: ./apps/annotations-sink
           push: true
           tags: |
             ghcr.io/goldfish-inc/oceanid/annotations-sink:${{ github.sha }}

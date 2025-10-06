@@ -76,7 +76,7 @@ Configure via Pulumi (cloud/): bind `PROJECT_BOOTSTRAPPER_URL` to the bootstrapp
 
 ## Backend: Project Bootstrapper
 
-The cluster component `ProjectBootstrapper` deploys a small FastAPI service that:
+The cluster component `ProjectBootstrapper` deploys a small Go service that:
 - Creates a Label Studio project
 - Applies the NER Labeling Interface from `NER_LABELS_JSON`
 - Connects DistilBERT NER backend (and TaBERT if requested)
