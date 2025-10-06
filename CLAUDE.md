@@ -136,24 +136,125 @@ cloudflared: ">=1.0.0"  # Track latest
 # Manual review required for major versions
 ```
 
-## Deployment Workflow (Authoritative)
+## CI/CD Workflows
 
-Use a single push‑to‑deploy flow across both stacks:
+### Active GitHub Actions Workflows
 
-1) Commit and push changes to `main`.
-- Cloud resources are applied by GitHub Actions (`cloud-infrastructure.yml`).
-- Cluster resources are applied by a GitHub self‑hosted runner using `pulumi/actions@v5` with `runs-on: self-hosted`.
+All deployments use GitHub Actions with automated checks and validations.
 
-2) Monitor deployments:
-- Cloud: GitHub Actions UI.
-- Cluster: GitHub Actions → Deploy Cluster (self‑hosted).
+#### Infrastructure Deployments
 
-3) Verify with kubectl only if necessary (debugging). Do not apply via CLI.
+**Cloud Infrastructure** (`cloud-infrastructure.yml`)
+- **Trigger**: Push to `main` touching `cloud/` directory or workflow file
+- **Runs on**: GitHub-hosted runner (`ubuntu-latest`)
+- **Authentication**: OIDC to Pulumi Cloud + Cloudflare
+- **Deploys**: DNS, Cloudflare Access, CrunchyBridge databases
+- **Optimizations**: pnpm caching, concurrency control
 
-Manual fallback is discouraged; if absolutely needed for break‑glass, coordinate with ops.
+**Cluster Infrastructure** (`cluster-selfhosted.yml`)
+- **Trigger**: Push to `main` touching `cluster/` directory or workflow file, or `workflow_dispatch`
+- **Runs on**: Self-hosted runner (tethys with kubeconfig access)
+- **Authentication**: OIDC to Pulumi Cloud
+- **Pre-flight checks**: Validates cluster state before deployment
+  - Detects Flux Helm ownership conflicts
+  - Identifies CRD annotation mismatches
+  - Reports namespace resource conflicts
+  - Warns about crashlooping pods
+- **Deploys**: K3s cluster resources, Flux CD, applications
+- **Script**: `cluster/scripts/preflight-check.sh` runs before `pulumi up`
+
+**Database Migrations** (`database-migrations.yml`)
+- **Trigger**: Push to `main` touching `sql/` directory, or `workflow_dispatch`
+- **Runs on**: Self-hosted runner (requires database network access)
+- **Authentication**: ESC-managed database credentials
+- **Runs**: Flyway-style SQL migrations in version order
+- **Safety**: Read-only validation before destructive changes
+
+#### Application Deployments
+
+**Build and Push Images** (`build-images.yml`)
+- **Trigger**: Push to `main` touching adapter/sink code
+- **Runs on**: GitHub-hosted runner
+- **Outputs**: Container images to `ghcr.io/goldfish-inc/oceanid/`
+- **Triggers**: `Update Image Tags` workflow on success
+
+**Update Image Tags** (`deploy-cluster.yml`)
+- **Trigger**: `Build and Push Images` completion, or `workflow_dispatch`
+- **Updates**: Pulumi ESC with new immutable image tags
+- **Note**: Cluster deployment handles actual k8s resource updates
+
+**Train and Publish NER Model** (`train-ner.yml`)
+- **Trigger**: Manual workflow dispatch
+- **Runs on**: GitHub-hosted runner
+- **Trains**: spaCy NER model for marine species extraction
+- **Publishes**: Model artifacts to releases
+
+#### Quality & Documentation
+
+**Infrastructure Policy Enforcement** (`policy-enforcement.yml`)
+- **Trigger**: Pull requests touching infrastructure code
+- **Validates**: Pulumi policy packs, Terraform plans
+- **Blocks**: PRs that violate security/compliance policies
+
+**Pre-commit Checks** (`pre-commit.yml`)
+- **Trigger**: Pull requests
+- **Runs**: Linters, formatters, security scans
+- **Checks**: YAML, shell scripts, markdown, GitHub Actions syntax
+
+**Trigger Nautilus Doc Sync** (`trigger-nautilus-sync.yml`)
+- **Trigger**: Push to `main` touching docs or markdown
+- **Action**: Rebuilds documentation site at nautilus.boathou.se
+
+### Deployment Workflow (Authoritative)
+
+Use a single push‑to‑deploy flow:
+
+1. **Commit and push** changes to `main`
+   - Cloud resources: Applied by `cloud-infrastructure.yml` (GitHub-hosted)
+   - Cluster resources: Applied by `cluster-selfhosted.yml` (self-hosted)
+   - Database changes: Applied by `database-migrations.yml` (self-hosted)
+
+2. **Monitor deployments**
+   - GitHub Actions UI shows real-time progress
+   - Self-hosted runner logs available on tethys
+
+3. **Pre-flight validation** (cluster deployments only)
+   - Automatic validation before `pulumi up`
+   - Fails fast on ownership conflicts
+   - Prevents wasted deployment cycles
+
+4. **Verify** with kubectl only if necessary (debugging)
+   - Do not apply via CLI
+
+**Manual applies are prohibited.** If break-glass access is needed, coordinate with ops.
+
+### Pre-flight Validation
+
+Before every cluster deployment, `cluster/scripts/preflight-check.sh` validates:
+
+**Ownership Conflicts** (blocking):
+- Flux Helm resources with mismatched release metadata
+- CRDs with incorrect ownership annotations
+- Namespace resources blocking new installations
+
+**Operational Warnings** (non-blocking):
+- Crashlooping pods that may be fixed by deployment
+- Cluster connectivity issues
+
+**Running manually**:
+```bash
+KUBECONFIG=~/.kube/k3s-config.yaml cluster/scripts/preflight-check.sh
+```
+
+**Exit codes**:
+- `0`: All checks passed, safe to deploy
+- `1`: Blocking issues found, fix before deployment
 
 ### Testing Changes:
 ```bash
+# Run pre-flight checks locally
+KUBECONFIG=~/.kube/k3s-config.yaml cluster/scripts/preflight-check.sh
+
 # Check Pulumi deployment
 pulumi stack output
 
@@ -183,19 +284,33 @@ kubectl get imageupdateautomation flux-system -n flux-system
 
 ### Common Issues:
 
-1. **SSH Connection Lost**:
+1. **Deployment Blocked by Pre-flight Checks**:
+   - **Helm ownership conflicts**: Delete stale resources manually
+     ```bash
+     kubectl delete clusterrole,clusterrolebinding <resource-name>
+     ```
+   - **CRD annotation mismatches**: Re-label or delete/recreate CRDs
+   - **Namespace conflicts**: Clean up old Flux resources in `flux-system` namespace
+
+2. **Self-Hosted Runner Offline**:
+   - Check runner status: `ssh tethys "systemctl status actions.runner.*"`
+   - Restart runner: Follow GitHub docs for runner management
+   - Fallback: Cannot deploy cluster changes until runner is online
+
+3. **SSH Connection Lost** (for local debugging):
    - Re-establish tunnel: `ssh -L 16443:localhost:6443 tethys -N &`
    - Verify kubeconfig: `KUBECONFIG=~/.kube/k3s-config.yaml`
 
-2. **Pulumi State Issues**:
+4. **Pulumi State Issues**:
    - Check ESC connectivity: `pulumi whoami`
-   - Refresh state: `pulumi refresh`
+   - Refresh state: `pulumi refresh` (local debugging only)
+   - State conflicts: Let GitHub Actions handle deployment
 
-3. **Flux Authentication**:
+5. **Flux Authentication**:
    - Verify GitHub token: `kubectl get secret github-token -n flux-system`
    - Check repo access: `kubectl get gitrepository flux-system -n flux-system`
 
-4. **Image Updates Not Working**:
+6. **Image Updates Not Working**:
    - Check policies: `kubectl get imagepolicy -n flux-system`
    - Verify markers: Check `clusters/tethys/infrastructure.yaml`
    - Force reconcile: Annotate ImageUpdateAutomation resource
