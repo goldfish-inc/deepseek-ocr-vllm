@@ -89,7 +89,8 @@ export class PulumiOperator extends pulumi.ComponentResource {
                 },
                 values: {
                     // PKO v2 requires cluster-wide installation
-                    installCRDs: true,
+                    // Skip CRD installation - Flux already manages its own CRDs
+                    installCRDs: false,
                     controllerManager: {
                         replicas: 1,
                         resources: {
