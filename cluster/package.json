@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@pulumi/cloudflare": "^6.9.1",
-    "@pulumi/command": "^1.1.1",
+    "@pulumi/command": "^1.2.0",
     "@pulumi/crunchybridge": "file:sdks/crunchybridge",
     "@pulumi/kubernetes": "^4.23.0",
     "@pulumi/pulumi": "^3.0.0",
