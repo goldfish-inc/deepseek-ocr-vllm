@@ -74,11 +74,29 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "PDF_CONVERT_TO_IMAGES", value: "true" },
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
-                                    // Force PostgreSQL usage when DATABASE_URL is provided
+                                    // PostgreSQL configuration - Label Studio needs individual env vars
                                     ...(dbUrl ? [
-                                        { name: "DATABASE_URL", value: dbUrl as any },
                                         { name: "DJANGO_DB", value: "default" },
-                                        { name: "USE_DEFAULT_DB", value: "true" },
+                                        { name: "POSTGRE_NAME", value: pulumi.output(dbUrl).apply(url => {
+                                            const match = (url as string).match(/postgres:\/\/[^:]+:[^@]+@[^:]+:\d+\/(.+)/);
+                                            return match ? match[1] : "labelfish";
+                                        }) },
+                                        { name: "POSTGRE_USER", value: pulumi.output(dbUrl).apply(url => {
+                                            const match = (url as string).match(/postgres:\/\/([^:]+):/);
+                                            return match ? match[1] : "labelfish_owner";
+                                        }) },
+                                        { name: "POSTGRE_PASSWORD", value: pulumi.output(dbUrl).apply(url => {
+                                            const match = (url as string).match(/postgres:\/\/[^:]+:([^@]+)@/);
+                                            return match && match[1] ? decodeURIComponent(match[1]) : "";
+                                        }) },
+                                        { name: "POSTGRE_HOST", value: pulumi.output(dbUrl).apply(url => {
+                                            const match = (url as string).match(/@([^:]+):/);
+                                            return match ? match[1] : "localhost";
+                                        }) },
+                                        { name: "POSTGRE_PORT", value: pulumi.output(dbUrl).apply(url => {
+                                            const match = (url as string).match(/@[^:]+:(\d+)/);
+                                            return match ? match[1] : "5432";
+                                        }) },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
