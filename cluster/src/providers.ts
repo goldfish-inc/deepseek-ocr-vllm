@@ -10,10 +10,10 @@ import { clusterConfig } from "./config";
 // Guard against running cluster stack in GitHub Actions
 // This stack must run on a machine that has kubeconfig access, typically via
 // Pulumi Deployments with a self-hosted agent. Do not run from GitHub runners.
-if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
+if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" && process.env.SELF_HOSTED !== "true") {
     throw new Error(
-        "❌ Cluster stack cannot run in GitHub Actions.\n\n" +
-        "Use Pulumi Deployments with a self-hosted agent (pool: oceanid-cluster),\n" +
+        "❌ Cluster stack cannot run in GitHub-hosted runners.\n\n" +
+        "Use a GitHub self-hosted runner on a host with kubeconfig access,\n" +
         "or run locally for break-glass only. Cloud resources live in the 'cloud/' stack."
     );
 }

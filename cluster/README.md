@@ -21,32 +21,14 @@ This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational 
 
 ## Deployment Model (Default)
 
-This stack is deployed by Pulumi Deployments using a self‑hosted agent with kubeconfig access. Do not run `pulumi up` locally or from GitHub Actions.
+This stack is deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). Do not run `pulumi up` from GitHub‑hosted runners.
 
-### Pulumi Deployments Agent (Required)
+### Self‑Hosted Actions Runner (Required)
 
-Install once on a host that can reach the cluster (e.g., tethys):
-
-```bash
-# 1) Install agent and register to pool
-pulumi deployments agent install \
-  --token "<Pulumi Agent Token>" \
-  --pool oceanid-cluster
-
-# 2) Enable on boot
-sudo systemctl enable pulumi-deployments-agent
-sudo systemctl start pulumi-deployments-agent
-```
-
-Pulumi Cloud configuration:
-- Stack: `ryan-taylor/oceanid-cluster/prod`
-- Deployments: Enabled
-- Deployment pool: `oceanid-cluster`
-- Trigger: Push to `main`
-- Work directory: `cluster/`
+Install a GitHub Actions runner on tethys and register it to this repository or organization. Then use the provided workflow to run `pulumi up` on push to `main` for `cluster/` changes.
 
 Monitoring:
-- Pulumi Cloud → Deployments → Runs
+- GitHub Actions → Deploy Cluster (self‑hosted)
 
 ### Manual Fallback (Discouraged)
 

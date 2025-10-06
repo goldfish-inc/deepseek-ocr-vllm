@@ -7,7 +7,7 @@ This file contains specific instructions for AI assistants working with the Ocea
 Never run Pulumi applies by hand (`pulumi up`, `pulumi destroy`, etc.). All infrastructure changes must go through automated deployments:
 
 - Cloud stack (`cloud/`): Deployed by GitHub Actions with OIDC.
-- Cluster stack (`cluster/`): Deployed by Pulumi Deployments using a self‑hosted agent that has kubeconfig access. Do not attempt to run cluster applies from GitHub runners.
+- Cluster stack (`cluster/`): Deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). Do not run cluster applies from GitHub‑hosted runners.
 
 Allowed local Pulumi commands (read/config only):
 - `pulumi config set` – write config (committed to git when applicable)
@@ -141,12 +141,12 @@ cloudflared: ">=1.0.0"  # Track latest
 Use a single push‑to‑deploy flow across both stacks:
 
 1) Commit and push changes to `main`.
-   - Cloud resources are applied by GitHub Actions (`cloud-infrastructure.yml`).
-   - Cluster resources are applied by Pulumi Deployments via the self‑hosted agent (configured in Pulumi Cloud).
+- Cloud resources are applied by GitHub Actions (`cloud-infrastructure.yml`).
+- Cluster resources are applied by a GitHub self‑hosted runner using `pulumi/actions@v5` with `runs-on: self-hosted`.
 
 2) Monitor deployments:
-   - Cloud: GitHub Actions UI.
-   - Cluster: Pulumi Cloud → Deployments → Runs (agent pool: `oceanid-cluster`).
+- Cloud: GitHub Actions UI.
+- Cluster: GitHub Actions → Deploy Cluster (self‑hosted).
 
 3) Verify with kubectl only if necessary (debugging). Do not apply via CLI.
 
