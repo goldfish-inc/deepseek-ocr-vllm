@@ -22,7 +22,7 @@ def convert_chile_excel_to_csv(input_file, output_file):
             except Exception:
                 # Try reading without engine specification
                 df = pd.read_excel(input_file)
-        
+
         # Standardize column names (Chilean registries use Spanish headers)
         column_mapping = {
             'RPA': 'registro_pesquero_artesanal',
@@ -48,16 +48,16 @@ def convert_chile_excel_to_csv(input_file, output_file):
             'PROVINCIA': 'provincia',
             'CALETA': 'caleta'
         }
-        
+
         # Rename columns to lowercase standardized names
         df.columns = [column_mapping.get(col.upper(), col.lower()) for col in df.columns]
-        
+
         # Save as CSV
         df.to_csv(output_file, index=False, encoding='utf-8')
         print(f"✓ Converted {input_file} → {output_file}")
         print(f"  Records: {len(df)}")
         return True
-        
+
     except Exception as e:
         print(f"✗ Error converting {input_file}: {str(e)}")
         return False
@@ -65,23 +65,23 @@ def convert_chile_excel_to_csv(input_file, output_file):
 def main():
     # Define source and destination directories
     source_dir = Path("/import/missing-registered-vessels-2025-09-08")
-    
+
     # Process each Chile Excel file
     chile_files = list(source_dir.glob("CHL_*.xlsx"))
-    
+
     if not chile_files:
         print("No Chile Excel files found")
         return 1
-    
+
     print(f"Found {len(chile_files)} Chile Excel files to convert")
-    
+
     successful = 0
     for excel_file in chile_files:
         # Extract region info from filename
         # e.g., CHL_region_III_RPA_2025-09-08.xlsx → CHILE_III
         filename = excel_file.stem
         parts = filename.split('_')
-        
+
         if 'region' in parts:
             region_idx = parts.index('region') + 1
             if region_idx < len(parts):
@@ -93,19 +93,19 @@ def main():
         else:
             # Handle CHL_vessels_LTP-PEP format
             dest_name = filename.replace('CHL_vessels_', 'CHILE_').split('_20')[0]
-        
+
         # Create destination directory
         dest_dir = Path(f"/import/vessels/vessel_data/COUNTRY/{dest_name}/raw")
         dest_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Define output CSV file
         csv_filename = f"{dest_name}_vessels_2025-09-08.csv"
         output_file = dest_dir / csv_filename
-        
+
         # Convert
         if convert_chile_excel_to_csv(excel_file, output_file):
             successful += 1
-    
+
     print(f"\nConversion complete: {successful}/{len(chile_files)} files converted successfully")
     return 0 if successful == len(chile_files) else 1
 

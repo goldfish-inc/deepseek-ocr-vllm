@@ -21,4 +21,3 @@ curl -sk https://${GPU_HOST}/ | head -n 3 || true
 curl -sk https://${GPU_HOST}/gpu | head -n 10 || true
 
 echo "==> Done. Review output above for errors."
-

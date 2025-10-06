@@ -83,4 +83,3 @@ END $$;
 --   DATABASE_URL=postgresql://labelfish_owner:***@<host>:5432/labelfish
 -- - If setting search_path via connection string, append:
 --   ?options=-c%20search_path%3Dlabelfish,public
-

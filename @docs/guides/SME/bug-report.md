@@ -48,4 +48,3 @@ Use this template to report issues. Clear, complete reports help us fix problems
 Tips:
 - Redact sensitive content. If a sample is required, create a minimal repro using public or dummy data.
 - Include the exact time of failure; we can correlate with server logs.
-

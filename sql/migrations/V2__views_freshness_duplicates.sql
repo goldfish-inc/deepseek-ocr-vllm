@@ -45,4 +45,3 @@ select
   e.updated_at
 from stage.extractions e
 where e.db_mapping is not null and e.db_mapping <> '';
-

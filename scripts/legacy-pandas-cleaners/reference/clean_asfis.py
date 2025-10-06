@@ -121,12 +121,12 @@ def main():
     try:
         print("🧼 Starting ASFIS rule-based cleaning (Step 2)...")
         df = pd.read_csv(INPUT)
-        
+
         # Clean column names (in case there are any spacing issues)
         df.columns = df.columns.str.strip().str.replace(" ", "_")
-        
+
         # Additional rule-based cleaning on the preprocessed data
-        
+
         # 1. Clean scientificName field
         if 'scientificName' in df.columns:
             df['scientificName'] = df['scientificName'].str.strip()
@@ -134,14 +134,14 @@ def main():
             df['scientificName'] = df['scientificName'].str.replace(r'\([^)]*\)', '', regex=True).str.strip()
             # Normalize whitespace
             df['scientificName'] = df['scientificName'].str.replace(r'\s+', ' ', regex=True)
-        
+
         # 2. Clean taxonRank field
         if 'taxonRank' in df.columns:
             df['taxonRank'] = df['taxonRank'].str.strip()
             # Standardize rank names
             rank_mappings = {
                 'species': 'Species',
-                'genus': 'Genus', 
+                'genus': 'Genus',
                 'family': 'Family',
                 'order': 'Order',
                 'class': 'Class',
@@ -155,7 +155,7 @@ def main():
                 'subspecies': 'Subspecies'
             }
             df['taxonRank'] = df['taxonRank'].str.lower().map(rank_mappings).fillna(df['taxonRank'])
-        
+
         # 3. Clean Family field - only capitalize properly
         if 'Family' in df.columns:
             def capitalize_family_name(name):
@@ -166,9 +166,9 @@ def main():
                 words = name.split()
                 capitalized_words = [word.capitalize() for word in words]
                 return ' '.join(capitalized_words)
-            
+
             df['Family'] = df['Family'].apply(capitalize_family_name)
-        
+
         # 4. Clean Order_or_higher_taxa field - only capitalize properly
         if 'Order_or_higher_taxa' in df.columns:
             def capitalize_order_name(name):
@@ -179,7 +179,7 @@ def main():
                 words = name.split()
                 capitalized_words = [word.capitalize() for word in words]
                 return ' '.join(capitalized_words)
-            
+
             df['Order_or_higher_taxa'] = df['Order_or_higher_taxa'].apply(capitalize_order_name)
 
         # 5. Clean FishStat_Data field - convert YES/NO to boolean
@@ -191,23 +191,23 @@ def main():
                 'NO': False
             }
             df['FishStat_Data'] = df['FishStat_Data'].map(fishstat_mappings)
-        
+
         # Optional: print null counts for monitoring
         null_counts = df.isnull().sum()
         print(f"ℹ️ Null counts after cleaning:")
         for col, count in null_counts[null_counts > 0].items():
             print(f"   {col}: {count}")
-        
+
         # Validate against schema
         print("🔍 Validating cleaned data against schema...")
         if schema is not None:
             schema.validate(df)
-        
+
         # Save cleaned data
         df.to_csv(OUTPUT, index=False)
         print(f"✅ ASFIS rule-based cleaning completed: {OUTPUT}")
         print(f"📊 Cleaned records: {len(df)}")
-        
+
     except pa.errors.SchemaError as e:
         print(f"❌ Schema validation failed: {e}")
         # Save the problematic data for review

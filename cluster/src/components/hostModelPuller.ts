@@ -128,4 +128,3 @@ $SUDO systemctl start ${serviceName}.service || true
     this.registerOutputs({});
   }
 }
-

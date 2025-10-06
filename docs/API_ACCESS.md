@@ -24,4 +24,3 @@ Notes
 - The node tunnel maps `api.<base>` to `https://kubernetes.default.svc.cluster.local:443`.
 - DNS is managed by this stack: `api.<base>` CNAME → `<NODE_TUNNEL_ID>.cfargotunnel.com`.
 - If you prefer SSH for short sessions, `scripts/k3s-ssh-tunnel.sh` remains available.
-

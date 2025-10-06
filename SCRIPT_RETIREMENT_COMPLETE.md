@@ -8,4 +8,3 @@ We replaced fragile shell workflows with infrastructure-as-code and CI:
 - Policy: pre-commit + actionlint + shellcheck + yamllint
 
 Remaining scripts are operational helpers and validated by CI; new features must use IaC or documented workflows.
-

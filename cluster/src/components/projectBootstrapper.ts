@@ -240,4 +240,3 @@ if __name__ == "__main__":
     this.registerOutputs({ serviceName: this.serviceName, serviceUrl: this.serviceUrl });
   }
 }
-

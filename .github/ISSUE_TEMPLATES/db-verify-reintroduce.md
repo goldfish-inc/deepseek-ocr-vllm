@@ -20,4 +20,3 @@ Acceptance Criteria
 Notes
 
 - This was temporarily disabled to avoid blocking deploys when DB was unavailable. Reintroduce with strict non-blocking behavior.
-

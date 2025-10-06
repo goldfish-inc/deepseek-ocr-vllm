@@ -10,4 +10,3 @@ COPY app.py /app/app.py
 COPY ner/ /app/ner/
 ENV PATH="/venv/bin:$PATH"
 CMD ["uvicorn","app:app","--host","0.0.0.0","--port","9090"]
-

@@ -19,4 +19,3 @@ Notes
 - The Annotations Sink writes to stage.* when DATABASE_URL is set in its environment.
 - Prefer running migrations from your workstation against CrunchyBridge.
 - Keep sink bootstrap DDL as a safety net; treat these SQL files as source of truth.
-

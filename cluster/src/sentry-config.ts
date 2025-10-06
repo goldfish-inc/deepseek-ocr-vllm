@@ -22,4 +22,3 @@ export function toEnvVars(s: SentrySettings): Record<string, pulumi.Input<string
     if (s.release) env["SENTRY_RELEASE"] = s.release;
     return env;
 }
-

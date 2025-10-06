@@ -153,4 +153,3 @@ class TritonPythonModel:
 
     def finalize(self):
         self.ready = False
-

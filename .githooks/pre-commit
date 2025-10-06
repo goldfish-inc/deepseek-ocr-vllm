@@ -34,4 +34,3 @@ else
 fi
 
 echo "[pre-commit] All checks passed."
-

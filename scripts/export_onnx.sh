@@ -20,4 +20,3 @@ optimum-cli export onnx --model "$MODEL_DIR" \
   "$OUT_DIR"
 
 echo "ONNX exported to $OUT_DIR"
-

@@ -16,4 +16,3 @@ echo "Opening CF Access TCP to ${HOSTNAME} on 127.0.0.1:${LPORT}..."
 cloudflared access tcp --hostname "${HOSTNAME}" --url "127.0.0.1:${LPORT}" &
 sleep 2
 echo "Set KUBECONFIG and point your kubeconfig server to https://127.0.0.1:${LPORT}"
-

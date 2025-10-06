@@ -49,4 +49,3 @@ Notes
 
 - Keep HF dataset as system of record; DB is a sink for analytics/QA.
 - Ensure Pulumi-only deploys; no manual kubectl.
-

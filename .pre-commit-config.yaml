@@ -49,4 +49,3 @@ repos:
       - id: yamllint
         files: ^(.*\.ya?ml)$
         args: ["-d", "{extends: default, rules: {line-length: disable, document-start: disable, indentation: {indent-sequences: consistent}, comments: {min-spaces-from-content: 1}, brackets: {min-spaces-inside: 0, max-spaces-inside: 1}}}"]
-

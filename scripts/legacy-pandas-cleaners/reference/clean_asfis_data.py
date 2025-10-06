@@ -10,9 +10,9 @@ os.makedirs(REFERENCE_OUT, exist_ok=True)
 os.makedirs(LOG_ROOT, exist_ok=True)
 
 def clean_asfis_data(input_file=None, output_file=None):
-    
+
     """ASFIS Edge Case Preprocessing - Step 1 of ASFIS pipeline"""
-    
+
     # Use default values if not provided
     if input_file is None:
         input_file = os.path.join(RAW_ROOT, "ASFIS_sp_2025.csv")
@@ -22,7 +22,7 @@ def clean_asfis_data(input_file=None, output_file=None):
     output_dir = os.path.dirname(output_file)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-    
+
     # Define the edge case mappings
     edge_cases = {
         "Siluriformes (=Siluroidei)": {"speciesScientificNames[0]": "Siluridae", "currentRank": "Family", "speciesScientificNames[1]": ""},
@@ -179,7 +179,7 @@ def clean_asfis_data(input_file=None, output_file=None):
 
         # Step 1: Process data with your existing logic
         processed_rows = []
-        
+
         for row in all_rows:
             scientific_name = row[scientific_name_idx]
 
@@ -221,7 +221,7 @@ def clean_asfis_data(input_file=None, output_file=None):
                     # Your existing word count logic...
                     words = scientific_name.split()
                     word_count = len(words)
-                    
+
                     if word_count == 1 and words[0].lower().endswith('dae'):
                         current_rank = "Family"
                         species_scientific_name_0 = scientific_name
@@ -265,17 +265,17 @@ def clean_asfis_data(input_file=None, output_file=None):
         # Step 2: Duplicate rows that have both speciesScientificNames[0] and speciesScientificNames[1]
         normalized_rows = []
         duplicate_count = 0
-        
+
         for row in processed_rows:
             current_rank = row[alpha3_code_idx + 1]
             species_name_0 = row[alpha3_code_idx + 2]
             species_name_1 = row[alpha3_code_idx + 3]
-            
+
             # Always add the first row (with speciesScientificNames[0])
             first_row = row.copy()
             first_row[alpha3_code_idx + 3] = ""  # Clear speciesScientificNames[1]
             normalized_rows.append(first_row)
-            
+
             # If there's a second species, create a duplicate row
             if species_name_1 and species_name_1.strip():
                 second_row = row.copy()
@@ -302,7 +302,7 @@ def clean_asfis_data(input_file=None, output_file=None):
         final_rows = []
         scientific_name_idx_intermediate = intermediate_headers.index('Scientific_Name')
         species_name_1_idx = intermediate_headers.index('speciesScientificNames[1]')
-        
+
         for row in normalized_rows:
             final_row = []
             for i, value in enumerate(row):
@@ -324,7 +324,7 @@ def clean_asfis_data(input_file=None, output_file=None):
         print(f"📊 Original rows: {len(all_rows)}")
         print(f"📊 Final rows: {len(final_rows)}")
         print(f"📊 Duplicated rows: {duplicate_count}")
-        
+
         # Log preprocessing statistics
         with open(os.path.join(LOG_ROOT, "asfis_preprocessing_stats.log"), "w") as log:
             log.write(f"Edge cases processed: {len(edge_cases)}\n")
@@ -332,7 +332,7 @@ def clean_asfis_data(input_file=None, output_file=None):
             log.write(f"Final rows: {len(final_rows)}\n")
             log.write(f"Duplicated rows: {duplicate_count}\n")
             log.write(f"Expansion ratio: {len(final_rows) / len(all_rows):.2f}\n")
-            
+
     except Exception as e:
         print(f"❌ ASFIS preprocessing failed: {e}")
         raise

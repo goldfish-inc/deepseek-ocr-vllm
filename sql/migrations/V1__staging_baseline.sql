@@ -119,4 +119,3 @@ create table if not exists curated.entity_organizations (
   name text,
   updated_at timestamptz default now()
 );
-

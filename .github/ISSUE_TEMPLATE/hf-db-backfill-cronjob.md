@@ -21,4 +21,3 @@ Acceptance Criteria
 Notes
 
 - Keep HF dataset as system of record; DB used for QA/analytics. This job makes DB eventually consistent.
-

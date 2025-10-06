@@ -35,4 +35,3 @@ export interface GetClusterstatusOperation {
     flavor: string;
     state: string;
 }
-

@@ -16,4 +16,3 @@ Current Status:
 - SSH tunnel workflows deprecated
 - Cluster applies use self-hosted runner + OIDC
 - Migrations and policy enforcement linting active in CI
-

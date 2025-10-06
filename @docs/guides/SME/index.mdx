@@ -182,7 +182,7 @@ See setup details: `docs/operations/sqlplayground-connection.mdx`.
 FROM stage.v_document_processing_stats
 ORDER BY last_processed_at DESC NULLS LAST
 LIMIT 50;`}
-/> 
+/>
 
 {/* CSV cells needing review */}
 <SQLPlayground
@@ -194,7 +194,7 @@ FROM stage.csv_extractions
 WHERE needs_review = true
 ORDER BY confidence ASC, created_at ASC
 LIMIT 200;`}
-/> 
+/>
 
 {/* NER spans by document */}
 <SQLPlayground
@@ -205,7 +205,7 @@ LIMIT 200;`}
 FROM stage.extractions e
 WHERE e.document_id = 12345
 ORDER BY e.updated_at DESC;`}
-/> 
+/>
 
 {/* Training corrections (latest) */}
 <SQLPlayground

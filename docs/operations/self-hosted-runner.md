@@ -36,4 +36,3 @@ Optional: If kubeconfig is not under the default path used by the stack, ensure 
 - Runner offline: check `./svc.sh status` and system logs
 - Pulumi errors: ensure both secrets are configured and valid
 - Kubeconfig: confirm file path and permissions for the runner user
-

@@ -84,4 +84,3 @@ export default async function handler(req, res) {
 - The database account must only have `SELECT` on `stage.*` and specific views; no write privileges.
 - Consider caching common queries (e.g., stats view) to reduce DB load.
 - In incident mode, disable the handler or the alias quickly via env/feature flag.
-
