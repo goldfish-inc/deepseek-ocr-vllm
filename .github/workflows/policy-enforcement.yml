@@ -144,15 +144,21 @@ jobs:
         fi
 
         # Check for proper resource organization
-        REQUIRED_DIRS=(
-          "src/components"
-          "src/config"
-          "src/providers"
+        if [ ! -d "src/components" ]; then
+          echo "❌ Missing required directory: src/components"
+          exit 1
+        fi
+
+        # Check for required TypeScript files
+        REQUIRED_FILES=(
+          "src/index.ts"
+          "src/config.ts"
+          "src/providers.ts"
         )
 
-        for dir in "${REQUIRED_DIRS[@]}"; do
-          if [ ! -d "$dir" ]; then
-            echo "❌ Missing required directory: $dir"
+        for file in "${REQUIRED_FILES[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "❌ Missing required file: $file"
             exit 1
           fi
         done
