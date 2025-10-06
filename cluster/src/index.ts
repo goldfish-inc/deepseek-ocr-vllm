@@ -787,7 +787,7 @@ const migration = enableMigration
                 privateKey: cfg.requireSecret("calypso_ssh_key"),
             },
         },
-    }, { dependsOn: ((() => { const deps: pulumi.Resource[] = [flux, pko, imageAutomation]; if (controlPlaneLB) deps.unshift(controlPlaneLB); return deps; })()) })
+    }, { dependsOn: ((() => { const deps: pulumi.Resource[] = [pko, imageAutomation]; if (flux) deps.push(flux); if (controlPlaneLB) deps.unshift(controlPlaneLB); return deps; })()) })
     : undefined;
 
 export const outputs = {
@@ -813,7 +813,7 @@ export const outputs = {
     nodeTunnelMetricsService: nodeTunnels ? nodeTunnels.outputs.metricsServiceName : pulumi.output(""),
     nodeTunnelDnsRecords: nodeTunnels ? nodeTunnels.outputs.dnsRecords : pulumi.output({}),
     lsMlBackendUrl: lsAdapter.serviceUrl,
-    fluxNamespace: flux.namespace,
+    fluxNamespace: flux ? flux.namespace : pulumi.output(""),
     gitRepository: clusterConfig.gitops.repositoryUrl,
     gitPath: clusterConfig.gitops.path,
     pkoNamespace: pko.namespace,

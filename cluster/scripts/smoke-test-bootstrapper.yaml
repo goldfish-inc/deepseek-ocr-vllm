@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrapper-smoke-test
+  namespace: apps
+spec:
+  ttlSecondsAfterFinished: 300  # Auto-cleanup after 5 minutes
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: smoke-test
+          image: curlimages/curl:8.10.1
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "🔍 Testing project-bootstrapper endpoints..."
+
+              # Test /health endpoint
+              echo "Testing /health..."
+              STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://project-bootstrapper.apps.svc.cluster.local:8080/health)
+              if [ "$STATUS" != "200" ]; then
+                echo "❌ /health returned $STATUS (expected 200)"
+                exit 1
+              fi
+              echo "✅ /health responded with 200"
+
+              # Verify response body
+              RESPONSE=$(curl -s http://project-bootstrapper.apps.svc.cluster.local:8080/health)
+              echo "Response: $RESPONSE"
+              if ! echo "$RESPONSE" | grep -q '"ok"'; then
+                echo "❌ /health response missing 'ok' field"
+                exit 1
+              fi
+              echo "✅ /health response valid"
+
+              echo ""
+              echo "🎉 All smoke tests passed!"
+              echo "project-bootstrapper is healthy and responding correctly"

@@ -50,3 +50,21 @@ repos:
       - id: yamllint
         files: ^(.*\.ya?ml)$
         args: ["-d", "{extends: default, rules: {line-length: disable, document-start: disable, indentation: {indent-sequences: consistent}, comments: {min-spaces-from-content: 1}, brackets: {min-spaces-inside: 0, max-spaces-inside: 1}}}"]
+
+  # TypeScript compilation check
+  - repo: local
+    hooks:
+      - id: typescript-build-cluster
+        name: TypeScript Build (cluster)
+        entry: bash -c 'pnpm --filter @oceanid/cluster build'
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false
+        files: ^cluster/.*\.ts$
+      - id: typescript-build-cloud
+        name: TypeScript Build (cloud)
+        entry: bash -c 'pnpm --filter @oceanid/cloud build'
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false
+        files: ^cloud/.*\.ts$
