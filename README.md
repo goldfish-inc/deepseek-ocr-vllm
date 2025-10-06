@@ -2,7 +2,7 @@
 
 Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflare Zero Trust.
 
-> Status: Infrastructure operational with Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. Staging database pipeline is active for SME launch.
+> Status: Infrastructure operational with Go services (99% memory reduction), Label Studio, Triton Inference Server (Calypso RTX 4090), DistilBERT NER, and Docling-Granite PDF extraction. Staging database pipeline is active for SME launch.
 
 ## Infrastructure Ownership
 
