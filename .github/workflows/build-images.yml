@@ -16,38 +16,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push adapter image
-        run: |
-          # Use git SHA for immutable tag
-          SHA_TAG=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:${{ github.sha }}
-          MAIN_TAG=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main
-
-          # Build with SHA tag
-          docker build -t "$SHA_TAG" adapter
-          docker push "$SHA_TAG"
-
-          # Also tag and push as :main for convenience
-          docker tag "$SHA_TAG" "$MAIN_TAG"
-          docker push "$MAIN_TAG"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./adapter
+          push: true
+          tags: |
+            ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:${{ github.sha }}
+            ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main
+          cache-from: type=registry,ref=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:buildcache
+          cache-to: type=registry,ref=ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:buildcache,mode=max
 
   build-sink:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push sink image
-        run: |
-          # Use git SHA for immutable tag
-          SHA_TAG=ghcr.io/goldfish-inc/oceanid/annotations-sink:${{ github.sha }}
-          MAIN_TAG=ghcr.io/goldfish-inc/oceanid/annotations-sink:main
-
-          # Build with SHA tag
-          docker build -t "$SHA_TAG" sink
-          docker push "$SHA_TAG"
-
-          # Also tag and push as :main for convenience
-          docker tag "$SHA_TAG" "$MAIN_TAG"
-          docker push "$MAIN_TAG"
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sink
+          push: true
+          tags: |
+            ghcr.io/goldfish-inc/oceanid/annotations-sink:${{ github.sha }}
+            ghcr.io/goldfish-inc/oceanid/annotations-sink:main
+          cache-from: type=registry,ref=ghcr.io/goldfish-inc/oceanid/annotations-sink:buildcache
+          cache-to: type=registry,ref=ghcr.io/goldfish-inc/oceanid/annotations-sink:buildcache,mode=max

@@ -1,0 +1,5 @@
+transformers>=4.53.0
+datasets
+optimum[exporters]
+onnxruntime
+huggingface_hub

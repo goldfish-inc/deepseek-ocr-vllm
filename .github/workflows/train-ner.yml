@@ -12,6 +12,9 @@ permissions:
 jobs:
   train-export-publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,11 +23,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
 
       - name: Export HF token from ESC
         id: esc
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           # Install ESC CLI
           curl -fsSL https://get.pulumi.com/esc/install.sh | sh
@@ -50,7 +59,7 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install transformers datasets "optimum[exporters]" onnxruntime huggingface_hub
+          pip install -r scripts/requirements-ner.txt
 
       - name: Fetch HF dataset annotations
         env:

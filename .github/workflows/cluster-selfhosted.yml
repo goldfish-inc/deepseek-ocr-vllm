@@ -8,6 +8,10 @@ on:
       - 'cluster/**'
       - '.github/workflows/cluster-selfhosted.yml'
 
+concurrency:
+  group: cluster-selfhosted-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -19,6 +23,8 @@ jobs:
       contents: read
     env:
       SELF_HOSTED: 'true'
+      PULUMI_VERSION: '3.197.0'
+      NODE_VERSION: '22.x'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
