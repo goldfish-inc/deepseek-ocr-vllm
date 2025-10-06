@@ -56,6 +56,7 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
         template: {
           metadata: { labels },
           spec: {
+            imagePullSecrets: [{ name: "ghcr-creds" }],
             containers: [
               {
                 name: serviceName,
