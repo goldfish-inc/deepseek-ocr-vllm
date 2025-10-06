@@ -46,6 +46,13 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
+      - name: Pre-flight Checks
+        run: |
+          chmod +x cluster/scripts/preflight-check.sh
+          cluster/scripts/preflight-check.sh
+        env:
+          KUBECONFIG: /home/runner/.kube/k3s-config.yaml
+
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1
         with:
