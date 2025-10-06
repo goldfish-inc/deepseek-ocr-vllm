@@ -74,7 +74,7 @@ export class LabelStudio extends pulumi.ComponentResource {
                                 {
                                     name: "wait-for-db",
                                     image: "postgres:16-alpine",
-                                    command: ["sh", "-c", "ENCODED_URL=$(echo \"$DATABASE_URL\" | sed 's/+/%2B/g; s/=/%3D/g') && until pg_isready -d \"$ENCODED_URL\" -q; do echo waiting for db; sleep 2; done; echo DB is ready"],
+                                    command: ["sh", "-c", "until pg_isready -d \"$DATABASE_URL\" -q; do echo waiting for db; sleep 2; done; echo DB is ready"],
                                     env: [{ name: "DATABASE_URL", value: dbUrl } as any],
                                     resources: { requests: { cpu: "5m", memory: "16Mi" }, limits: { cpu: "50m", memory: "64Mi" } },
                                 },
