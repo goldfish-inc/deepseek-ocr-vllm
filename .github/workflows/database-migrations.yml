@@ -50,7 +50,7 @@ jobs:
           psql --version
 
       - name: Configure Pulumi ESC access
-        uses: pulumi/auth-actions@c22af9ba90368c1c3983467d48902b5fc4d77743 # v1.1.0
+        uses: pulumi/auth-actions@v1
         with:
           organization: ryan-taylor
           requested-token-type: urn:pulumi:token-type:access_token:organization
