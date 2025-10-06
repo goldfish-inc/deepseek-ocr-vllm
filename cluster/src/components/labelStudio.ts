@@ -69,6 +69,17 @@ export class LabelStudio extends pulumi.ComponentResource {
                 template: {
                     metadata: { labels },
                     spec: {
+                        ...(dbUrl ? {
+                            initContainers: [
+                                {
+                                    name: "wait-for-db",
+                                    image: "postgres:16-alpine",
+                                    command: ["sh", "-lc", "until pg_isready -d \"$DATABASE_URL\" -q; do echo waiting for db; sleep 2; done; echo DB is ready"],
+                                    env: [{ name: "DATABASE_URL", value: dbUrl } as any],
+                                    resources: { requests: { cpu: "5m", memory: "16Mi" }, limits: { cpu: "50m", memory: "64Mi" } },
+                                },
+                            ],
+                        } : {}),
                         containers: [
                             {
                                 name: "label-studio",
@@ -83,11 +94,10 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "PDF_CONVERT_TO_IMAGES", value: "true" },
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
-                                    // PostgreSQL configuration - Use DATABASE_URL for Django
-                                    // Label Studio uses Django's database configuration
+                                    // PostgreSQL configuration via standard Django URL
+                                    // Label Studio detects DATABASE_URL automatically; avoid extra overrides
                                     ...(dbUrl ? [
                                         { name: "DATABASE_URL", value: dbUrl },
-                                        { name: "DJANGO_DB", value: "default" },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
