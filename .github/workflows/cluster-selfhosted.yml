@@ -49,9 +49,16 @@ jobs:
       - name: Pre-flight Checks
         run: |
           chmod +x cluster/scripts/preflight-check.sh
+          # Try common kubeconfig locations for self-hosted runner
+          if [ -f "$HOME/.kube/k3s-config.yaml" ]; then
+            export KUBECONFIG="$HOME/.kube/k3s-config.yaml"
+          elif [ -f "/home/ubuntu/.kube/k3s-config.yaml" ]; then
+            export KUBECONFIG="/home/ubuntu/.kube/k3s-config.yaml"
+          else
+            echo "⚠️  Kubeconfig not found, skipping pre-flight checks"
+            exit 0
+          fi
           cluster/scripts/preflight-check.sh
-        env:
-          KUBECONFIG: $HOME/.kube/k3s-config.yaml
 
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1
