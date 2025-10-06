@@ -75,13 +75,13 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
                                     // PostgreSQL configuration - Label Studio needs individual env vars
-                                    // Reading directly from config instead of parsing DATABASE_URL
+                                    // Reading from ESC configuration
                                     ...(dbUrl ? [
                                         { name: "DJANGO_DB", value: "default" },
-                                        { name: "POSTGRE_NAME", value: cfg.get("postgres.database") || "labelfish" },
-                                        { name: "POSTGRE_USER", value: cfg.get("postgres.user") || "labelfish_owner" },
-                                        { name: "POSTGRE_PASSWORD", value: cfg.getSecret("postgres.password") || "" },
-                                        { name: "POSTGRE_HOST", value: cfg.get("postgres.host") || "p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com" },
+                                        { name: "POSTGRE_NAME", value: cfg.get("postgres.database") as any },
+                                        { name: "POSTGRE_USER", value: cfg.get("postgres.user") as any },
+                                        { name: "POSTGRE_PASSWORD", value: cfg.getSecret("postgres.password") as any },
+                                        { name: "POSTGRE_HOST", value: cfg.get("postgres.host") as any },
                                         { name: "POSTGRE_PORT", value: cfg.get("postgres.port") || "5432" },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
