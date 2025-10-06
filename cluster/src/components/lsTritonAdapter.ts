@@ -525,15 +525,14 @@ async def predict_ls(request: Request):
                         containers: [{
                             name: "adapter",
                             image: (new pulumi.Config()).get("adapterImage") || "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main",
-                            workingDir: "/app",
                             env: envVars as any,
                             envFrom: [],
                             volumeMounts: [],
-                            command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9090"],
+                            // No command - Go binary has its own entrypoint
                             ports: [{ containerPort: 9090, name: "http" }],
                             readinessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 5, periodSeconds: 10 },
                             livenessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 10, periodSeconds: 20 },
-                            resources: { requests: { cpu: "100m", memory: "128Mi" } },
+                            resources: { requests: { cpu: "10m", memory: "16Mi" }, limits: { cpu: "100m", memory: "64Mi" } },
                         }],
                     },
                 },

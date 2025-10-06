@@ -518,14 +518,13 @@ if __name__ == "__main__":
             containers: [{
               name: "sink",
               image: (new pulumi.Config()).get("sinkImage") || "ghcr.io/goldfish-inc/oceanid/annotations-sink:main",
-              workingDir: "/app",
               env,
               volumeMounts: useImageOnly ? [] : [{ name: "code", mountPath: "/app" }],
-              command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"],
+              // No command - Go binary has its own entrypoint
               ports: [{ containerPort: 8080, name: "http" }],
               readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
               livenessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 10, periodSeconds: 20 },
-              resources: { requests: { cpu: "50m", memory: "128Mi" } },
+              resources: { requests: { cpu: "10m", memory: "16Mi" }, limits: { cpu: "100m", memory: "64Mi" } },
             }],
           },
         },
