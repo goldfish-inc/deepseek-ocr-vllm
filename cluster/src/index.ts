@@ -234,11 +234,15 @@ const pko = new PulumiOperator("pko", {
     k8sProvider,
 });
 
-const imageAutomation = new ImageAutomation("version-monitor", {
-    cluster: clusterConfig,
-    k8sProvider,
-    fluxNamespace: "flux-system",
-}, { dependsOn: flux ? [flux] : [] });
+const enableImageAutomation = cfg.getBoolean("enableImageAutomation") ?? false;
+let imageAutomation: ImageAutomation | undefined;
+if (enableImageAutomation && flux) {
+    imageAutomation = new ImageAutomation("version-monitor", {
+        cluster: clusterConfig,
+        k8sProvider,
+        fluxNamespace: "flux-system",
+    }, { dependsOn: [flux] });
+}
 
 // Deploy node tunnels for bidirectional pod networking (especially for Calypso GPU node)
 const enableNodeTunnels = cfg.getBoolean("enableNodeTunnels") ?? true;
@@ -787,7 +791,7 @@ const migration = enableMigration
                 privateKey: cfg.requireSecret("calypso_ssh_key"),
             },
         },
-    }, { dependsOn: ((() => { const deps: pulumi.Resource[] = [pko, imageAutomation]; if (flux) deps.push(flux); if (controlPlaneLB) deps.unshift(controlPlaneLB); return deps; })()) })
+    }, { dependsOn: ((() => { const deps: pulumi.Resource[] = [pko]; if (imageAutomation) deps.push(imageAutomation); if (flux) deps.push(flux); if (controlPlaneLB) deps.unshift(controlPlaneLB); return deps; })()) })
     : undefined;
 
 export const outputs = {
