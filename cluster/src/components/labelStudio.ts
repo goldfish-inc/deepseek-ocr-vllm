@@ -77,8 +77,8 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     // Force PostgreSQL usage when DATABASE_URL is provided
                                     ...(dbUrl ? [
                                         { name: "DATABASE_URL", value: dbUrl as any },
-                                        { name: "DJANGO_DB_ENGINE", value: "django.db.backends.postgresql" },
-                                        { name: "DJANGO_DB", value: "labelstudio" },
+                                        { name: "DJANGO_DB", value: "default" },
+                                        { name: "USE_DEFAULT_DB", value: "true" },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
