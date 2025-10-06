@@ -271,8 +271,10 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
 });
 
 // Deploy Label Studio with dedicated labelfish database (CrunchyBridge ebisu cluster)
-// Use postgres_url which has URL-encoded password (not labelStudioDbUrl which is unencoded)
-const labelStudioDbUrl = cfg.requireSecret("postgres_url");
+// URL-encode password characters for pg_isready compatibility (handles + and = in password)
+const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl").apply(url =>
+    url.replace(/\+/g, '%2B').replace(/=/g, '%3D')
+);
 
 const labelStudio = new LabelStudio("label-studio", {
     k8sProvider,
