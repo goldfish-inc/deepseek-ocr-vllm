@@ -92,11 +92,7 @@ jobs:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
           echo "🔧 Ensuring required extensions are installed..."
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-            CREATE EXTENSION IF NOT EXISTS pgcrypto;
-            CREATE EXTENSION IF NOT EXISTS postgis;
-            CREATE EXTENSION IF NOT EXISTS btree_gist;
-          SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS btree_gist;"
           echo "✅ Extensions ensured"
 
       - name: Check existing migrations
@@ -128,9 +124,9 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🔄 Applying V3: Staging Tables"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
+          echo "Applying V3: Staging Tables"
+          echo "============================================"
 
           # Check if already applied
           APPLIED=$(psql "$DATABASE_URL" -tAc "
@@ -149,13 +145,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/V3__staging_tables_complete.sql
 
           # Record in control.schema_versions
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-            INSERT INTO control.schema_versions (domain, version, activated_at)
-            VALUES ('V3', 'V3__staging_tables_complete.sql', now())
-            ON CONFLICT (domain) DO UPDATE
-              SET version = EXCLUDED.version,
-                  activated_at = EXCLUDED.activated_at;
-SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO control.schema_versions (domain, version, activated_at) VALUES ('V3', 'V3__staging_tables_complete.sql', now()) ON CONFLICT (domain) DO UPDATE SET version = EXCLUDED.version, activated_at = EXCLUDED.activated_at;"
 
           echo "✅ V3 migration completed"
 
@@ -164,9 +154,9 @@ SQL
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🔄 Applying V4: Reference Tables"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
+          echo "Applying V4: Reference Tables"
+          echo "============================================"
 
           APPLIED=$(psql "$DATABASE_URL" -tAc "
             SELECT EXISTS (
@@ -182,13 +172,7 @@ SQL
 
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/V4__curated_reference_tables.sql
 
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-            INSERT INTO control.schema_versions (domain, version, activated_at)
-            VALUES ('V4', 'V4__curated_reference_tables.sql', now())
-            ON CONFLICT (domain) DO UPDATE
-              SET version = EXCLUDED.version,
-                  activated_at = EXCLUDED.activated_at;
-SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO control.schema_versions (domain, version, activated_at) VALUES ('V4', 'V4__curated_reference_tables.sql', now()) ON CONFLICT (domain) DO UPDATE SET version = EXCLUDED.version, activated_at = EXCLUDED.activated_at;"
 
           echo "✅ V4 migration completed"
 
@@ -197,9 +181,9 @@ SQL
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🔄 Applying V5: Temporal Events"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
+          echo "Applying V5: Temporal Events"
+          echo "============================================"
 
           APPLIED=$(psql "$DATABASE_URL" -tAc "
             SELECT EXISTS (
@@ -215,13 +199,7 @@ SQL
 
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/V5__curated_temporal_events.sql
 
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-            INSERT INTO control.schema_versions (domain, version, activated_at)
-            VALUES ('V5', 'V5__curated_temporal_events.sql', now())
-            ON CONFLICT (domain) DO UPDATE
-              SET version = EXCLUDED.version,
-                  activated_at = EXCLUDED.activated_at;
-SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO control.schema_versions (domain, version, activated_at) VALUES ('V5', 'V5__curated_temporal_events.sql', now()) ON CONFLICT (domain) DO UPDATE SET version = EXCLUDED.version, activated_at = EXCLUDED.activated_at;"
 
           echo "✅ V5 migration completed"
 
@@ -230,9 +208,9 @@ SQL
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🔄 Applying V6: Vessel Info Typed Columns"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
+          echo "Applying V6: Vessel Info Typed Columns"
+          echo "============================================"
 
           APPLIED=$(psql "$DATABASE_URL" -tAc "
             SELECT EXISTS (
@@ -248,13 +226,7 @@ SQL
 
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/V6__vessel_info_typed_columns.sql
 
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<SQL
-            INSERT INTO control.schema_versions (domain, version, activated_at)
-            VALUES ('V6', 'V6__vessel_info_typed_columns.sql', now())
-            ON CONFLICT (domain) DO UPDATE
-              SET version = EXCLUDED.version,
-                  activated_at = EXCLUDED.activated_at;
-SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO control.schema_versions (domain, version, activated_at) VALUES ('V6', 'V6__vessel_info_typed_columns.sql', now()) ON CONFLICT (domain) DO UPDATE SET version = EXCLUDED.version, activated_at = EXCLUDED.activated_at;"
 
           echo "✅ V6 migration completed"
 
@@ -263,9 +235,9 @@ SQL
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
           echo "🔍 DRY RUN - No migrations applied"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
           echo ""
           echo "Would apply: ${{ github.event.inputs.migration_version }}"
           echo ""
@@ -276,9 +248,9 @@ SQL
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
           echo "✅ Migration Summary"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "============================================"
 
           psql "$DATABASE_URL" -c "
             SELECT
