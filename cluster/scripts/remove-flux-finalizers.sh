@@ -1,23 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Remove Flux finalizers from stuck resources
-KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s-config.yaml}"
-export KUBECONFIG
+# Remove finalizers from Flux resources that may block deletion or Helm ownership.
+# Safe to run multiple times; only patches objects that have finalizers.
 
-echo "🧹 Removing Flux finalizers from stuck resources..."
+NS=${1:-flux-system}
+echo "🔧 Removing Flux finalizers in namespace: ${NS}"
 
-# Kustomization
-echo "Removing finalizer from gitops-kustomization..."
-kubectl -n flux-system patch kustomization flux-system --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || echo "  Already removed or doesn't exist"
+types=(
+  "kustomizations.kustomize.toolkit.fluxcd.io"
+  "gitrepositories.source.toolkit.fluxcd.io"
+  "helmrepositories.source.toolkit.fluxcd.io"
+  "helmreleases.helm.toolkit.fluxcd.io"
+  "buckets.source.toolkit.fluxcd.io"
+  "imagerepositories.image.toolkit.fluxcd.io"
+  "imagepolicies.image.toolkit.fluxcd.io"
+  "imageupdateautomations.image.toolkit.fluxcd.io"
+)
 
-# ImagePolicies
-echo "Removing finalizers from ImagePolicy resources..."
-kubectl -n flux-system patch imagepolicy cert-manager --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || echo "  cert-manager: Already removed or doesn't exist"
-kubectl -n flux-system patch imagepolicy cloudflared --type=json -p='[{"op": "remove", "path": "/metadata/finalizers"}]' 2>/dev/null || echo "  cloudflared: Already removed or doesn't exist"
+for t in "${types[@]}"; do
+  if ! kubectl api-resources | awk '{print $1"."$2}' | grep -q "^${t}$"; then
+    continue
+  fi
+  echo "-- Scanning ${t}"
+  mapfile -t items < <(kubectl -n "$NS" get "$t" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+  for name in "${items[@]:-}"; do
+    [ -z "$name" ] && continue
+    fins=$(kubectl -n "$NS" get "$t" "$name" -o jsonpath='{.metadata.finalizers}' 2>/dev/null || echo "")
+    if [[ -n "$fins" && "$fins" != "[]" ]]; then
+      echo "   Patching finalizers on ${t}/${name}"
+      kubectl -n "$NS" patch "$t" "$name" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+    fi
+  done
+done
 
-echo ""
-echo "✅ Finalizers removed. Resources should now delete."
-echo ""
-echo "Checking remaining Flux resources:"
-kubectl get kustomization,imagepolicy -A 2>/dev/null || echo "No Flux CRDs remaining"
+echo "✅ Finalizer cleanup complete"
