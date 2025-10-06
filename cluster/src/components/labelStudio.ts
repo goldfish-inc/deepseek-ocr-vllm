@@ -35,6 +35,15 @@ export class LabelStudio extends pulumi.ComponentResource {
         const adminEmail = cfg.get("labelStudioAdminEmail") || cfg.get("labelStudioEmail") || cfg.get("labelStudioUsername");
         const adminPassword = cfg.getSecret("labelStudioAdminPassword") || cfg.getSecret("labelStudioPassword");
 
+        // PostgreSQL configuration from ESC
+        const postgresConfig = cfg.getObject<{
+            host: string;
+            port: number;
+            database: string;
+            user: string;
+            password: string;
+        }>("postgres");
+
         // S3 storage credentials from ESC
         const awsAccessKeyId = cfg.getSecret("aws.labelStudio.accessKeyId");
         const awsSecretAccessKey = cfg.getSecret("aws.labelStudio.secretAccessKey");
@@ -76,13 +85,13 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
                                     // PostgreSQL configuration - Label Studio needs individual env vars
                                     // Reading from ESC configuration
-                                    ...(dbUrl ? [
+                                    ...(dbUrl && postgresConfig ? [
                                         { name: "DJANGO_DB", value: "default" },
-                                        { name: "POSTGRE_NAME", value: cfg.get("postgres.database") as any },
-                                        { name: "POSTGRE_USER", value: cfg.get("postgres.user") as any },
-                                        { name: "POSTGRE_PASSWORD", value: cfg.getSecret("postgres.password") as any },
-                                        { name: "POSTGRE_HOST", value: cfg.get("postgres.host") as any },
-                                        { name: "POSTGRE_PORT", value: cfg.get("postgres.port") || "5432" },
+                                        { name: "POSTGRE_NAME", value: postgresConfig.database },
+                                        { name: "POSTGRE_USER", value: postgresConfig.user },
+                                        { name: "POSTGRE_PASSWORD", value: postgresConfig.password },
+                                        { name: "POSTGRE_HOST", value: postgresConfig.host },
+                                        { name: "POSTGRE_PORT", value: String(postgresConfig.port || 5432) },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
