@@ -46,39 +46,31 @@ fi
 # Check for namespace-scoped Flux resources with stale Helm metadata
 echo "Checking for namespace-scoped Flux conflicts..."
 
-# Find all Flux release names in the namespace
-FLUX_RELEASES=$(kubectl get deploy,svc,sa,secret,configmap,networkpolicy -n flux-system -o json 2>/dev/null | \
+# Find any existing Flux Helm-managed resources
+# These will conflict if a new Flux release with different hash is being deployed
+EXISTING_FLUX_RESOURCES=$(kubectl get networkpolicy -n flux-system -o json 2>/dev/null | \
   jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
-  .metadata.annotations["meta.helm.sh/release-name"]' 2>/dev/null | sort -u || echo "")
+  "\(.kind) \(.metadata.name) (release: \(.metadata.annotations[\"meta.helm.sh/release-name\"]))"' 2>/dev/null || true)
 
-# If we have multiple different release names, there's a conflict
-RELEASE_COUNT=$(echo "$FLUX_RELEASES" | grep -c "gitops-flux-" || true)
+if [[ -n "$EXISTING_FLUX_RESOURCES" ]]; then
+  echo "⚠️  Found Flux NetworkPolicy resources that may conflict with new Helm release:"
+  echo "$EXISTING_FLUX_RESOURCES"
+  echo ""
+  echo "  Auto-cleaning to prevent Helm ownership conflicts..."
 
-if [[ $RELEASE_COUNT -gt 1 ]]; then
-  # Get the most recent release name (highest timestamp in name)
-  LATEST_RELEASE=$(echo "$FLUX_RELEASES" | tail -1)
+  # Delete NetworkPolicy resources with gitops-flux-* release annotations
+  # These will be recreated by the new Helm release
+  kubectl get networkpolicy -n flux-system -o json 2>/dev/null | \
+    jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
+    .metadata.name' 2>/dev/null | \
+    while IFS= read -r policy_name; do
+      if [[ -n "$policy_name" ]]; then
+        echo "    Deleting NetworkPolicy/$policy_name..."
+        kubectl delete networkpolicy "$policy_name" -n flux-system --ignore-not-found || true
+      fi
+    done
 
-  echo "⚠️  Found multiple Flux Helm releases, cleaning old ones:"
-  echo "$FLUX_RELEASES"
-
-  # Delete resources from old releases
-  while IFS= read -r old_release; do
-    if [[ "$old_release" != "$LATEST_RELEASE" && -n "$old_release" ]]; then
-      echo "  Removing resources from release: $old_release"
-      kubectl get deploy,svc,sa,secret,configmap,networkpolicy -n flux-system -o json 2>/dev/null | \
-        jq -r --arg release "$old_release" \
-        '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] == $release) |
-        "\(.kind) \(.metadata.name)"' 2>/dev/null | \
-        while IFS= read -r resource; do
-          if [[ -n "$resource" ]]; then
-            echo "    Deleting $resource..."
-            kubectl delete $resource -n flux-system --ignore-not-found || true
-          fi
-        done
-    fi
-  done <<< "$FLUX_RELEASES"
-
-  echo "✅ Cleaned up old Flux Helm releases"
+  echo "✅ Cleaned up Flux NetworkPolicy resources for fresh deployment"
 fi
 
 # Check for crashlooping pods that would block deployment
