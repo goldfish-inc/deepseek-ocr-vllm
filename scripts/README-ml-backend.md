@@ -165,26 +165,31 @@ The script uses these Label Studio API endpoints:
 
 Full API docs: <https://api.labelstud.io>
 
-## Integration with Training Pipeline
+## Active Learning Pipeline
 
 ```mermaid
 flowchart LR
     A[Label Tasks] --> B[ML Backend]
     B --> C[Pre-annotations]
     C --> D[Human Review]
-    D --> E[Corrections]
-    E --> F[Training Corpus]
-    F --> G[Fine-tune Model]
-    G --> B
+    D --> E[Submit Annotations]
+    E --> F[Trigger Training Job]
+    F --> G[GPU Training on Calypso]
+    G --> H[Publish ONNX to HF]
+    H --> I[Reload Triton Model]
+    I --> B
 ```
 
-1. Tasks enter system
-2. ML backend generates predictions
-3. Human annotators review/correct
-4. Corrections stored in HuggingFace dataset
-5. Nightly GitHub Action retrains model
-6. Updated model deployed to Triton
-7. Improved predictions for next batch
+1. **Tasks enter system** - Documents/text imported to Label Studio
+2. **ML backend generates predictions** - Triton serves current model via ls-triton-adapter
+3. **Human annotators review/correct** - Pre-annotations corrected in UI
+4. **Submit annotations** - POST to `/train` endpoint triggers retraining
+5. **Training Job spawns** - K8s Job runs on Calypso GPU node
+6. **Fine-tune model** - DistilBERT trained on new annotations from HuggingFace
+7. **Export to ONNX** - Optimized format for Triton Inference Server
+8. **Publish to HuggingFace** - Model artifact stored in model repository
+9. **Reload Triton** - Zero-downtime model update via Triton Model Control API
+10. **Improved predictions** - Next tasks benefit from updated model
 
 ## See Also
 

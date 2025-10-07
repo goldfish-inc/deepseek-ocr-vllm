@@ -250,59 +250,100 @@ Label Studio integration
   - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
   The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.
 
-### Train Endpoint Validation
+### Active Learning Pipeline
 
-- The adapter exposes `/train` to support Label Studio Active Learning (training on submit).
-- It now returns immediately and triggers GitHub Actions in the background.
-- Controls:
-  - `TRAIN_ASYNC` (default `true`): run GitHub trigger in a goroutine.
-  - `TRAIN_DRY_RUN` (default `false`): skip GitHub call, just log and return.
-  - `GITHUB_WORKFLOW` (default `train-ner.yml`): workflow filename to dispatch.
-  - `GITHUB_REPO` (default `goldfish-inc/oceanid`): repo to dispatch.
+The adapter exposes `/train` to support Label Studio Active Learning with automatic model retraining:
 
-Local validation (no token required):
+**Architecture:**
+1. Annotation submission → POST `/train` → Creates K8s Job on Calypso GPU node
+2. Training Job fetches annotations from HuggingFace dataset
+3. Fine-tunes DistilBERT model on new annotations
+4. Exports optimized ONNX model
+5. Publishes to HuggingFace model repository
+6. Reloads Triton model via Model Control API (zero-downtime)
+7. Next predictions use updated model
+
+**Configuration:**
+- `TRAIN_ASYNC` (default `true`): Run training Job asynchronously
+- `TRAIN_DRY_RUN` (default `false`): Skip Job creation, log only
+- `TRAINING_JOB_IMAGE`: Container image for training worker
+- `TRAINING_JOB_NAMESPACE`: K8s namespace for Jobs (default `apps`)
+- `TRITON_URL`: Triton server URL for model reload
+- `TRITON_MODEL_NAME`: Model name in Triton repository
+
+**Local validation:**
 
 ```bash
-# start adapter locally (dry-run)
-(cd apps/ls-triton-adapter && TRAIN_DRY_RUN=1 go run .)
+# Start adapter locally (dry-run)
+cd apps/ls-triton-adapter && TRAIN_DRY_RUN=1 go run .
 
-# in another terminal
-./scripts/validate-train-endpoint.sh
+# In another terminal, test endpoint
+curl -X POST http://localhost:9090/train \
+  -H "Content-Type: application/json" \
+  -d '{"annotations": [{"text": "Test", "label": "VESSEL"}]}'
 ```
 
-Cluster validation:
+**Cluster validation:**
 
 ```bash
+# Port-forward to adapter
 kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-ENDPOINT_URL=http://localhost:9090 ./scripts/validate-train-endpoint.sh
+
+# Trigger training
+curl -X POST http://localhost:9090/train \
+  -H "Content-Type: application/json" \
+  -d '{"annotations": [{"text": "Vessel IMO 1234567", "label": "VESSEL"}]}'
+
+# Check Job status
+kubectl get jobs -n apps | grep train
+kubectl logs -n apps job/train-<timestamp> -f
 ```
 
-Notes:
+## Model Training (DistilBERT NER)
 
-- With `TRAIN_DRY_RUN=1` or without `GITHUB_TOKEN`, the adapter responds `{"status":"queued", "dry_run": true}` and logs a note that triggering was skipped.
-- With a properly scoped `GITHUB_TOKEN` (workflow: `workflow_dispatch`), the adapter dispatches `${GITHUB_WORKFLOW}` on `${GITHUB_REPO}@main`.
+### Automated Active Learning (Production)
 
-## Model Training Loop (DistilBERT NER)
+Training is fully automated via the Active Learning pipeline:
+- Annotations submitted in Label Studio trigger K8s Jobs
+- Jobs run on Calypso GPU node with RTX 4090
+- Trained models automatically reload into Triton (zero-downtime)
 
-- Train a NER model from your HF JSONL annotations, export to ONNX, and deploy to Triton.
-  This is automated via GitHub Actions and a host-side puller.
+See **Active Learning Pipeline** section above for architecture details.
 
-Steps
+### Manual Training (Development)
 
-- Prepare labels JSON (ESC `nerLabels` order is the ground truth).
-- Train locally (requires Python, transformers, datasets):
-  - `python scripts/ner_train.py --labels labels.json --data-dir ./local_annotations --out ./models/ner-distilbert`
-- Export ONNX with Optimum:
-  - `bash scripts/export_onnx.sh ./models/ner-distilbert distilbert_onnx 63`
-- Deploy to Calypso:
-  - `scp distilbert_onnx/model.onnx calypso:/tmp && ssh calypso 'sudo mkdir -p /opt/triton/models/distilbert-base-uncased/1 && sudo mv /tmp/model.onnx /opt/triton/models/distilbert-base-uncased/1/ && sudo systemctl restart tritonserver'`
+For local development and testing:
 
-Notes
+```bash
+# 1. Prepare labels (ESC nerLabels order is ground truth)
+cat labels.json
 
-- Keep `triton-models/distilbert-base-uncased/config.pbtxt` in sync with label count.
-- CI: `.github/workflows/train-ner.yml` runs nightly (or on demand) to train and publish `onnx/model.onnx` to `HF_MODEL_REPO` (set via GitHub Variables).
-- Calypso: a `model-puller` systemd timer fetches the latest ONNX from HF and drops a new version under `/opt/triton/models/distilbert-base-uncased/<n>/`.
-- Triton runs with `--model-control-mode=poll` and auto-loads new versions.
+# 2. Train model
+python scripts/ner_train.py \
+  --labels labels.json \
+  --data-dir ./local_annotations \
+  --out ./models/ner-distilbert
+
+# 3. Export to ONNX
+bash scripts/export_onnx.sh \
+  ./models/ner-distilbert \
+  ./distilbert_onnx \
+  63  # label count
+
+# 4. Test locally with Triton
+# (Copy model.onnx to Triton model repository and reload)
+```
+
+### Training Worker Components
+
+- **Container**: `ghcr.io/goldfish-inc/oceanid/training-worker:main`
+- **Base image**: `python:3.11-slim` (optimized for GitHub Actions disk space)
+- **Entrypoint**: `apps/training-worker/entrypoint.py`
+  - Fetches annotations from HuggingFace dataset
+  - Trains DistilBERT with `scripts/ner_train.py`
+  - Exports ONNX with `scripts/export_onnx.sh`
+  - Publishes to HuggingFace model repository
+  - Reloads Triton model via Model Control API
 
 ## SME Workflow (CSV/Text/PDF/Images)
 
