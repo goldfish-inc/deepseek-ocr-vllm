@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Training worker for in-cluster Active Learning."""
 import os
 import io
 import json
