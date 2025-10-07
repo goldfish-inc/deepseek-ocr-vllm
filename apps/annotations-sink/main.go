@@ -17,22 +17,22 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr       string
-	DatabaseURL      string
-	HFToken          string
-	HFRepo           string
-	SchemaVersion    string
-	SubdirTemplate   string
+	ListenAddr     string
+	DatabaseURL    string
+	HFToken        string
+	HFRepo         string
+	SchemaVersion  string
+	SubdirTemplate string
 }
 
 func loadConfig() *Config {
 	return &Config{
-		ListenAddr:       getEnv("LISTEN_ADDR", ":8080"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		HFToken:          os.Getenv("HF_TOKEN"),
-		HFRepo:           getEnv("HF_REPO", "goldfish-inc/oceanid-annotations"),
-		SchemaVersion:    getEnv("SCHEMA_VERSION", "1.0.0"),
-		SubdirTemplate:   getEnv("SUBDIR_TEMPLATE", "annotations/{date}/project-{project_id}.jsonl"),
+		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
+		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		HFToken:        os.Getenv("HF_TOKEN"),
+		HFRepo:         getEnv("HF_REPO", "goldfish-inc/oceanid-annotations"),
+		SchemaVersion:  getEnv("SCHEMA_VERSION", "1.0.0"),
+		SubdirTemplate: getEnv("SUBDIR_TEMPLATE", "annotations/{date}/project-{project_id}.jsonl"),
 	}
 }
 
@@ -219,8 +219,8 @@ func ingestHandler(cfg *Config) http.HandlerFunc {
 		// Return success
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":      "ok",
-			"project_id":  payload.ProjectID,
+			"status":     "ok",
+			"project_id": payload.ProjectID,
 			"task_count": len(payload.Tasks),
 		})
 	}
@@ -375,12 +375,12 @@ func processCSVTask(task map[string]interface{}, rows []interface{}) {
 func storeToHuggingFace(cfg *Config, payload WebhookPayload) {
 	// Format annotation for storage
 	record := map[string]interface{}{
-		"timestamp":   time.Now().Format(time.RFC3339),
-		"action":      payload.Action,
-		"project_id":  payload.Project["id"],
-		"task_id":     payload.Task["id"],
-		"annotation":  payload.Annotation,
-		"task_data":   payload.Task["data"],
+		"timestamp":  time.Now().Format(time.RFC3339),
+		"action":     payload.Action,
+		"project_id": payload.Project["id"],
+		"task_id":    payload.Task["id"],
+		"annotation": payload.Annotation,
+		"task_data":  payload.Task["data"],
 	}
 
 	// Convert to JSONL
