@@ -413,9 +413,6 @@ func trainHandler(cfg *Config) http.HandlerFunc {
 		workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/train-ner.yml/dispatches", cfg.GitHubRepo)
 		payload := map[string]interface{}{
 			"ref": "main",
-			"inputs": map[string]string{
-				"trigger_source": "label_studio",
-			},
 		}
 
 		payloadBytes, _ := json.Marshal(payload)
