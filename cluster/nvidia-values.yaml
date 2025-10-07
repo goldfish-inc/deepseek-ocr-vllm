@@ -1,0 +1,19 @@
+nodeSelector:
+  oceanid.cluster/gpu: rtx4090
+
+tolerations:
+- key: nvidia.com/gpu
+  operator: Exists
+  effect: NoSchedule
+- key: workload-type
+  operator: Equal
+  value: gpu-compute
+  effect: NoSchedule
+
+runtimeClassName: nvidia
+
+nfd:
+  enabled: false
+
+gfd:
+  enabled: false
