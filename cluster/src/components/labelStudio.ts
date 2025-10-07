@@ -151,8 +151,8 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "AWS_S3_REGION_NAME", valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_S3_REGION_NAME" } } },
                                 ] as any,
                                 resources: {
-                                    requests: { cpu: "200m", memory: "512Mi" },
-                                    limits: { cpu: "1000m", memory: "1Gi" },
+                                    requests: { cpu: "200m", memory: "1Gi" },
+                                    limits: { cpu: "2000m", memory: "2Gi" },
                                 },
                                 // Health probes: Allow LS to retry DB connection without initContainer
                                 startupProbe: {
