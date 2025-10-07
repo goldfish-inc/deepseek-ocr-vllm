@@ -150,9 +150,12 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     { name: "AWS_STORAGE_BUCKET_NAME", valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_STORAGE_BUCKET_NAME" } } },
                                     { name: "AWS_S3_REGION_NAME", valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_S3_REGION_NAME" } } },
                                 ] as any,
+                                // Remove resource limits as they cause network connectivity issues
+                                // This is a known issue where CPU limits can throttle network operations
+                                // causing connection timeouts to external databases
                                 resources: {
                                     requests: { cpu: "200m", memory: "1Gi" },
-                                    limits: { cpu: "2000m", memory: "2Gi" },
+                                    // Removed limits - was causing connection timeouts
                                 },
                                 // Health probes: Allow LS to retry DB connection without initContainer
                                 startupProbe: {
