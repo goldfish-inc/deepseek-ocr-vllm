@@ -228,34 +228,59 @@ Performance-optimized with indexes on:
 
 ## Integration Points
 
+### S3 Storage
+- SMEs upload raw PDF/CSV/Excel files via web interface
+- Files stored in AWS S3 bucket (configured in Label Studio)
+- Source of truth for original documents
+
+### Granite-Docling GPU Server
+- Reads files from S3
+- ML-powered extraction using Granite-Docling-258M model
+- Pre-labels data with confidence scores
+- Handles complex PDFs (tables, formulas, multi-column layouts)
+- Outputs pre-labeled data to Label Studio
+
 ### Label Studio
-- Loads vessel data from PostgreSQL for annotation
-- `vessel_changes.label_studio_task_id` tracks which annotations caused changes
-- Exports completed annotations to Hugging Face for model training
+- Loads pre-labeled data from Granite-Docling
+- SMEs validate and correct pre-labels
+- Exports TWO outputs:
+  1. **Annotations → Hugging Face** (training data to improve Granite-Docling)
+  2. **Clean data → PostgreSQL** (validated vessel records for applications)
+- `vessel_changes.label_studio_task_id` links changes to annotation tasks
 
 ### Hugging Face
-- **Source of Truth for ML Annotations**: All Label Studio annotations are exported here
-- Stores versioned training datasets
+- **Source of Truth for Training Data**: Stores Label Studio annotations
+- Used to retrain/improve Granite-Docling model
+- Versioned training datasets
 - Hosts trained models
-- Repository: `goldfish-inc/vessel-registry-annotations` (or similar)
 
-### ML Pipeline
-- Raw data from PDF/CSV extraction → PostgreSQL `raw_data`
-- ML cleaning results → PostgreSQL `cleaned_data`
-- Human validation → PostgreSQL `validation_data`
-- Training data → Label Studio → **Hugging Face** (not PostgreSQL)
+### PostgreSQL `cleandata` Schema
+- **Destination**: Receives validated data FROM Label Studio exports
+- Stores final clean vessel records for application queries
+- NOT a source for Label Studio (Label Studio reads from S3/Granite-Docling)
 
-### Workflow
+### Actual Workflow
 ```
-PDF/CSV → Extract → raw_data (PostgreSQL)
-            ↓
-         ML Clean → cleaned_data (PostgreSQL)
-            ↓
-      Label Studio → validation_data (PostgreSQL)
-            ↓              ↓
-         Publish    Export Annotations → Hugging Face
-            ↓                                  ↓
-    status='published'              Train Model → Deploy
+1. SME Upload
+   ↓
+   S3 Storage (raw PDF/CSV/Excel files)
+   ↓
+2. Granite-Docling GPU Server
+   - Extracts tables, text, formulas
+   - Pre-labels vessel data with ML
+   ↓
+3. Label Studio
+   - SME validates pre-labels
+   - SME corrects errors
+   ↓
+4. Export (dual output):
+   ├─→ Hugging Face (annotations for model training)
+   │   ↓
+   │   Retrain Granite-Docling → Improve extraction
+   │
+   └─→ PostgreSQL cleandata (clean vessel records)
+       ↓
+       Applications query validated data
 ```
 
 ## Future Enhancements
