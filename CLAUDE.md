@@ -2,6 +2,27 @@
 
 This file contains specific instructions for AI assistants working with the Oceanid infrastructure and deployment workflows.
 
+## CRITICAL: Verify Actual Functionality, Not Just Deployment
+
+**DO NOT DECLARE SUCCESS BASED ON DEPLOYMENT.**
+**SUCCESS IS ONLY BASED ON ACTUAL FUNCTIONALITY VERIFICATION.**
+
+When configuring databases, storage, or any critical system:
+1. ALWAYS verify the actual behavior, not just configuration
+2. ALWAYS check application logs for what's actually being used
+3. ALWAYS verify data is going to the right place (check actual database tables/files)
+4. NEVER assume environment variables are working without testing
+5. NEVER trust deployment success = functional success
+
+**Verification checklist for database configuration:**
+- [ ] Check application startup logs for database connection type (e.g., "Using PostgreSQL" vs "Using SQLite")
+- [ ] List actual tables in the configured database to confirm it's being used
+- [ ] Check if any local database files are being created (SQLite, local files, etc.)
+- [ ] Perform a write operation and verify it appears in the correct database
+- [ ] Verify data persists after pod restart in the expected location
+
+**Example of failure:** Label Studio was configured with `DATABASE_URL` environment variable pointing to Postgres, deployment succeeded, but application was silently using local SQLite instead because Label Studio requires `POSTGRE_*` variables. This was not discovered until user lost hours of work on pod restart.
+
 ## CRITICAL: Do Not Apply Manually
 
 Never run Pulumi applies by hand (`pulumi up`, `pulumi destroy`, etc.). All infrastructure changes must go through automated deployments:
