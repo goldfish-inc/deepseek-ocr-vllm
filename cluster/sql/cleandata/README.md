@@ -56,16 +56,6 @@ Audit trail for all changes to vessel records.
 - Full data snapshot at time of change
 - Optional Link to Label Studio task ID
 
-#### `ml_annotations`
-Training data from Label Studio annotations.
-
-**Stores**:
-- Full Label Studio annotation JSON
-- Annotator information
-- Confidence scores
-- Ground truth flags for verified data
-- Review status and reviewer information
-
 #### `data_quality_metrics`
 Statistics for tracking data quality per source file.
 
@@ -189,30 +179,6 @@ WHERE vc.change_type = 'validate'
     AND vc.changed_at > NOW() - INTERVAL '7 days';
 ```
 
-### ML Training Queries
-```sql
--- Get ground truth annotations for training
-SELECT
-    v.source,
-    v.raw_data,
-    v.cleaned_data,
-    ma.annotations
-FROM cleandata.vessels v
-JOIN cleandata.ml_annotations ma ON v.id = ma.vessel_id
-WHERE ma.ground_truth = TRUE
-    AND ma.review_status = 'approved';
-
--- Calculate annotation agreement scores
-SELECT
-    vessel_id,
-    COUNT(DISTINCT annotator) as annotator_count,
-    AVG(confidence_score) as avg_confidence
-FROM cleandata.ml_annotations
-GROUP BY vessel_id
-HAVING COUNT(DISTINCT annotator) > 1
-ORDER BY avg_confidence DESC;
-```
-
 ### Data Quality Reports
 ```sql
 -- Quality metrics by source
@@ -263,23 +229,33 @@ Performance-optimized with indexes on:
 ## Integration Points
 
 ### Label Studio
-- `ml_annotations.task_id` links to Label Studio annotation tasks
+- Loads vessel data from PostgreSQL for annotation
 - `vessel_changes.label_studio_task_id` tracks which annotations caused changes
+- Exports completed annotations to Hugging Face for model training
+
+### Hugging Face
+- **Source of Truth for ML Annotations**: All Label Studio annotations are exported here
+- Stores versioned training datasets
+- Hosts trained models
+- Repository: `goldfish-inc/vessel-registry-annotations` (or similar)
 
 ### ML Pipeline
-- Raw data from PDF/CSV extraction → `raw_data`
-- ML cleaning results → `cleaned_data`
-- Training data from `ml_annotations` table
+- Raw data from PDF/CSV extraction → PostgreSQL `raw_data`
+- ML cleaning results → PostgreSQL `cleaned_data`
+- Human validation → PostgreSQL `validation_data`
+- Training data → Label Studio → **Hugging Face** (not PostgreSQL)
 
 ### Workflow
 ```
-PDF/CSV → Extract → raw_data
+PDF/CSV → Extract → raw_data (PostgreSQL)
             ↓
-         ML Clean → cleaned_data
+         ML Clean → cleaned_data (PostgreSQL)
             ↓
-      Label Studio → validation_data
-            ↓
-         Publish → status='published'
+      Label Studio → validation_data (PostgreSQL)
+            ↓              ↓
+         Publish    Export Annotations → Hugging Face
+            ↓                                  ↓
+    status='published'              Train Model → Deploy
 ```
 
 ## Future Enhancements
