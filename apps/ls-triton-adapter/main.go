@@ -14,14 +14,17 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr       string
-	TritonBaseURL    string
-	DefaultModel     string
-	NERLabels        []string
-	CFAccessClientID string
-	CFAccessSecret   string
-	GitHubToken      string
-	GitHubRepo       string
+    ListenAddr       string
+    TritonBaseURL    string
+    DefaultModel     string
+    NERLabels        []string
+    CFAccessClientID string
+    CFAccessSecret   string
+    GitHubToken      string
+    GitHubRepo       string
+    GitHubWorkflow   string
+    TrainAsync       bool
+    TrainDryRun      bool
 }
 
 func loadConfig() *Config {
@@ -36,23 +39,34 @@ func loadConfig() *Config {
 		nerLabels = []string{"O", "VESSEL", "IMO", "MMSI", "IRCS", "PORT", "DATE", "COMPANY", "FLAG"}
 	}
 
-	return &Config{
-		ListenAddr:       getEnv("LISTEN_ADDR", ":9090"),
-		TritonBaseURL:    getEnv("TRITON_BASE_URL", "http://localhost:8000"),
-		DefaultModel:     getEnv("DEFAULT_MODEL", "bert-base-uncased"),
-		NERLabels:        nerLabels,
-		CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
-		CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
-		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
-		GitHubRepo:       getEnv("GITHUB_REPO", "goldfish-inc/oceanid"),
-	}
+    return &Config{
+        ListenAddr:       getEnv("LISTEN_ADDR", ":9090"),
+        TritonBaseURL:    getEnv("TRITON_BASE_URL", "http://localhost:8000"),
+        DefaultModel:     getEnv("DEFAULT_MODEL", "bert-base-uncased"),
+        NERLabels:        nerLabels,
+        CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
+        CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
+        GitHubToken:      os.Getenv("GITHUB_TOKEN"),
+        GitHubRepo:       getEnv("GITHUB_REPO", "goldfish-inc/oceanid"),
+        GitHubWorkflow:   getEnv("GITHUB_WORKFLOW", "train-ner.yml"),
+        TrainAsync:       getEnvBool("TRAIN_ASYNC", true),
+        TrainDryRun:      getEnvBool("TRAIN_DRY_RUN", false),
+    }
 }
 
 func getEnv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+    if value := os.Getenv(key); value != "" {
+        v := strings.ToLower(strings.TrimSpace(value))
+        return v == "1" || v == "true" || v == "yes" || v == "on"
+    }
+    return fallback
 }
 
 // PredictRequest represents the prediction request
@@ -383,76 +397,92 @@ func makeOnes(n int) []int64 {
 
 // trainHandler triggers GitHub Actions workflow for model retraining
 func trainHandler(cfg *Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+    return func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
 
-		// Label Studio sends annotation data in request body
-		var body map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			log.Printf("Train request body parse error: %v", err)
-			// Still return success - we'll trigger training anyway
-		}
+        // Label Studio sends annotation data in request body
+        // Read body but do not block on downstream call
+        var body map[string]interface{}
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+            log.Printf("Train request body parse error: %v", err)
+        }
 
-		log.Printf("Received training request with %d annotations", len(body))
+        // Best-effort count of annotations if present
+        annCount := 0
+        if anns, ok := body["annotations"].([]interface{}); ok {
+            annCount = len(anns)
+        } else if data, ok := body["data"].([]interface{}); ok {
+            annCount = len(data)
+        }
+        requestID := fmt.Sprintf("trn-%d", time.Now().UnixNano())
+        log.Printf("/train request %s received (annotations~%d, async=%v, dry_run=%v)", requestID, annCount, cfg.TrainAsync, cfg.TrainDryRun)
 
-		// Trigger GitHub Actions workflow
-		if cfg.GitHubToken == "" {
-			log.Println("Warning: GITHUB_TOKEN not set, cannot trigger training workflow")
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"status":  "queued",
-				"message": "Training skipped - GitHub token not configured",
-			})
-			return
-		}
+        // Prepare immediate response
+        respObj := map[string]interface{}{
+            "status":     "queued",
+            "message":    "Training request accepted",
+            "request_id": requestID,
+            "async":      cfg.TrainAsync,
+            "dry_run":    cfg.TrainDryRun,
+        }
+        // Include workflow URL if known
+        respObj["workflow_url"] = fmt.Sprintf("https://github.com/%s/actions/workflows/%s", cfg.GitHubRepo, cfg.GitHubWorkflow)
 
-		// Trigger workflow via GitHub API
-		workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/train-ner.yml/dispatches", cfg.GitHubRepo)
-		payload := map[string]interface{}{
-			"ref": "main",
-		}
+        // Kick off the workflow trigger
+        trigger := func() {
+            if cfg.TrainDryRun {
+                log.Printf("/train %s dry-run: would trigger %s on %s@main", requestID, cfg.GitHubWorkflow, cfg.GitHubRepo)
+                return
+            }
+            if cfg.GitHubToken == "" {
+                log.Printf("/train %s skipped: GITHUB_TOKEN not configured", requestID)
+                return
+            }
 
-		payloadBytes, _ := json.Marshal(payload)
-		req, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to create request: %v", err), http.StatusInternalServerError)
-			return
-		}
+            workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%s/dispatches", cfg.GitHubRepo, cfg.GitHubWorkflow)
+            payload := map[string]interface{}{
+                "ref": "main",
+            }
+            payloadBytes, _ := json.Marshal(payload)
+            ghReq, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
+            if err != nil {
+                log.Printf("/train %s error creating GH request: %v", requestID, err)
+                return
+            }
+            ghReq.Header.Set("Accept", "application/vnd.github+json")
+            ghReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
+            ghReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+            ghReq.Header.Set("Content-Type", "application/json")
 
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
-		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-		req.Header.Set("Content-Type", "application/json")
+            client := &http.Client{Timeout: 10 * time.Second}
+            ghResp, err := client.Do(ghReq)
+            if err != nil {
+                log.Printf("/train %s failed to trigger workflow: %v", requestID, err)
+                return
+            }
+            defer ghResp.Body.Close()
+            if ghResp.StatusCode != 204 {
+                bodyBytes, _ := io.ReadAll(ghResp.Body)
+                log.Printf("/train %s GitHub API error %d: %s", requestID, ghResp.StatusCode, string(bodyBytes))
+                return
+            }
+            log.Printf("/train %s triggered workflow %s successfully", requestID, cfg.GitHubWorkflow)
+        }
 
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Printf("Failed to trigger workflow: %v", err)
-			http.Error(w, fmt.Sprintf("Failed to trigger workflow: %v", err), http.StatusBadGateway)
-			return
-		}
-		defer resp.Body.Close()
+        if cfg.TrainAsync {
+            go trigger()
+        } else {
+            trigger()
+        }
 
-		if resp.StatusCode != 204 {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			log.Printf("GitHub API error %d: %s", resp.StatusCode, string(bodyBytes))
-			http.Error(w, fmt.Sprintf("GitHub API error: %d", resp.StatusCode), resp.StatusCode)
-			return
-		}
-
-		log.Println("Successfully triggered train-ner.yml workflow")
-
-		// Return success response to Label Studio
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":       "queued",
-			"message":      "Model training workflow triggered",
-			"workflow_url": fmt.Sprintf("https://github.com/%s/actions/workflows/train-ner.yml", cfg.GitHubRepo),
-		})
-	}
+        // Respond immediately
+        w.Header().Set("Content-Type", "application/json")
+        // Keep 200 for Label Studio compatibility
+        json.NewEncoder(w).Encode(respObj)
+    }
 }
 
 func main() {
@@ -465,9 +495,10 @@ func main() {
 	mux.HandleFunc("/predict_ls", predictLSHandler(cfg))
 	mux.HandleFunc("/train", trainHandler(cfg))
 
-	log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
-	log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
-	log.Printf("NER labels: %v", cfg.NERLabels)
+    log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
+    log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
+    log.Printf("NER labels: %v", cfg.NERLabels)
+    log.Printf("/train async=%v dry_run=%v workflow=%s repo=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.GitHubWorkflow, cfg.GitHubRepo)
 
 	if err := http.ListenAndServe(cfg.ListenAddr, mux); err != nil {
 		log.Fatal(err)

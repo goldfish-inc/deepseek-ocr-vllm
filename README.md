@@ -250,6 +250,38 @@ Label Studio integration
   - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
   The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.
 
+### Train Endpoint Validation
+
+- The adapter exposes `/train` to support Label Studio Active Learning (training on submit).
+- It now returns immediately and triggers GitHub Actions in the background.
+- Controls:
+  - `TRAIN_ASYNC` (default `true`): run GitHub trigger in a goroutine.
+  - `TRAIN_DRY_RUN` (default `false`): skip GitHub call, just log and return.
+  - `GITHUB_WORKFLOW` (default `train-ner.yml`): workflow filename to dispatch.
+  - `GITHUB_REPO` (default `goldfish-inc/oceanid`): repo to dispatch.
+
+Local validation (no token required):
+
+```bash
+# start adapter locally (dry-run)
+(cd apps/ls-triton-adapter && TRAIN_DRY_RUN=1 go run .)
+
+# in another terminal
+./scripts/validate-train-endpoint.sh
+```
+
+Cluster validation:
+
+```bash
+kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
+ENDPOINT_URL=http://localhost:9090 ./scripts/validate-train-endpoint.sh
+```
+
+Notes:
+
+- With `TRAIN_DRY_RUN=1` or without `GITHUB_TOKEN`, the adapter responds `{"status":"queued", "dry_run": true}` and logs a note that triggering was skipped.
+- With a properly scoped `GITHUB_TOKEN` (workflow: `workflow_dispatch`), the adapter dispatches `${GITHUB_WORKFLOW}` on `${GITHUB_REPO}@main`.
+
 ## Model Training Loop (DistilBERT NER)
 
 - Train a NER model from your HF JSONL annotations, export to ONNX, and deploy to Triton.

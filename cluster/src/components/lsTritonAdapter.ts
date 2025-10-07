@@ -50,6 +50,10 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             DEFAULT_MODEL: "distilbert-base-uncased",
             GITHUB_TOKEN: githubToken,
             GITHUB_REPO: "goldfish-inc/oceanid",
+            // Training controls (can be overridden via Pulumi config)
+            TRAIN_ASYNC: cfgPulumi.get("trainAsync") ?? "true",
+            TRAIN_DRY_RUN: cfgPulumi.get("trainDryRun") ?? "false",
+            GITHUB_WORKFLOW: cfgPulumi.get("githubWorkflow") ?? "train-ner.yml",
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 
