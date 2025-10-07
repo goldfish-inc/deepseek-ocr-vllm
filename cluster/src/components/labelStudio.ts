@@ -135,6 +135,9 @@ export class LabelStudio extends pulumi.ComponentResource {
                                         { name: "POSTGRE_PASSWORD", valueFrom: { secretKeyRef: { name: "labelstudio-db-credentials", key: "POSTGRE_PASSWORD" } } },
                                         { name: "POSTGRE_PORT", value: "5432" },
                                         { name: "POSTGRE_HOST", value: "p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com" },
+                                        // Django database settings for connection reliability
+                                        { name: "DJANGO_DB_OPTIONS_CONNECT_TIMEOUT", value: "30" },  // 30s connect timeout
+                                        { name: "POSTGRES_CONN_MAX_AGE", value: "0" },  // Disable connection pooling for initial setup
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
