@@ -110,7 +110,8 @@ jobs:
       - name: Build and push training-worker image
         uses: docker/build-push-action@v6
         with:
-          context: ./apps/training-worker
+          context: .
+          file: ./apps/training-worker/Dockerfile
           push: true
           tags: |
             ghcr.io/goldfish-inc/oceanid/training-worker:${{ github.sha }}
