@@ -1,20 +1,12 @@
 name: Trigger Nautilus Doc Sync
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'docs/**'
-      - '*.md'
-      - 'adr/**'
-      - 'adapter/README.md'
-      - 'adapter/**/README.md'
-      - 'cloud/README.md'
-      - 'cluster/README.md'
-      - 'cluster/docs/**'
-      - 'scripts/README*.md'
-      - 'sql/README.md'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Optional reason for manual trigger'
+        required: false
+        default: 'docs-updated'
 
 jobs:
   trigger-sync:
@@ -23,12 +15,15 @@ jobs:
     steps:
       - name: Trigger nautilus documentation sync
         run: |
-          curl -X POST \
+          if [ -z "${{ secrets.NAUTILUS_SYNC_TOKEN }}" ]; then
+            echo "NAUTILUS_SYNC_TOKEN is not configured. Exiting gracefully." && exit 0
+          fi
+          curl -sS -X POST \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: token ${{ secrets.NAUTILUS_SYNC_TOKEN }}" \
             https://api.github.com/repos/goldfish-inc/nautilus/dispatches \
-            -d '{"event_type":"docs-updated","client_payload":{"repository":"${{ github.repository }}","commit":"${{ github.sha }}","ref":"${{ github.ref }}"}}'
+            -d '{"event_type":"docs-updated","client_payload":{"repository":"${{ github.repository }}","commit":"${{ github.sha }}","ref":"${{ github.ref }}","reason":"${{ github.event.inputs.reason }}"}}'
 
       - name: Log trigger
         run: |
-          echo "✅ Triggered nautilus sync for commit ${{ github.sha }}"
+          echo "✅ Trigger attempted for commit ${{ github.sha }} (check previous step for success)"
