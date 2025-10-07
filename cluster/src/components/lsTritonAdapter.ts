@@ -26,6 +26,9 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
 
         const sentry = getSentrySettings();
         const cfgPulumi = new pulumi.Config();
+        const hfToken = cfgPulumi.getSecret("hfAccessToken");
+        const hfDatasetRepo = cfgPulumi.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
+        const hfModelRepo = cfgPulumi.get("hfModelRepo") || "goldfish-inc/oceanid-ner-distilbert";
         const defaultLabels = [
             "O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"
         ];
@@ -54,6 +57,16 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             TRAIN_ASYNC: cfgPulumi.get("trainAsync") ?? "true",
             TRAIN_DRY_RUN: cfgPulumi.get("trainDryRun") ?? "false",
             GITHUB_WORKFLOW: cfgPulumi.get("githubWorkflow") ?? "train-ner.yml",
+            TRAIN_USE_K8S_JOBS: cfgPulumi.get("trainUseK8sJobs") ?? "false",
+            TRAINING_JOB_IMAGE: cfgPulumi.get("trainingJobImage") ?? "ghcr.io/goldfish-inc/oceanid/training-worker:main",
+            TRAINING_JOB_NAMESPACE: namespace,
+            TRAINING_JOB_TTL_SECONDS: cfgPulumi.get("trainingJobTtlSeconds") ?? "3600",
+            TRAIN_NODE_SELECTOR: cfgPulumi.get("trainingNodeSelector") ?? "kubernetes.io/hostname=calypso",
+            TRAIN_GPU_RESOURCE: cfgPulumi.get("trainingGpuResource") ?? "nvidia.com/gpu",
+            TRAIN_GPU_COUNT: cfgPulumi.get("trainingGpuCount") ?? "1",
+            HF_TOKEN: hfToken as any,
+            HF_DATASET_REPO: hfDatasetRepo,
+            HF_MODEL_REPO: hfModelRepo,
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 
@@ -80,6 +93,24 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             envVars.push({ name: "NER_LABELS", value: (cfgPulumi.get("nerLabels") || JSON.stringify(defaultLabels)) } as any);
         }
 
+        // ServiceAccount and RBAC to allow Job creation
+        const sa = new k8s.core.v1.ServiceAccount(`${name}-sa`, {
+            metadata: { name: serviceName, namespace },
+        }, { provider: k8sProvider, parent: this });
+
+        const role = new k8s.rbac.v1.Role(`${name}-role`, {
+            metadata: { name: `${serviceName}-job-writer`, namespace },
+            rules: [
+                { apiGroups: ["batch"], resources: ["jobs"], verbs: ["create", "get", "list", "watch"] },
+            ],
+        }, { provider: k8sProvider, parent: this });
+
+        new k8s.rbac.v1.RoleBinding(`${name}-rb`, {
+            metadata: { name: `${serviceName}-job-writer`, namespace },
+            roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: role.metadata.name },
+            subjects: [{ kind: "ServiceAccount", name: sa.metadata.name, namespace }],
+        }, { provider: k8sProvider, parent: this });
+
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: serviceName, namespace },
             spec: {
@@ -88,6 +119,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
                 template: {
                     metadata: { labels: { app: serviceName } },
                     spec: {
+                        serviceAccountName: sa.metadata.name,
                         imagePullSecrets: [{ name: "ghcr-creds" }],
                         containers: [{
                             name: "adapter",

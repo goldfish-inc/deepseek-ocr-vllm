@@ -1,15 +1,23 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-	"time"
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "os"
+    "strings"
+    "time"
+    "context"
+
+    batchv1 "k8s.io/api/batch/v1"
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/api/resource"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/rest"
 )
 
 // Config holds all environment variables
@@ -25,6 +33,17 @@ type Config struct {
     GitHubWorkflow   string
     TrainAsync       bool
     TrainDryRun      bool
+    TrainUseK8sJobs  bool
+    TrainJobImage    string
+    TrainJobNS       string
+    TrainJobTTL      int32
+    TrainNodeSel     string // key=value
+    TrainGPURsrc     string // e.g., nvidia.com/gpu
+    TrainGPUCount    string // e.g., "1"
+    HfToken          string
+    HfDatasetRepo    string
+    HfModelRepo      string
+    FallbackToGH     bool
 }
 
 func loadConfig() *Config {
@@ -51,6 +70,17 @@ func loadConfig() *Config {
         GitHubWorkflow:   getEnv("GITHUB_WORKFLOW", "train-ner.yml"),
         TrainAsync:       getEnvBool("TRAIN_ASYNC", true),
         TrainDryRun:      getEnvBool("TRAIN_DRY_RUN", false),
+        TrainUseK8sJobs:  getEnvBool("TRAIN_USE_K8S_JOBS", false),
+        TrainJobImage:    getEnv("TRAINING_JOB_IMAGE", "ghcr.io/goldfish-inc/oceanid/training-worker:main"),
+        TrainJobNS:       getEnv("TRAINING_JOB_NAMESPACE", "apps"),
+        TrainJobTTL:      int32(getEnvInt("TRAINING_JOB_TTL_SECONDS", 3600)),
+        TrainNodeSel:     getEnv("TRAIN_NODE_SELECTOR", "node-role.kubernetes.io/gpu=true"),
+        TrainGPURsrc:     getEnv("TRAIN_GPU_RESOURCE", "nvidia.com/gpu"),
+        TrainGPUCount:    getEnv("TRAIN_GPU_COUNT", "1"),
+        HfToken:          os.Getenv("HF_TOKEN"),
+        HfDatasetRepo:    getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
+        HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
+        FallbackToGH:     getEnvBool("TRAIN_FALLBACK_GH", true),
     }
 }
 
@@ -65,6 +95,17 @@ func getEnvBool(key string, fallback bool) bool {
     if value := os.Getenv(key); value != "" {
         v := strings.ToLower(strings.TrimSpace(value))
         return v == "1" || v == "true" || v == "yes" || v == "on"
+    }
+    return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+    if v := os.Getenv(key); v != "" {
+        var n int
+        _, err := fmt.Sscanf(v, "%d", &n)
+        if err == nil {
+            return n
+        }
     }
     return fallback
 }
@@ -418,7 +459,7 @@ func trainHandler(cfg *Config) http.HandlerFunc {
             annCount = len(data)
         }
         requestID := fmt.Sprintf("trn-%d", time.Now().UnixNano())
-        log.Printf("/train request %s received (annotations~%d, async=%v, dry_run=%v)", requestID, annCount, cfg.TrainAsync, cfg.TrainDryRun)
+        log.Printf("/train request %s received (annotations~%d, async=%v, dry_run=%v, k8s_jobs=%v)", requestID, annCount, cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainUseK8sJobs)
 
         // Prepare immediate response
         respObj := map[string]interface{}{
@@ -431,45 +472,23 @@ func trainHandler(cfg *Config) http.HandlerFunc {
         // Include workflow URL if known
         respObj["workflow_url"] = fmt.Sprintf("https://github.com/%s/actions/workflows/%s", cfg.GitHubRepo, cfg.GitHubWorkflow)
 
-        // Kick off the workflow trigger
+        // Kick off training via K8s Job or GitHub workflow
         trigger := func() {
             if cfg.TrainDryRun {
-                log.Printf("/train %s dry-run: would trigger %s on %s@main", requestID, cfg.GitHubWorkflow, cfg.GitHubRepo)
+                log.Printf("/train %s dry-run: would trigger training (k8s_jobs=%v)", requestID, cfg.TrainUseK8sJobs)
                 return
             }
-            if cfg.GitHubToken == "" {
-                log.Printf("/train %s skipped: GITHUB_TOKEN not configured", requestID)
+            if cfg.TrainUseK8sJobs {
+                if err := triggerK8sJob(cfg, requestID, annCount); err != nil {
+                    log.Printf("/train %s K8s Job creation failed: %v", requestID, err)
+                    if cfg.FallbackToGH {
+                        log.Printf("/train %s falling back to GitHub workflow", requestID)
+                        triggerGitHub(cfg, requestID)
+                    }
+                }
                 return
             }
-
-            workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%s/dispatches", cfg.GitHubRepo, cfg.GitHubWorkflow)
-            payload := map[string]interface{}{
-                "ref": "main",
-            }
-            payloadBytes, _ := json.Marshal(payload)
-            ghReq, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
-            if err != nil {
-                log.Printf("/train %s error creating GH request: %v", requestID, err)
-                return
-            }
-            ghReq.Header.Set("Accept", "application/vnd.github+json")
-            ghReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
-            ghReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-            ghReq.Header.Set("Content-Type", "application/json")
-
-            client := &http.Client{Timeout: 10 * time.Second}
-            ghResp, err := client.Do(ghReq)
-            if err != nil {
-                log.Printf("/train %s failed to trigger workflow: %v", requestID, err)
-                return
-            }
-            defer ghResp.Body.Close()
-            if ghResp.StatusCode != 204 {
-                bodyBytes, _ := io.ReadAll(ghResp.Body)
-                log.Printf("/train %s GitHub API error %d: %s", requestID, ghResp.StatusCode, string(bodyBytes))
-                return
-            }
-            log.Printf("/train %s triggered workflow %s successfully", requestID, cfg.GitHubWorkflow)
+            triggerGitHub(cfg, requestID)
         }
 
         if cfg.TrainAsync {
@@ -485,6 +504,131 @@ func trainHandler(cfg *Config) http.HandlerFunc {
     }
 }
 
+func triggerGitHub(cfg *Config, requestID string) {
+    if cfg.GitHubToken == "" {
+        log.Printf("/train %s skipped: GITHUB_TOKEN not configured", requestID)
+        return
+    }
+    workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%s/dispatches", cfg.GitHubRepo, cfg.GitHubWorkflow)
+    payload := map[string]interface{}{
+        "ref": "main",
+    }
+    payloadBytes, _ := json.Marshal(payload)
+    ghReq, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
+    if err != nil {
+        log.Printf("/train %s error creating GH request: %v", requestID, err)
+        return
+    }
+    ghReq.Header.Set("Accept", "application/vnd.github+json")
+    ghReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
+    ghReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+    ghReq.Header.Set("Content-Type", "application/json")
+
+    client := &http.Client{Timeout: 10 * time.Second}
+    ghResp, err := client.Do(ghReq)
+    if err != nil {
+        log.Printf("/train %s failed to trigger workflow: %v", requestID, err)
+        return
+    }
+    defer ghResp.Body.Close()
+    if ghResp.StatusCode != 204 {
+        bodyBytes, _ := io.ReadAll(ghResp.Body)
+        log.Printf("/train %s GitHub API error %d: %s", requestID, ghResp.StatusCode, string(bodyBytes))
+        return
+    }
+    log.Printf("/train %s triggered workflow %s successfully", requestID, cfg.GitHubWorkflow)
+}
+
+func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
+    // In-cluster config
+    restCfg, err := rest.InClusterConfig()
+    if err != nil {
+        return fmt.Errorf("in-cluster config: %w", err)
+    }
+    clientset, err := kubernetes.NewForConfig(restCfg)
+    if err != nil {
+        return fmt.Errorf("clientset: %w", err)
+    }
+
+    // Parse node selector key=value
+    nsKey := ""
+    nsVal := ""
+    if kv := strings.SplitN(cfg.TrainNodeSel, "=", 2); len(kv) == 2 {
+        nsKey, nsVal = strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+    }
+
+    // Resources
+    cpuReq := resource.MustParse("4")
+    memReq := resource.MustParse("8Gi")
+    gpuQty := resource.MustParse(cfg.TrainGPUCount)
+    limits := corev1.ResourceList{
+        corev1.ResourceCPU:    cpuReq,
+        corev1.ResourceMemory: memReq,
+    }
+    requests := corev1.ResourceList{
+        corev1.ResourceCPU:    cpuReq,
+        corev1.ResourceMemory: memReq,
+    }
+    if cfg.TrainGPURsrc != "" && cfg.TrainGPUCount != "0" {
+        rn := corev1.ResourceName(cfg.TrainGPURsrc)
+        limits[rn] = gpuQty
+        requests[rn] = gpuQty
+    }
+
+    jobName := fmt.Sprintf("train-%d", time.Now().Unix())
+    backoff := int32(0)
+    ttl := cfg.TrainJobTTL
+    env := []corev1.EnvVar{
+        {Name: "HF_TOKEN", Value: cfg.HfToken},
+        {Name: "HF_DATASET_REPO", Value: cfg.HfDatasetRepo},
+        {Name: "HF_MODEL_REPO", Value: cfg.HfModelRepo},
+        {Name: "ANNOTATION_COUNT", Value: fmt.Sprintf("%d", annCount)},
+    }
+
+    podSpec := corev1.PodSpec{
+        RestartPolicy: corev1.RestartPolicyNever,
+        Containers: []corev1.Container{{
+            Name:  "trainer",
+            Image: cfg.TrainJobImage,
+            Env:   env,
+            Resources: corev1.ResourceRequirements{
+                Limits:   limits,
+                Requests: requests,
+            },
+        }},
+    }
+    if nsKey != "" && nsVal != "" {
+        podSpec.NodeSelector = map[string]string{nsKey: nsVal}
+    }
+
+    job := &batchv1.Job{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      jobName,
+            Namespace: cfg.TrainJobNS,
+            Labels: map[string]string{
+                "app":     "training-worker",
+                "trigger": "label-studio",
+            },
+        },
+        Spec: batchv1.JobSpec{
+            BackoffLimit:            &backoff,
+            TtlSecondsAfterFinished: &ttl,
+            Template: corev1.PodTemplateSpec{
+                Spec: podSpec,
+            },
+        },
+    }
+
+    ctx, cancel := time.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    _, err = clientset.BatchV1().Jobs(cfg.TrainJobNS).Create(ctx, job, metav1.CreateOptions{})
+    if err != nil {
+        return err
+    }
+    log.Printf("/train %s created Job %s/%s (image=%s)", requestID, cfg.TrainJobNS, jobName, cfg.TrainJobImage)
+    return nil
+}
+
 func main() {
 	cfg := loadConfig()
 
@@ -498,7 +642,7 @@ func main() {
     log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
     log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
     log.Printf("NER labels: %v", cfg.NERLabels)
-    log.Printf("/train async=%v dry_run=%v workflow=%s repo=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.GitHubWorkflow, cfg.GitHubRepo)
+    log.Printf("/train async=%v dry_run=%v k8sJobs=%v workflow=%s repo=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainUseK8sJobs, cfg.GitHubWorkflow, cfg.GitHubRepo)
 
 	if err := http.ListenAndServe(cfg.ListenAddr, mux); err != nil {
 		log.Fatal(err)
