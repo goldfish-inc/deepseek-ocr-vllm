@@ -55,10 +55,7 @@ export class PulumiOperator extends pulumi.ComponentResource {
         const helmRelease = new k8s.helm.v3.Release(`${name}-helm`, {
             name: "pulumi-kubernetes-operator",
             namespace: namespaceName,
-            repositoryOpts: {
-                repo: "oci://ghcr.io/pulumi/helm-charts",
-            },
-            chart: "pulumi-kubernetes-operator",
+            chart: "oci://ghcr.io/pulumi/helm-charts/pulumi-kubernetes-operator",
             version: "2.2.0",
             values: {
                 // PKO v2 requires cluster-wide installation

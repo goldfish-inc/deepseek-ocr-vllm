@@ -5,11 +5,7 @@ import { SSHKeyManager } from "./sshKeyManager";
 import { K3sTokenRotator } from "./k3sTokenRotator";
 import { SecurityHardening } from "./securityHardening";
 import { CredentialSynchronizer } from "./credentialSynchronizer";
-import { SelfInstallingFlux } from "./selfInstallingFlux";
-import { ClusterConfig } from "../config";
-
 export interface MigrationOrchestratorArgs {
-    cluster: ClusterConfig;
     k8sProvider: k8s.Provider;
     escEnvironment: string;
     migrationPhase: "preparation" | "parallel-validation" | "cutover" | "cleanup";
@@ -17,7 +13,6 @@ export interface MigrationOrchestratorArgs {
     enableK3sRotation?: boolean;
     enableSecurityHardening?: boolean;
     enableCredentialSync?: boolean;
-    enableFluxSelfInstall?: boolean;
     nodes: Record<string, {
         ip: string;
         hostname: string;
@@ -45,7 +40,6 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
         super("oceanid:migration:MigrationOrchestrator", name, {}, opts);
 
         const {
-            cluster,
             k8sProvider,
             escEnvironment,
             migrationPhase,
@@ -53,7 +47,6 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
             enableK3sRotation = true,
             enableSecurityHardening = true,
             enableCredentialSync = true,
-            enableFluxSelfInstall = true,
             nodes
         } = args;
 
@@ -69,7 +62,6 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
         let k3sTokenRotator: K3sTokenRotator | undefined;
         let securityHardening: SecurityHardening | undefined;
         let credentialSynchronizer: CredentialSynchronizer | undefined;
-        let selfInstallingFlux: SelfInstallingFlux | undefined;
 
         if (migrationPhase === "preparation" || migrationPhase === "parallel-validation") {
             if (enableSSHRotation) {
@@ -186,19 +178,6 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
                 componentHealth["credential-synchronizer"] = credentialSynchronizer.outputs.allCredentialsValid;
             }
 
-            if (enableFluxSelfInstall) {
-                activeComponents.push("Self-Installing Flux");
-
-                selfInstallingFlux = new SelfInstallingFlux(`${name}-flux`, {
-                    cluster,
-                    k8sProvider,
-                    escEnvironment,
-                    enablePKO: true,
-                    enableImageAutomation: true,
-                }, { parent: this });
-
-                componentHealth["self-installing-flux"] = selfInstallingFlux.outputs.bootstrapComplete;
-            }
         }
 
         // =================================================================
@@ -304,13 +283,11 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
 // =============================================================================
 
 export function createMigrationIntegration(
-    cluster: ClusterConfig,
     k8sProvider: k8s.Provider,
     escEnvironment: string,
     nodes: Record<string, any>
 ): MigrationOrchestrator {
     return new MigrationOrchestrator("script-retirement", {
-        cluster,
         k8sProvider,
         escEnvironment,
         migrationPhase: "preparation", // Start with preparation phase
@@ -318,7 +295,6 @@ export function createMigrationIntegration(
         enableK3sRotation: true,
         enableSecurityHardening: true,
         enableCredentialSync: true,
-        enableFluxSelfInstall: true,
         nodes,
     });
 }

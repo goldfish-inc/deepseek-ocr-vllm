@@ -14,7 +14,6 @@ export class ImageAutomation extends pulumi.ComponentResource {
 
         const { cluster, k8sProvider, fluxNamespace } = args;
 
-        // Monitor Cloudflared for new versions
         const cloudflaredImageRepo = new k8s.apiextensions.CustomResource(`${name}-cloudflared-repo`, {
             apiVersion: "image.toolkit.fluxcd.io/v1beta2",
             kind: "ImageRepository",
@@ -29,7 +28,6 @@ export class ImageAutomation extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this });
 
-        // Create image policy to track latest stable versions
         const cloudflaredImagePolicy = new k8s.apiextensions.CustomResource(`${name}-cloudflared-policy`, {
             apiVersion: "image.toolkit.fluxcd.io/v1beta2",
             kind: "ImagePolicy",
@@ -43,14 +41,12 @@ export class ImageAutomation extends pulumi.ComponentResource {
                 },
                 policy: {
                     semver: {
-                        // Track latest stable versions, avoid pre-releases
                         range: ">=1.0.0",
                     },
                 },
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [cloudflaredImageRepo] });
 
-        // Monitor cert-manager
         const certManagerImageRepo = new k8s.apiextensions.CustomResource(`${name}-cert-manager-repo`, {
             apiVersion: "image.toolkit.fluxcd.io/v1beta2",
             kind: "ImageRepository",
@@ -77,14 +73,13 @@ export class ImageAutomation extends pulumi.ComponentResource {
                 },
                 policy: {
                     semver: {
-                        range: ">=1.0.0 <2.0.0", // Stay on v1.x
+                        range: ">=1.0.0 <2.0.0",
                     },
                 },
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [certManagerImageRepo] });
 
-        // Configure automated image updates
-        const imageUpdateAutomation = new k8s.apiextensions.CustomResource(`${name}-update-automation`, {
+        new k8s.apiextensions.CustomResource(`${name}-update-automation`, {
             apiVersion: "image.toolkit.fluxcd.io/v1beta2",
             kind: "ImageUpdateAutomation",
             metadata: {
@@ -128,8 +123,7 @@ export class ImageAutomation extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this });
 
-        // Create alert for new versions
-        const versionAlert = new k8s.apiextensions.CustomResource(`${name}-version-alert`, {
+        new k8s.apiextensions.CustomResource(`${name}-version-alert`, {
             apiVersion: "notification.toolkit.fluxcd.io/v1beta3",
             kind: "Alert",
             metadata: {
@@ -152,8 +146,7 @@ export class ImageAutomation extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this });
 
-        // GitHub notification provider for alerts
-        const githubProvider = new k8s.apiextensions.CustomResource(`${name}-github-provider`, {
+        new k8s.apiextensions.CustomResource(`${name}-github-provider`, {
             apiVersion: "notification.toolkit.fluxcd.io/v1beta3",
             kind: "Provider",
             metadata: {

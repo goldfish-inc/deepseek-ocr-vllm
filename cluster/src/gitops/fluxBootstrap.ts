@@ -31,7 +31,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this })
             : undefined;
 
-        // Create SSH secret for private repository access
         const cfg = new pulumi.Config();
         const sshPrivateKey = cfg.getSecret("flux.ssh_private_key");
         const knownHosts = cfg.get("flux.known_hosts");
@@ -50,7 +49,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
-        // Create GitHub token secret for automated PRs (from ESC)
         const githubToken = cfg.getSecret("github.token");
         const githubTokenSecret = githubToken
             ? new k8s.core.v1.Secret(`${name}-github-token`, {
@@ -73,7 +71,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
             namespace: namespaceName,
             createNamespace,
-            // Skip CRDs - they're already managed by the initial Flux bootstrap
             skipCrds: true,
             values: {
                 installCRDs: false,
@@ -88,7 +85,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined });
 
-        // Determine URL and authentication method
         const gitRepoUrl = sshSecret && cluster.gitops.repositoryUrl.startsWith("https://")
             ? cluster.gitops.repositoryUrl.replace("https://", "ssh://git@")
             : cluster.gitops.repositoryUrl;

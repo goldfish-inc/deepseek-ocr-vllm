@@ -6,9 +6,8 @@ import * as command from "@pulumi/command";
 import { clusterConfig } from "./config";
 import { cloudflareProvider, k8sProvider, kubeconfigPath } from "./providers";
 import { CloudflareTunnel } from "./components/cloudflareTunnel";
-import { FluxBootstrap } from "./components/fluxBootstrap";
 import { PulumiOperator } from "./components/pulumiOperator";
-import { ImageAutomation } from "./components/imageAutomation";
+import { configureGitOps } from "./gitops";
 // import { LabelStudio } from "./components/labelStudio"; // MOVED TO GITOPS
 import { HostCloudflared } from "./components/hostCloudflared";
 import { HostDockerService } from "./components/hostDockerService";
@@ -221,28 +220,19 @@ if (enableAppsStack) {
 // NOTE: CrunchyBridge PostgreSQL cluster now managed by oceanid-cloud stack
 
 const enableFluxBootstrap = cfg.getBoolean("enableFluxBootstrap") ?? false;
-let flux: FluxBootstrap | undefined;
-if (enableFluxBootstrap) {
-    flux = new FluxBootstrap("gitops", {
-        cluster: clusterConfig,
-        k8sProvider,
-    });
-}
+const enableImageAutomation = cfg.getBoolean("enableImageAutomation") ?? false;
+
+const { flux, imageAutomation } = configureGitOps({
+    enableBootstrap: enableFluxBootstrap,
+    enableImageAutomation,
+    cluster: clusterConfig,
+    k8sProvider,
+});
 
 const pko = new PulumiOperator("pko", {
     cluster: clusterConfig,
     k8sProvider,
 });
-
-const enableImageAutomation = cfg.getBoolean("enableImageAutomation") ?? false;
-let imageAutomation: ImageAutomation | undefined;
-if (enableImageAutomation && flux) {
-    imageAutomation = new ImageAutomation("version-monitor", {
-        cluster: clusterConfig,
-        k8sProvider,
-        fluxNamespace: "flux-system",
-    }, { dependsOn: [flux] });
-}
 
 // Deploy node tunnels for bidirectional pod networking (especially for Calypso GPU node)
 const enableNodeTunnels = cfg.getBoolean("enableNodeTunnels") ?? true;
@@ -753,7 +743,6 @@ export const modelConfiguration = {
 // Create migration orchestrator to manage script retirement
 const migration = enableMigration
     ? new MigrationOrchestrator("script-retirement", {
-        cluster: clusterConfig,
         k8sProvider,
         escEnvironment: "default/oceanid-cluster",
         migrationPhase: cfg.get("migration_phase") as any || "preparation",
@@ -761,7 +750,6 @@ const migration = enableMigration
         enableK3sRotation: true,
         enableSecurityHardening: true,
         enableCredentialSync: true,
-        enableFluxSelfInstall: true,
         nodes: {
             tethys: {
                 ip: cfg.require("tethysIp"),
