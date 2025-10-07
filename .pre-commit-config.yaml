@@ -62,7 +62,7 @@ repos:
         pass_filenames: true
       - id: golangci-lint
         name: golangci-lint
-        entry: bash -c 'cd apps/ls-triton-adapter && golangci-lint run --fix'
+        entry: bash -c 'cd apps/ls-triton-adapter && golangci-lint run --fix --timeout=5m'
         language: system
         types: [go]
         pass_filenames: false
