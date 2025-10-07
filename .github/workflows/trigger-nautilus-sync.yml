@@ -26,6 +26,9 @@ jobs:
   trigger-sync:
     name: Notify nautilus of doc changes
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1

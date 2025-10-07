@@ -5,8 +5,15 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'cluster/**'
+      - 'cluster/src/**'
+      - 'cluster/package.json'
+      - 'cluster/tsconfig.json'
+      - 'cluster/Pulumi.*.yaml'
+      - 'cluster/scripts/**'
       - '.github/workflows/cluster-selfhosted.yml'
+      # Use ! to exclude patterns
+      - '!cluster/**.md'
+      - '!cluster/bin/**'
 
 concurrency:
   group: cluster-selfhosted-${{ github.ref }}

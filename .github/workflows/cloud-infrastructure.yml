@@ -6,12 +6,23 @@ on:
     branches:
       - main
     paths:
-      - 'cloud/**'
+      - 'cloud/src/**'
+      - 'cloud/package.json'
+      - 'cloud/tsconfig.json'
+      - 'cloud/Pulumi.*.yaml'
       - '.github/workflows/cloud-infrastructure.yml'
+      # Use ! to exclude patterns
+      - '!cloud/**.md'
+      - '!cloud/bin/**'
   pull_request:
     paths:
-      - 'cloud/**'
+      - 'cloud/src/**'
+      - 'cloud/package.json'
+      - 'cloud/tsconfig.json'
+      - 'cloud/Pulumi.*.yaml'
       - '.github/workflows/cloud-infrastructure.yml'
+      - '!cloud/**.md'
+      - '!cloud/bin/**'
 
 concurrency:
   group: cloud-infrastructure-${{ github.ref }}
