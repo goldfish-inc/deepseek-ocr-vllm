@@ -3,3 +3,4 @@ datasets
 optimum[exporters]
 onnxruntime
 huggingface_hub
+requests

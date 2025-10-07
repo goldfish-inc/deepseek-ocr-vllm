@@ -42,6 +42,7 @@ type Config struct {
 	HfModelRepo      string
 	HFSecretName     string
 	HFSecretKey      string
+	TritonModelName  string
 }
 
 func loadConfig() *Config {
@@ -77,6 +78,7 @@ func loadConfig() *Config {
 		HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
 		HFSecretName:     getEnv("TRAIN_HF_SECRET_NAME", ""),
 		HFSecretKey:      getEnv("TRAIN_HF_SECRET_KEY", "token"),
+		TritonModelName:  getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
 	}
 }
 
@@ -568,6 +570,8 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
 		corev1.EnvVar{Name: "HF_DATASET_REPO", Value: cfg.HfDatasetRepo},
 		corev1.EnvVar{Name: "HF_MODEL_REPO", Value: cfg.HfModelRepo},
 		corev1.EnvVar{Name: "ANNOTATION_COUNT", Value: fmt.Sprintf("%d", annCount)},
+		corev1.EnvVar{Name: "TRITON_URL", Value: cfg.TritonBaseURL},
+		corev1.EnvVar{Name: "TRITON_MODEL_NAME", Value: cfg.TritonModelName},
 	)
 
 	podSpec := corev1.PodSpec{

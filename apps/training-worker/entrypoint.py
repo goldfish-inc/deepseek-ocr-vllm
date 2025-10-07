@@ -5,8 +5,10 @@ import io
 import json
 import pathlib
 import subprocess
+import time
 from datetime import datetime
 
+import requests
 from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download, list_repo_files
 
 
@@ -55,12 +57,63 @@ def publish_model(token: str, model_repo: str, path: pathlib.Path) -> None:
     log(f"Published ONNX to {model_repo}")
 
 
+def reload_triton_model(triton_url: str, model_name: str, max_retries: int = 3) -> None:
+    """Reload model in Triton using Model Control API (EXPLICIT mode).
+
+    This completes the Active Learning loop by updating the serving model
+    after training completes.
+    """
+    log(f"Reloading Triton model '{model_name}' at {triton_url}")
+
+    # Step 1: Unload current model (graceful)
+    unload_url = f"{triton_url}/v2/repository/models/{model_name}/unload"
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(unload_url, timeout=30)
+            if resp.status_code == 200:
+                log(f"Model '{model_name}' unloaded successfully")
+                break
+            elif resp.status_code == 404:
+                log(f"Model '{model_name}' not loaded (first deployment?), skipping unload")
+                break
+            else:
+                log(f"Unload attempt {attempt}/{max_retries} failed: {resp.status_code} {resp.text}")
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)
+        except Exception as e:
+            log(f"Unload attempt {attempt}/{max_retries} error: {e}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+
+    # Step 2: Load updated model
+    load_url = f"{triton_url}/v2/repository/models/{model_name}/load"
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(load_url, timeout=60)
+            if resp.status_code == 200:
+                log(f"Model '{model_name}' loaded successfully - Active Learning loop complete")
+                return
+            else:
+                log(f"Load attempt {attempt}/{max_retries} failed: {resp.status_code} {resp.text}")
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)
+        except Exception as e:
+            log(f"Load attempt {attempt}/{max_retries} error: {e}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+
+    # If we get here, all retries failed
+    raise RuntimeError(f"Failed to reload Triton model '{model_name}' after {max_retries} attempts")
+
+
 def main() -> None:
     log("Training job started")
     hf_token = env("HF_TOKEN")
     dataset_repo = env("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations")
     model_repo = env("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert")
     ann_count = env("ANNOTATION_COUNT", "0")
+    triton_url = env("TRITON_URL", "http://triton.triton.svc.cluster.local:8000")
+    model_name = env("TRITON_MODEL_NAME", "ner-distilbert")
 
     work = pathlib.Path("/workspace")
     anns = work / "local_annotations"
@@ -109,6 +162,13 @@ def main() -> None:
 
     log("Publishing ONNX to HF…")
     publish_model(hf_token, model_repo, onnx_path)
+
+    log("Reloading model in Triton…")
+    try:
+        reload_triton_model(triton_url, model_name)
+    except Exception as e:
+        log(f"WARN: Triton reload failed: {e}")
+        log("Model published to HuggingFace but not loaded in Triton - manual reload required")
 
     log("Training complete.")
 
