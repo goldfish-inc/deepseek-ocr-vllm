@@ -62,6 +62,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:nautilusSyncToken "<GITHUB_PAT_WITH_repo_WRITE_ON_goldfish-inc/nautilus>" --secret
 ```
 
 Workflows:
@@ -123,6 +124,7 @@ Notes:
   - `cloudflareNodeTunnelId`, `cloudflareNodeTunnelToken`, `cloudflareNodeTunnelHostname`, `cloudflareNodeTunnelTarget`
   - `cloudflareAccountId`, `cloudflareApiToken`, `cloudflareZoneId`
   - `labelStudioApiToken` - API token for ML backend auto-configuration (from 1Password)
+  - `nautilusSyncToken` - GitHub token used by the docs sync workflow to dispatch builds to `goldfish-inc/nautilus`
 - The node tunnel token can be either:
   - Base64‑encoded credentials.json, or
   - Raw TUNNEL_TOKEN string
