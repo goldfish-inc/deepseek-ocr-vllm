@@ -69,17 +69,6 @@ export class LabelStudio extends pulumi.ComponentResource {
                 template: {
                     metadata: { labels },
                     spec: {
-                        ...(dbUrl ? {
-                            initContainers: [
-                                {
-                                    name: "wait-for-db",
-                                    image: "postgres:16-alpine",
-                                    command: ["sh", "-c", "until pg_isready -d \"$DATABASE_URL\" -q; do echo waiting for db; sleep 2; done; echo DB is ready"],
-                                    env: [{ name: "DATABASE_URL", value: dbUrl } as any],
-                                    resources: { requests: { cpu: "5m", memory: "16Mi" }, limits: { cpu: "50m", memory: "64Mi" } },
-                                },
-                            ],
-                        } : {}),
                         containers: [
                             {
                                 name: "label-studio",
