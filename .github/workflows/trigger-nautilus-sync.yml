@@ -1,6 +1,20 @@
 name: Trigger Nautilus Doc Sync
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '*.md'
+      - 'adr/**'
+      - 'adapter/README.md'
+      - 'adapter/**/README.md'
+      - 'cloud/README.md'
+      - 'cluster/README.md'
+      - 'cluster/docs/**'
+      - 'scripts/README*.md'
+      - 'sql/README.md'
   workflow_dispatch:
     inputs:
       reason:
@@ -13,17 +27,36 @@ jobs:
     name: Notify nautilus of doc changes
     runs-on: ubuntu-latest
     steps:
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
+
+      - name: Fetch Nautilus token from ESC
+        id: esc
+        run: |
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          export PATH="$HOME/.pulumi/bin:$PATH"
+          # Retrieve token from ESC (configure this key once):
+          #   esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:nautilusSyncToken "<GH_PAT_OR_TOKEN>" --secret
+          NAUTILUS_SYNC_TOKEN=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:nautilusSyncToken --show-secrets --value string)
+          if [ -z "$NAUTILUS_SYNC_TOKEN" ] || [ "$NAUTILUS_SYNC_TOKEN" = "[secret]" ]; then
+            echo "❌ nautilusSyncToken not found in ESC (pulumiConfig.oceanid-cluster:nautilusSyncToken)" >&2
+            exit 1
+          fi
+          echo "::add-mask::$NAUTILUS_SYNC_TOKEN"
+          echo "NAUTILUS_SYNC_TOKEN=$NAUTILUS_SYNC_TOKEN" >> "$GITHUB_ENV"
+
       - name: Trigger nautilus documentation sync
         run: |
-          if [ -z "${{ secrets.NAUTILUS_SYNC_TOKEN }}" ]; then
-            echo "NAUTILUS_SYNC_TOKEN is not configured. Exiting gracefully." && exit 0
-          fi
           curl -sS -X POST \
             -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token ${{ secrets.NAUTILUS_SYNC_TOKEN }}" \
+            -H "Authorization: token ${NAUTILUS_SYNC_TOKEN}" \
             https://api.github.com/repos/goldfish-inc/nautilus/dispatches \
             -d '{"event_type":"docs-updated","client_payload":{"repository":"${{ github.repository }}","commit":"${{ github.sha }}","ref":"${{ github.ref }}","reason":"${{ github.event.inputs.reason }}"}}'
 
       - name: Log trigger
         run: |
-          echo "✅ Trigger attempted for commit ${{ github.sha }} (check previous step for success)"
+          echo "✅ Triggered nautilus sync for commit ${{ github.sha }}"
