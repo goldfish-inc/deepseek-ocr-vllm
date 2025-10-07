@@ -48,26 +48,34 @@ echo "Checking for namespace-scoped Flux conflicts..."
 
 # Check if flux-system namespace exists first
 if kubectl get namespace flux-system &>/dev/null; then
-  # Find and delete any NetworkPolicy with gitops-flux-* Helm release annotation
+  # Find and delete ALL resources with gitops-flux-* Helm release annotation
   # These always conflict when refactoring changes the Helm release name hash
-  echo "  Scanning for NetworkPolicy resources with Flux Helm metadata..."
+  echo "  Scanning for resources with Flux Helm metadata..."
 
-  NETWORKPOLICIES=$(kubectl get networkpolicy -n flux-system -o name 2>/dev/null || true)
+  # Resource types that commonly have Helm ownership conflicts
+  RESOURCE_TYPES="networkpolicy,serviceaccount,secret,configmap,service,deployment"
 
-  if [[ -n "$NETWORKPOLICIES" ]]; then
-    while IFS= read -r policy; do
-      if [[ -n "$policy" ]]; then
-        RELEASE_NAME=$(kubectl get "$policy" -n flux-system \
+  ALL_RESOURCES=$(kubectl get $RESOURCE_TYPES -n flux-system -o name 2>/dev/null || true)
+
+  CLEANED=0
+  if [[ -n "$ALL_RESOURCES" ]]; then
+    while IFS= read -r resource; do
+      if [[ -n "$resource" ]]; then
+        RELEASE_NAME=$(kubectl get "$resource" -n flux-system \
           -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
 
         if [[ "$RELEASE_NAME" == gitops-flux-* ]]; then
-          echo "    Found $policy with Helm release: $RELEASE_NAME"
+          echo "    Found $resource with Helm release: $RELEASE_NAME"
           echo "    Deleting to prevent ownership conflict..."
-          kubectl delete "$policy" -n flux-system --ignore-not-found || true
+          kubectl delete "$resource" -n flux-system --ignore-not-found || true
+          CLEANED=$((CLEANED + 1))
         fi
       fi
-    done <<< "$NETWORKPOLICIES"
-    echo "  ✅ Cleaned up Flux NetworkPolicy resources"
+    done <<< "$ALL_RESOURCES"
+
+    if [[ $CLEANED -gt 0 ]]; then
+      echo "  ✅ Cleaned up $CLEANED Flux resources with stale Helm metadata"
+    fi
   fi
 else
   echo "  flux-system namespace does not exist yet (first deployment)"
