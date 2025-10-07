@@ -354,6 +354,21 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
+// setupHandler returns Label Studio ML backend configuration
+func setupHandler(cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		setup := map[string]interface{}{
+			"model_version": "oceanid-ner-v1",
+			"hostname":      "ls-triton-adapter",
+			"status":        "ready",
+			"model_name":    cfg.DefaultModel,
+			"labels":        cfg.NERLabels,
+		}
+		json.NewEncoder(w).Encode(setup)
+	}
+}
+
 func makeOnes(n int) []int64 {
 	ones := make([]int64, n)
 	for i := range ones {
@@ -367,6 +382,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/setup", setupHandler(cfg))
 	mux.HandleFunc("/predict", predictHandler(cfg))
 	mux.HandleFunc("/predict_ls", predictLSHandler(cfg))
 
