@@ -28,9 +28,6 @@ type Config struct {
     NERLabels        []string
     CFAccessClientID string
     CFAccessSecret   string
-    GitHubToken      string
-    GitHubRepo       string
-    GitHubWorkflow   string
     TrainAsync       bool
     TrainDryRun      bool
     TrainUseK8sJobs  bool
@@ -43,7 +40,6 @@ type Config struct {
     HfToken          string
     HfDatasetRepo    string
     HfModelRepo      string
-    FallbackToGH     bool
 }
 
 func loadConfig() *Config {
@@ -65,9 +61,6 @@ func loadConfig() *Config {
         NERLabels:        nerLabels,
         CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
         CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
-        GitHubToken:      os.Getenv("GITHUB_TOKEN"),
-        GitHubRepo:       getEnv("GITHUB_REPO", "goldfish-inc/oceanid"),
-        GitHubWorkflow:   getEnv("GITHUB_WORKFLOW", "train-ner.yml"),
         TrainAsync:       getEnvBool("TRAIN_ASYNC", true),
         TrainDryRun:      getEnvBool("TRAIN_DRY_RUN", false),
         TrainUseK8sJobs:  getEnvBool("TRAIN_USE_K8S_JOBS", false),
@@ -80,7 +73,6 @@ func loadConfig() *Config {
         HfToken:          os.Getenv("HF_TOKEN"),
         HfDatasetRepo:    getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
         HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
-        FallbackToGH:     getEnvBool("TRAIN_FALLBACK_GH", true),
     }
 }
 
@@ -459,7 +451,7 @@ func trainHandler(cfg *Config) http.HandlerFunc {
             annCount = len(data)
         }
         requestID := fmt.Sprintf("trn-%d", time.Now().UnixNano())
-        log.Printf("/train request %s received (annotations~%d, async=%v, dry_run=%v, k8s_jobs=%v)", requestID, annCount, cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainUseK8sJobs)
+        log.Printf("/train request %s received (annotations~%d, async=%v, dry_run=%v, k8s_jobs=%v)", requestID, annCount, cfg.TrainAsync, cfg.TrainDryRun, true)
 
         // Prepare immediate response
         respObj := map[string]interface{}{
@@ -470,25 +462,18 @@ func trainHandler(cfg *Config) http.HandlerFunc {
             "dry_run":    cfg.TrainDryRun,
         }
         // Include workflow URL if known
-        respObj["workflow_url"] = fmt.Sprintf("https://github.com/%s/actions/workflows/%s", cfg.GitHubRepo, cfg.GitHubWorkflow)
+        // Add job discovery hint
+        respObj["job_namespace"] = cfg.TrainJobNS
 
         // Kick off training via K8s Job or GitHub workflow
         trigger := func() {
             if cfg.TrainDryRun {
-                log.Printf("/train %s dry-run: would trigger training (k8s_jobs=%v)", requestID, cfg.TrainUseK8sJobs)
+                log.Printf("/train %s dry-run: would create training Job in %s", requestID, cfg.TrainJobNS)
                 return
             }
-            if cfg.TrainUseK8sJobs {
-                if err := triggerK8sJob(cfg, requestID, annCount); err != nil {
-                    log.Printf("/train %s K8s Job creation failed: %v", requestID, err)
-                    if cfg.FallbackToGH {
-                        log.Printf("/train %s falling back to GitHub workflow", requestID)
-                        triggerGitHub(cfg, requestID)
-                    }
-                }
-                return
+            if err := triggerK8sJob(cfg, requestID, annCount); err != nil {
+                log.Printf("/train %s K8s Job creation failed: %v", requestID, err)
             }
-            triggerGitHub(cfg, requestID)
         }
 
         if cfg.TrainAsync {
@@ -502,41 +487,6 @@ func trainHandler(cfg *Config) http.HandlerFunc {
         // Keep 200 for Label Studio compatibility
         json.NewEncoder(w).Encode(respObj)
     }
-}
-
-func triggerGitHub(cfg *Config, requestID string) {
-    if cfg.GitHubToken == "" {
-        log.Printf("/train %s skipped: GITHUB_TOKEN not configured", requestID)
-        return
-    }
-    workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/%s/dispatches", cfg.GitHubRepo, cfg.GitHubWorkflow)
-    payload := map[string]interface{}{
-        "ref": "main",
-    }
-    payloadBytes, _ := json.Marshal(payload)
-    ghReq, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
-    if err != nil {
-        log.Printf("/train %s error creating GH request: %v", requestID, err)
-        return
-    }
-    ghReq.Header.Set("Accept", "application/vnd.github+json")
-    ghReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
-    ghReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-    ghReq.Header.Set("Content-Type", "application/json")
-
-    client := &http.Client{Timeout: 10 * time.Second}
-    ghResp, err := client.Do(ghReq)
-    if err != nil {
-        log.Printf("/train %s failed to trigger workflow: %v", requestID, err)
-        return
-    }
-    defer ghResp.Body.Close()
-    if ghResp.StatusCode != 204 {
-        bodyBytes, _ := io.ReadAll(ghResp.Body)
-        log.Printf("/train %s GitHub API error %d: %s", requestID, ghResp.StatusCode, string(bodyBytes))
-        return
-    }
-    log.Printf("/train %s triggered workflow %s successfully", requestID, cfg.GitHubWorkflow)
 }
 
 func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
@@ -560,7 +510,10 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
     // Resources
     cpuReq := resource.MustParse("4")
     memReq := resource.MustParse("8Gi")
-    gpuQty := resource.MustParse(cfg.TrainGPUCount)
+    var gpuQty resource.Quantity
+    if cfg.TrainGPUCount != "" {
+        gpuQty = resource.MustParse(cfg.TrainGPUCount)
+    }
     limits := corev1.ResourceList{
         corev1.ResourceCPU:    cpuReq,
         corev1.ResourceMemory: memReq,
@@ -569,7 +522,7 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
         corev1.ResourceCPU:    cpuReq,
         corev1.ResourceMemory: memReq,
     }
-    if cfg.TrainGPURsrc != "" && cfg.TrainGPUCount != "0" {
+    if cfg.TrainGPURsrc != "" && cfg.TrainGPUCount != "0" && cfg.TrainGPUCount != "" {
         rn := corev1.ResourceName(cfg.TrainGPURsrc)
         limits[rn] = gpuQty
         requests[rn] = gpuQty
@@ -587,6 +540,7 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
 
     podSpec := corev1.PodSpec{
         RestartPolicy: corev1.RestartPolicyNever,
+        ImagePullSecrets: []corev1.LocalObjectReference{{Name: "ghcr-creds"}},
         Containers: []corev1.Container{{
             Name:  "trainer",
             Image: cfg.TrainJobImage,
@@ -599,6 +553,11 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
     }
     if nsKey != "" && nsVal != "" {
         podSpec.NodeSelector = map[string]string{nsKey: nsVal}
+    }
+    // Common GPU taints on Calypso
+    podSpec.Tolerations = []corev1.Toleration{
+        {Key: "nvidia.com/gpu", Operator: corev1.TolerationOpEqual, Value: "true", Effect: corev1.TaintEffectNoSchedule},
+        {Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "gpu-compute", Effect: corev1.TaintEffectNoSchedule},
     }
 
     job := &batchv1.Job{
@@ -642,7 +601,7 @@ func main() {
     log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
     log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
     log.Printf("NER labels: %v", cfg.NERLabels)
-    log.Printf("/train async=%v dry_run=%v k8sJobs=%v workflow=%s repo=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainUseK8sJobs, cfg.GitHubWorkflow, cfg.GitHubRepo)
+    log.Printf("/train async=%v dry_run=%v k8sJobs=true jobImage=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainJobImage)
 
 	if err := http.ListenAndServe(cfg.ListenAddr, mux); err != nil {
 		log.Fatal(err)

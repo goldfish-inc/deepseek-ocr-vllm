@@ -46,17 +46,12 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         }
 
         // GitHub token for triggering training workflows
-        const githubToken = cfgPulumi.getSecret("ghcrToken"); // Reuse GHCR token for GitHub API
-
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
             DEFAULT_MODEL: "distilbert-base-uncased",
-            GITHUB_TOKEN: githubToken,
-            GITHUB_REPO: "goldfish-inc/oceanid",
             // Training controls (can be overridden via Pulumi config)
             TRAIN_ASYNC: cfgPulumi.get("trainAsync") ?? "true",
             TRAIN_DRY_RUN: cfgPulumi.get("trainDryRun") ?? "false",
-            GITHUB_WORKFLOW: cfgPulumi.get("githubWorkflow") ?? "train-ner.yml",
             TRAIN_USE_K8S_JOBS: cfgPulumi.get("trainUseK8sJobs") ?? "false",
             TRAINING_JOB_IMAGE: cfgPulumi.get("trainingJobImage") ?? "ghcr.io/goldfish-inc/oceanid/training-worker:main",
             TRAINING_JOB_NAMESPACE: namespace,
