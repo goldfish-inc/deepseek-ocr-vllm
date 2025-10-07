@@ -2,7 +2,12 @@ name: Train and Publish NER Model
 # ESC-powered workflow
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Source of dispatch (optional)"
+        required: false
+        default: "label-studio"
   schedule:
     - cron: '0 3 * * *'  # daily at 03:00 UTC
 
