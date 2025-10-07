@@ -110,8 +110,17 @@ KUBECONFIG=~/.kube/k3s-config.yaml kubectl get nodes
    - Centralized secret management
    - GitHub tokens, API keys stored securely
    - No secrets in code or git
+   - Database credentials managed in ESC environment
 
-4. **Flux CD v2.6.4**: GitOps continuous deployment
+4. **Crunchy Bridge Database (Ebisu Cluster)**:
+   - Managed PostgreSQL on AWS
+   - Host: `p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com`
+   - Database: `labelfish` - Label Studio operational storage
+   - User: `u_ogfzdegyvvaj3g4iyuvlu5yxmi` (database owner)
+   - Connection: `postgresql://` with `sslmode=require`
+   - Credentials stored in ESC: `oceanid-cluster:labelStudioDbUrl`
+
+5. **Flux CD v2.6.4**: GitOps continuous deployment
    - Helm chart management
    - Automated image updates
    - Source: `clusters/tethys/`
@@ -355,6 +364,66 @@ kubectl get imageupdateautomation flux-system -n flux-system
    - Check policies: `kubectl get imagepolicy -n flux-system`
    - Verify markers: Check `clusters/tethys/infrastructure.yaml`
    - Force reconcile: Annotate ImageUpdateAutomation resource
+
+7. **Label Studio Database Connection Issues**:
+   - Verify ESC has correct credentials: `pulumi env get default/oceanid-cluster`
+   - Test connection from cluster:
+     ```bash
+     kubectl -n apps run db-test --rm -i --image=postgres:16-alpine \
+       --env="DATABASE_URL=$(pulumi config get oceanid-cluster:labelStudioDbUrl)" \
+       --command -- sh -c 'pg_isready -d "$DATABASE_URL"'
+     ```
+   - Check database exists on Crunchy Bridge:
+     ```bash
+     PGPASSWORD="<password>" psql -h p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com \
+       -U postgres -d postgres -c "\l"
+     ```
+   - Correct credentials stored in ESC:
+     - User: `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
+     - Database: `labelfish`
+     - URL format: `postgresql://user:pass@host:5432/labelfish?sslmode=require`
+
+## Database Management
+
+### Label Studio Database (Crunchy Bridge)
+
+**Cluster**: Ebisu (`p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com`)
+
+**Database**: `labelfish`
+- **Purpose**: Label Studio operational storage (projects, tasks, annotations, users)
+- **Owner**: `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
+- **Future**: Will be used for cleaned annotation data once Label Studio gets dedicated DB
+
+**Accessing the Database**:
+```bash
+# List all databases on Ebisu cluster
+PGPASSWORD="<superuser-password>" psql \
+  -h p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com \
+  -U postgres -d postgres -c "\l"
+
+# Connect to labelfish database
+PGPASSWORD="<user-password>" psql \
+  -h p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com \
+  -U u_ogfzdegyvvaj3g4iyuvlu5yxmi -d labelfish
+```
+
+**ESC Configuration**:
+- Key: `oceanid-cluster:labelStudioDbUrl`
+- Format: Django-standard `postgresql://` URL with `sslmode=require`
+- Updated via: `pulumi env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl --secret --plaintext '<url>'`
+
+**Testing Connection from Cluster**:
+```bash
+# Quick test with pg_isready
+kubectl -n apps run pgtest --rm -i --image=postgres:16-alpine \
+  --env="DATABASE_URL=postgresql://u_ogfzdegyvvaj3g4iyuvlu5yxmi:<password>@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish?sslmode=require" \
+  --command -- pg_isready -d "$DATABASE_URL"
+
+# Full test with psql query
+kubectl -n apps run dbtest --rm -i --image=postgres:16-alpine \
+  --env="DATABASE_URL=<url>" \
+  --command -- sh -c 'psql "$DATABASE_URL" -c "SELECT current_database(), current_user;"'
+```
 
 ## Security Considerations
 
