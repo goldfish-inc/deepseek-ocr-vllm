@@ -70,6 +70,17 @@ export class LabelStudio extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [ns] }) : undefined;
 
+        // Persistent volume for Label Studio data directory
+        const pvc = new k8s.core.v1.PersistentVolumeClaim(`${name}-pvc`, {
+            metadata: { name: "label-studio-data", namespace },
+            spec: {
+                accessModes: ["ReadWriteOnce"],
+                resources: {
+                    requests: { storage: "10Gi" },
+                },
+            },
+        }, { provider: k8sProvider, parent: this, dependsOn: [ns] });
+
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: "label-studio", namespace },
             spec: {
@@ -78,11 +89,23 @@ export class LabelStudio extends pulumi.ComponentResource {
                 template: {
                     metadata: { labels },
                     spec: {
+                        volumes: [
+                            {
+                                name: "data",
+                                persistentVolumeClaim: { claimName: "label-studio-data" },
+                            },
+                        ],
                         containers: [
                             {
                                 name: "label-studio",
                                 image: "heartexlabs/label-studio:1.21.0",
                                 ports: [{ containerPort: 8080, name: "http" }],
+                                volumeMounts: [
+                                    {
+                                        name: "data",
+                                        mountPath: "/label-studio/data",
+                                    },
+                                ],
                                 env: [
                                     { name: "LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED", value: "true" },
                                     // Security: Derive CSRF_TRUSTED_ORIGINS from hostUrl dynamically
@@ -138,7 +161,7 @@ export class LabelStudio extends pulumi.ComponentResource {
                     },
                 },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: dbSecret ? [ns, s3Secret, dbSecret] : [ns, s3Secret] });
+        }, { provider: k8sProvider, parent: this, dependsOn: dbSecret ? [ns, s3Secret, dbSecret, pvc] : [ns, s3Secret, pvc] });
 
         const svc = new k8s.core.v1.Service(`${name}-svc`, {
             metadata: { name: "label-studio", namespace },
