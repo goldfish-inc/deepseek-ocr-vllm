@@ -46,31 +46,31 @@ fi
 # Check for namespace-scoped Flux resources with stale Helm metadata
 echo "Checking for namespace-scoped Flux conflicts..."
 
-# Find any existing Flux Helm-managed resources
-# These will conflict if a new Flux release with different hash is being deployed
-EXISTING_FLUX_RESOURCES=$(kubectl get networkpolicy -n flux-system -o json 2>/dev/null | \
-  jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
-  "\(.kind) \(.metadata.name) (release: \(.metadata.annotations[\"meta.helm.sh/release-name\"]))"' 2>/dev/null || true)
+# Check if flux-system namespace exists first
+if kubectl get namespace flux-system &>/dev/null; then
+  # Find and delete any NetworkPolicy with gitops-flux-* Helm release annotation
+  # These always conflict when refactoring changes the Helm release name hash
+  echo "  Scanning for NetworkPolicy resources with Flux Helm metadata..."
 
-if [[ -n "$EXISTING_FLUX_RESOURCES" ]]; then
-  echo "⚠️  Found Flux NetworkPolicy resources that may conflict with new Helm release:"
-  echo "$EXISTING_FLUX_RESOURCES"
-  echo ""
-  echo "  Auto-cleaning to prevent Helm ownership conflicts..."
+  NETWORKPOLICIES=$(kubectl get networkpolicy -n flux-system -o name 2>/dev/null || true)
 
-  # Delete NetworkPolicy resources with gitops-flux-* release annotations
-  # These will be recreated by the new Helm release
-  kubectl get networkpolicy -n flux-system -o json 2>/dev/null | \
-    jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
-    .metadata.name' 2>/dev/null | \
-    while IFS= read -r policy_name; do
-      if [[ -n "$policy_name" ]]; then
-        echo "    Deleting NetworkPolicy/$policy_name..."
-        kubectl delete networkpolicy "$policy_name" -n flux-system --ignore-not-found || true
+  if [[ -n "$NETWORKPOLICIES" ]]; then
+    while IFS= read -r policy; do
+      if [[ -n "$policy" ]]; then
+        RELEASE_NAME=$(kubectl get "$policy" -n flux-system \
+          -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
+
+        if [[ "$RELEASE_NAME" == gitops-flux-* ]]; then
+          echo "    Found $policy with Helm release: $RELEASE_NAME"
+          echo "    Deleting to prevent ownership conflict..."
+          kubectl delete "$policy" -n flux-system --ignore-not-found || true
+        fi
       fi
-    done
-
-  echo "✅ Cleaned up Flux NetworkPolicy resources for fresh deployment"
+    done <<< "$NETWORKPOLICIES"
+    echo "  ✅ Cleaned up Flux NetworkPolicy resources"
+  fi
+else
+  echo "  flux-system namespace does not exist yet (first deployment)"
 fi
 
 # Check for crashlooping pods that would block deployment
