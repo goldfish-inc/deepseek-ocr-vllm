@@ -51,6 +51,23 @@ repos:
         files: ^(.*\.ya?ml)$
         args: ["-d", "{extends: default, rules: {line-length: disable, document-start: disable, indentation: {indent-sequences: consistent}, comments: {min-spaces-from-content: 1}, brackets: {min-spaces-inside: 0, max-spaces-inside: 1}}}"]
 
+  # Go linting and formatting
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -w
+        language: system
+        types: [go]
+        pass_filenames: true
+      - id: golangci-lint
+        name: golangci-lint
+        entry: bash -c 'cd apps/ls-triton-adapter && golangci-lint run --fix'
+        language: system
+        types: [go]
+        pass_filenames: false
+        files: ^apps/ls-triton-adapter/
+
   # TypeScript compilation check
   - repo: local
     hooks:
