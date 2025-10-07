@@ -14,15 +14,15 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr        string
-	LabelStudioURL    string
-	LabelStudioPAT    string
-	NERBackendURL     string
-	TabertBackendURL  string
-	SinkIngestURL     string
-	SinkWebhookURL    string
-	NERLabelsJSON     string
-	AllowedOrigins    []string
+	ListenAddr       string
+	LabelStudioURL   string
+	LabelStudioPAT   string
+	NERBackendURL    string
+	TabertBackendURL string
+	SinkIngestURL    string
+	SinkWebhookURL   string
+	NERLabelsJSON    string
+	AllowedOrigins   []string
 }
 
 func loadConfig() *Config {
@@ -35,15 +35,15 @@ func loadConfig() *Config {
 	}
 
 	return &Config{
-		ListenAddr:        getEnv("LISTEN_ADDR", ":8080"),
-		LabelStudioURL:    os.Getenv("LS_URL"),
-		LabelStudioPAT:    os.Getenv("LS_PAT"),
-		NERBackendURL:     os.Getenv("NER_BACKEND_URL"),
-		TabertBackendURL:  os.Getenv("TABERT_BACKEND_URL"),
-		SinkIngestURL:     os.Getenv("SINK_INGEST_URL"),
-		SinkWebhookURL:    os.Getenv("SINK_WEBHOOK_URL"),
-		NERLabelsJSON:     os.Getenv("NER_LABELS_JSON"),
-		AllowedOrigins:    allowedOrigins,
+		ListenAddr:       getEnv("LISTEN_ADDR", ":8080"),
+		LabelStudioURL:   os.Getenv("LS_URL"),
+		LabelStudioPAT:   os.Getenv("LS_PAT"),
+		NERBackendURL:    os.Getenv("NER_BACKEND_URL"),
+		TabertBackendURL: os.Getenv("TABERT_BACKEND_URL"),
+		SinkIngestURL:    os.Getenv("SINK_INGEST_URL"),
+		SinkWebhookURL:   os.Getenv("SINK_WEBHOOK_URL"),
+		NERLabelsJSON:    os.Getenv("NER_LABELS_JSON"),
+		AllowedOrigins:   allowedOrigins,
 	}
 }
 
