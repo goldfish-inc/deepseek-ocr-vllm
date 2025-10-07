@@ -59,11 +59,20 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             TRAIN_NODE_SELECTOR: cfgPulumi.get("trainingNodeSelector") ?? "kubernetes.io/hostname=calypso",
             TRAIN_GPU_RESOURCE: cfgPulumi.get("trainingGpuResource") ?? "nvidia.com/gpu",
             TRAIN_GPU_COUNT: cfgPulumi.get("trainingGpuCount") ?? "1",
-            HF_TOKEN: hfToken as any,
             HF_DATASET_REPO: hfDatasetRepo,
             HF_MODEL_REPO: hfModelRepo,
+            TRAIN_HF_SECRET_NAME: "hf-credentials",
+            TRAIN_HF_SECRET_KEY: "token",
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
+
+        // Create K8s Secret for HF token sourced from ESC, so adapter‑spawned Jobs can reference it via SecretKeyRef
+        if (hfToken) {
+            new k8s.core.v1.Secret(`${name}-hf-credentials`, {
+                metadata: { name: "hf-credentials", namespace },
+                stringData: { token: hfToken as any },
+            }, { provider: k8sProvider, parent: this });
+        }
 
         // Optional: allow gating gpu.<base> behind Cloudflare Access with service tokens
         const cfIdFromCfg = cfgPulumi.getSecret("cfAccessClientId");

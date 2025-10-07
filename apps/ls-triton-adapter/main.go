@@ -40,6 +40,8 @@ type Config struct {
     HfToken          string
     HfDatasetRepo    string
     HfModelRepo      string
+    HFSecretName     string
+    HFSecretKey      string
 }
 
 func loadConfig() *Config {
@@ -73,6 +75,8 @@ func loadConfig() *Config {
         HfToken:          os.Getenv("HF_TOKEN"),
         HfDatasetRepo:    getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
         HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
+        HFSecretName:     getEnv("TRAIN_HF_SECRET_NAME", ""),
+        HFSecretKey:      getEnv("TRAIN_HF_SECRET_KEY", "token"),
     }
 }
 
@@ -531,12 +535,24 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
     jobName := fmt.Sprintf("train-%d", time.Now().Unix())
     backoff := int32(0)
     ttl := cfg.TrainJobTTL
-    env := []corev1.EnvVar{
-        {Name: "HF_TOKEN", Value: cfg.HfToken},
-        {Name: "HF_DATASET_REPO", Value: cfg.HfDatasetRepo},
-        {Name: "HF_MODEL_REPO", Value: cfg.HfModelRepo},
-        {Name: "ANNOTATION_COUNT", Value: fmt.Sprintf("%d", annCount)},
+    env := []corev1.EnvVar{}
+    // Prefer SecretKeyRef from k8s Secret created via ESC
+    if cfg.HFSecretName != "" {
+        env = append(env, corev1.EnvVar{
+            Name: "HF_TOKEN",
+            ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+                LocalObjectReference: corev1.LocalObjectReference{Name: cfg.HFSecretName},
+                Key:                  cfg.HFSecretKey,
+            }},
+        })
+    } else if cfg.HfToken != "" { // fallback to plain env (not recommended)
+        env = append(env, corev1.EnvVar{Name: "HF_TOKEN", Value: cfg.HfToken})
     }
+    env = append(env,
+        corev1.EnvVar{Name: "HF_DATASET_REPO", Value: cfg.HfDatasetRepo},
+        corev1.EnvVar{Name: "HF_MODEL_REPO", Value: cfg.HfModelRepo},
+        corev1.EnvVar{Name: "ANNOTATION_COUNT", Value: fmt.Sprintf("%d", annCount)},
+    )
 
     podSpec := corev1.PodSpec{
         RestartPolicy: corev1.RestartPolicyNever,
