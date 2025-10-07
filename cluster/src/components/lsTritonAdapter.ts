@@ -42,9 +42,14 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this });
         }
 
+        // GitHub token for triggering training workflows
+        const githubToken = cfgPulumi.getSecret("ghcrToken"); // Reuse GHCR token for GitHub API
+
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
             DEFAULT_MODEL: "distilbert-base-uncased",
+            GITHUB_TOKEN: githubToken,
+            GITHUB_REPO: "goldfish-inc/oceanid",
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 

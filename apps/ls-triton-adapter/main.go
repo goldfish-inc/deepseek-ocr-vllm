@@ -20,6 +20,8 @@ type Config struct {
 	NERLabels        []string
 	CFAccessClientID string
 	CFAccessSecret   string
+	GitHubToken      string
+	GitHubRepo       string
 }
 
 func loadConfig() *Config {
@@ -41,6 +43,8 @@ func loadConfig() *Config {
 		NERLabels:        nerLabels,
 		CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
 		CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
+		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
+		GitHubRepo:       getEnv("GITHUB_REPO", "goldfish-inc/oceanid"),
 	}
 }
 
@@ -377,6 +381,83 @@ func makeOnes(n int) []int64 {
 	return ones
 }
 
+// trainHandler triggers GitHub Actions workflow for model retraining
+func trainHandler(cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Label Studio sends annotation data in request body
+		var body map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			log.Printf("Train request body parse error: %v", err)
+			// Still return success - we'll trigger training anyway
+		}
+
+		log.Printf("Received training request with %d annotations", len(body))
+
+		// Trigger GitHub Actions workflow
+		if cfg.GitHubToken == "" {
+			log.Println("Warning: GITHUB_TOKEN not set, cannot trigger training workflow")
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "queued",
+				"message": "Training skipped - GitHub token not configured",
+			})
+			return
+		}
+
+		// Trigger workflow via GitHub API
+		workflowURL := fmt.Sprintf("https://api.github.com/repos/%s/actions/workflows/train-ner.yml/dispatches", cfg.GitHubRepo)
+		payload := map[string]interface{}{
+			"ref": "main",
+			"inputs": map[string]string{
+				"trigger_source": "label_studio",
+			},
+		}
+
+		payloadBytes, _ := json.Marshal(payload)
+		req, err := http.NewRequest("POST", workflowURL, bytes.NewReader(payloadBytes))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create request: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cfg.GitHubToken))
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Failed to trigger workflow: %v", err)
+			http.Error(w, fmt.Sprintf("Failed to trigger workflow: %v", err), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 204 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			log.Printf("GitHub API error %d: %s", resp.StatusCode, string(bodyBytes))
+			http.Error(w, fmt.Sprintf("GitHub API error: %d", resp.StatusCode), resp.StatusCode)
+			return
+		}
+
+		log.Println("Successfully triggered train-ner.yml workflow")
+
+		// Return success response to Label Studio
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":       "queued",
+			"message":      "Model training workflow triggered",
+			"workflow_url": fmt.Sprintf("https://github.com/%s/actions/workflows/train-ner.yml", cfg.GitHubRepo),
+		})
+	}
+}
+
 func main() {
 	cfg := loadConfig()
 
@@ -385,6 +466,7 @@ func main() {
 	mux.HandleFunc("/setup", setupHandler(cfg))
 	mux.HandleFunc("/predict", predictHandler(cfg))
 	mux.HandleFunc("/predict_ls", predictLSHandler(cfg))
+	mux.HandleFunc("/train", trainHandler(cfg))
 
 	log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
 	log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
