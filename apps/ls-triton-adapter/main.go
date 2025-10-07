@@ -448,7 +448,7 @@ func makeOnes(n int) []int64 {
 	return ones
 }
 
-// trainHandler triggers GitHub Actions workflow for model retraining
+// trainHandler triggers K8s training Job for model retraining
 func trainHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -481,11 +481,10 @@ func trainHandler(cfg *Config) http.HandlerFunc {
 			"async":      cfg.TrainAsync,
 			"dry_run":    cfg.TrainDryRun,
 		}
-		// Include workflow URL if known
 		// Add job discovery hint
 		respObj["job_namespace"] = cfg.TrainJobNS
 
-		// Kick off training via K8s Job or GitHub workflow
+		// Kick off training via K8s Job
 		trigger := func() {
 			if cfg.TrainDryRun {
 				log.Printf("/train %s dry-run: would create training Job in %s", requestID, cfg.TrainJobNS)

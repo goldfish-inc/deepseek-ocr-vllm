@@ -45,14 +45,14 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this });
         }
 
-        // GitHub token for triggering training workflows
+        // Training configuration
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
             DEFAULT_MODEL: "distilbert-base-uncased",
+            TRITON_MODEL_NAME: cfgPulumi.get("tritonModelName") ?? "ner-distilbert",
             // Training controls (can be overridden via Pulumi config)
             TRAIN_ASYNC: cfgPulumi.get("trainAsync") ?? "true",
             TRAIN_DRY_RUN: cfgPulumi.get("trainDryRun") ?? "false",
-            TRAIN_USE_K8S_JOBS: cfgPulumi.get("trainUseK8sJobs") ?? "false",
             TRAINING_JOB_IMAGE: cfgPulumi.get("trainingJobImage") ?? "ghcr.io/goldfish-inc/oceanid/training-worker:main",
             TRAINING_JOB_NAMESPACE: namespace,
             TRAINING_JOB_TTL_SECONDS: cfgPulumi.get("trainingJobTtlSeconds") ?? "3600",
