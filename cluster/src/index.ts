@@ -9,7 +9,7 @@ import { CloudflareTunnel } from "./components/cloudflareTunnel";
 import { FluxBootstrap } from "./components/fluxBootstrap";
 import { PulumiOperator } from "./components/pulumiOperator";
 import { ImageAutomation } from "./components/imageAutomation";
-import { LabelStudio } from "./components/labelStudio";
+// import { LabelStudio } from "./components/labelStudio"; // MOVED TO GITOPS
 import { HostCloudflared } from "./components/hostCloudflared";
 import { HostDockerService } from "./components/hostDockerService";
 import { HostModelPuller } from "./components/hostModelPuller";
@@ -126,7 +126,7 @@ const minioHostname = pulumi.interpolate`minio.${clusterConfig.nodeTunnel.hostna
 const enableAppsStack = cfg.getBoolean("enableAppsStack") ?? false;
 
 const extraIngressRules: Array<{ hostname: pulumi.Input<string>; service: pulumi.Input<string>; noTLSVerify?: pulumi.Input<boolean> }>= [
-    { hostname: labelHostname, service: pulumi.output("http://label-studio.apps.svc.cluster.local:8080"), noTLSVerify: false },
+    { hostname: labelHostname, service: pulumi.output("http://label-studio.apps.svc.cluster.local:8080"), noTLSVerify: false }, // Service deployed by Flux
     // Note: GPU service is handled by HostCloudflared on Calypso, not this tunnel
 ];
 
@@ -270,18 +270,11 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
     cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
 });
 
-// Deploy Label Studio with dedicated labelfish database (CrunchyBridge Ebisu cluster)
-// ESC provides the complete postgresql:// URL with correct credentials and sslmode=require
-const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl");
-
-const labelStudio = new LabelStudio("label-studio", {
-    k8sProvider,
-    namespace: "apps",
-    replicas: 1,
-    mlBackendUrl: pulumi.interpolate`${lsAdapter.serviceUrl}/predict_ls`,
-    dbUrl: labelStudioDbUrl,
-    hostUrl: pulumi.interpolate`https://${labelHostname}`,
-});
+// Label Studio deployment moved to GitOps (Flux)
+// See clusters/tethys/apps/label-studio-release.yaml
+// Database URL and other secrets are now managed through Flux
+// const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl");
+// const labelStudio = new LabelStudio(...); // REMOVED - Now managed by Flux
 
 // GHCR image pull secret (private images)
 (() => {
@@ -491,7 +484,7 @@ if __name__ == "__main__":
                 },
             },
         },
-    }, { provider: k8sProvider, dependsOn: [labelStudio, lsAdapter, provConfig, provSecret] });
+    }, { provider: k8sProvider, dependsOn: [lsAdapter, provConfig, provSecret] }); // labelStudio removed - managed by Flux
 })();
 
 // Verification: List webhooks and confirm NER_Data exists (runs once)
@@ -588,8 +581,8 @@ const smeReadiness = new SMEReadiness("sme-ready", {
 // Annotations sink: receives LS webhooks, appends JSONL to HF dataset and upserts into Postgres
 const hfRepo = cfg.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
 const hfToken = cfg.getSecret("hfAccessToken");
-// Use the same labelfish database as Label Studio
-const annotationsSinkDbUrl = labelStudioDbUrl; // Same database as Label Studio
+// Use the same labelfish database as Label Studio (now retrieved directly from ESC)
+const annotationsSinkDbUrl = cfg.requireSecret("labelStudioDbUrl"); // Same database as Label Studio
 const schemaVersion = cfg.get("schemaVersion") || "1.0.0";
 const annotationsSink = new AnnotationsSink("annotations-sink", {
     k8sProvider,
