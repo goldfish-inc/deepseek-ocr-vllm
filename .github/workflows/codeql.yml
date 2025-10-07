@@ -1,0 +1,64 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'go', 'javascript-typescript', 'python' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      # Fallback manual build in case autobuild fails (multi-module/go + workspaces)
+      - name: Manual build (fallback)
+        if: failure()
+        run: |
+          set -euxo pipefail
+          if [ "${{ matrix.language }}" = "go" ]; then
+            sudo apt-get update && sudo apt-get install -y golang-go || true
+            for m in apps/*; do
+              if [ -f "$m/go.mod" ]; then
+                (cd "$m" && go mod download && go build ./...)
+              fi
+            done
+          elif [ "${{ matrix.language }}" = "javascript-typescript" ]; then
+            if [ -f package.json ]; then
+              npm ci || true
+            fi
+            if [ -f cluster/package.json ]; then
+              (cd cluster && npm ci || true)
+            fi
+          elif [ "${{ matrix.language }}" = "python" ]; then
+            python -m pip install --upgrade pip || true
+            if [ -f scripts/requirements-ner.txt ]; then
+              pip install -r scripts/requirements-ner.txt || true
+            fi
+          fi
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

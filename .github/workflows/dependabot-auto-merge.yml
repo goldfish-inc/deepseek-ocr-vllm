@@ -1,0 +1,50 @@
+name: Dependabot Auto-Enable Auto‑Merge (Patch/Minor)
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve patch/minor update PR
+        if: contains(steps.metadata.outputs.update-type, 'version-update:semver-patch') || contains(steps.metadata.outputs.update-type, 'version-update:semver-minor')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              event: 'APPROVE',
+              body: 'Auto-approved patch/minor dependency update (Dependabot).'
+            });
+
+      - name: Enable auto-merge for patch/minor updates
+        if: contains(steps.metadata.outputs.update-type, 'version-update:semver-patch') || contains(steps.metadata.outputs.update-type, 'version-update:semver-minor')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pullRequestId = context.payload.pull_request.node_id;
+            try {
+              await github.graphql(`
+                mutation($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }) { clientMutationId }
+                }
+              `, { pullRequestId });
+              core.info('Auto-merge enabled for patch/minor update');
+            } catch (e) {
+              core.warning('Could not enable auto-merge. Ensure repo setting "Allow auto-merge" is enabled and branch protections permit it. ' + e);
+            }

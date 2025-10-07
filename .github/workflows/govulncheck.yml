@@ -1,0 +1,35 @@
+name: Go Vulnerability Scan
+
+on:
+  push:
+    paths:
+      - 'apps/**'
+      - '.github/workflows/govulncheck.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+  schedule:
+    - cron: '0 4 * * 2' # Tuesdays 04:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run govulncheck (multi-module)
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: '1.23'
+          work-dir: '.'
+          # Iterate modules
+          # The action will attempt to scan from root; modules under apps/* are discovered.

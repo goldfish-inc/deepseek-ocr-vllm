@@ -1,0 +1,175 @@
+version: 2
+updates:
+  # Go modules (multi-module repo)
+  - package-ecosystem: "gomod"
+    directory: "/apps/annotations-sink"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+    open-pull-requests-limit: 25
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(go)"
+      include: "scope"
+    labels: ["dependencies", "go"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "gomod"
+    directory: "/apps/ls-triton-adapter"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+    open-pull-requests-limit: 25
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(go)"
+      include: "scope"
+    labels: ["dependencies", "go"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "gomod"
+    directory: "/apps/project-bootstrapper"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+    open-pull-requests-limit: 25
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(go)"
+      include: "scope"
+    labels: ["dependencies", "go"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  # NodeJS workspaces
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+    open-pull-requests-limit: 25
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(npm)"
+      include: "scope"
+    labels: ["dependencies", "javascript"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "npm"
+    directory: "/cluster"
+    schedule:
+      interval: "daily"
+      time: "03:30"
+    open-pull-requests-limit: 25
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(npm)"
+      include: "scope"
+    labels: ["dependencies", "javascript"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  # Python training worker requirements
+  - package-ecosystem: "pip"
+    directory: "/scripts"
+    schedule:
+      interval: "daily"
+      time: "04:00"
+    open-pull-requests-limit: 20
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(pip)"
+      include: "scope"
+    labels: ["dependencies", "python"]
+    groups:
+      minor-and-patch:
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      majors:
+        update-types: ["version-update:semver-major"]
+
+  # Dockerfiles
+  - package-ecosystem: "docker"
+    directory: "/apps/annotations-sink"
+    schedule:
+      interval: "daily"
+      time: "05:00"
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    labels: ["dependencies", "docker"]
+  - package-ecosystem: "docker"
+    directory: "/apps/ls-triton-adapter"
+    schedule:
+      interval: "daily"
+      time: "05:10"
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    labels: ["dependencies", "docker"]
+  - package-ecosystem: "docker"
+    directory: "/apps/project-bootstrapper"
+    schedule:
+      interval: "daily"
+      time: "05:20"
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    labels: ["dependencies", "docker"]
+  - package-ecosystem: "docker"
+    directory: "/apps/training-worker"
+    schedule:
+      interval: "daily"
+      time: "05:30"
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    versioning-strategy: increase
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    labels: ["dependencies", "docker"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "01:30"
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    commit-message:
+      prefix: "deps(actions)"
+      include: "scope"
+    labels: ["dependencies", "ci"]

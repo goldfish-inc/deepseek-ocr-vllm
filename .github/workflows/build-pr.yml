@@ -1,0 +1,158 @@
+name: Build (PR)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-go:
+    name: Build (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes (Go)
+        id: changes
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD | tr '\n' ' ')
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          if echo "$CHANGED" | grep -Eq '^(apps/[^/]+/(go\.mod|.*\.go)|go\.mod|go\.sum)'; then
+            echo "do_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "do_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Go
+        if: steps.changes.outputs.do_build == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build all Go modules under apps/*
+        if: steps.changes.outputs.do_build == 'true'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for m in apps/*; do
+            if [ -f "$m/go.mod" ]; then
+              echo "::group::Build $m"
+              (cd "$m" && go mod download && go build ./...)
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: No Go changes detected
+        if: steps.changes.outputs.do_build != 'true'
+        run: echo "No Go changes; skipping build."
+
+  build-node:
+    name: Build (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes (Node)
+        id: changes
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD | tr '\n' ' ')
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          if echo "$CHANGED" | grep -Eq '^(cluster/|pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml)'; then
+            echo "do_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "do_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up pnpm
+        if: steps.changes.outputs.do_build == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.12.2'
+          run_install: false
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.do_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install and build cluster
+        if: steps.changes.outputs.do_build == 'true'
+        run: |
+          cd cluster
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: No Node changes detected
+        if: steps.changes.outputs.do_build != 'true'
+        run: echo "No Node changes; skipping build."
+
+  build-python:
+    name: Build (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes (Python)
+        id: changes
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD | tr '\n' ' ')
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          if echo "$CHANGED" | grep -Eq '^(apps/training-worker/|scripts/requirements-ner\.txt)'; then
+            echo "do_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "do_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Python
+        if: steps.changes.outputs.do_build == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'scripts/requirements-ner.txt'
+
+      - name: Install Python dependencies (training worker)
+        if: steps.changes.outputs.do_build == 'true'
+        run: |
+          pip install --upgrade pip
+          pip install -r scripts/requirements-ner.txt
+
+      - name: No Python changes detected
+        if: steps.changes.outputs.do_build != 'true'
+        run: echo "No Python changes; skipping install."
