@@ -51,89 +51,61 @@ export class PulumiOperator extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
-        // Create OCI HelmRepository for PKO
-        const helmRepo = new k8s.apiextensions.CustomResource(`${name}-helm-repo`, {
-            apiVersion: "source.toolkit.fluxcd.io/v1beta2",
-            kind: "HelmRepository",
-            metadata: {
-                name: "pulumi",
-                namespace: namespaceName,
+        // Deploy PKO via standard Helm (NOT through Flux which isn't installed yet)
+        const helmRelease = new k8s.helm.v3.Release(`${name}-helm`, {
+            name: "pulumi-kubernetes-operator",
+            namespace: namespaceName,
+            repositoryOpts: {
+                repo: "oci://ghcr.io/pulumi/helm-charts",
             },
-            spec: {
-                interval: "10m",
-                type: "oci",
-                url: "oci://ghcr.io/pulumi/helm-charts",
-            },
-        }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
-
-        // Deploy PKO via Helm
-        const helmRelease = new k8s.apiextensions.CustomResource(`${name}-helm-release`, {
-            apiVersion: "helm.toolkit.fluxcd.io/v2beta1",
-            kind: "HelmRelease",
-            metadata: {
-                name: "pulumi-kubernetes-operator",
-                namespace: namespaceName,
-            },
-            spec: {
-                interval: "10m",
-                chart: {
-                    spec: {
-                        chart: "pulumi-kubernetes-operator",
-                        version: "2.2.0",
-                        sourceRef: {
-                            kind: "HelmRepository",
-                            name: "pulumi",
-                            namespace: namespaceName,
+            chart: "pulumi-kubernetes-operator",
+            version: "2.2.0",
+            values: {
+                // PKO v2 requires cluster-wide installation
+                // Install CRDs since we're not using Flux
+                installCRDs: true,
+                controllerManager: {
+                    replicas: 1,
+                    resources: {
+                        requests: {
+                            cpu: "100m",
+                            memory: "128Mi",
+                        },
+                        limits: {
+                            cpu: "500m",
+                            memory: "512Mi",
                         },
                     },
-                },
-                values: {
-                    // PKO v2 requires cluster-wide installation
-                    // Skip CRD installation - Flux already manages its own CRDs
-                    installCRDs: false,
-                    controllerManager: {
-                        replicas: 1,
-                        resources: {
-                            requests: {
-                                cpu: "100m",
-                                memory: "128Mi",
-                            },
-                            limits: {
-                                cpu: "500m",
-                                memory: "512Mi",
-                            },
-                        },
-                        // Avoid scheduling on GPU nodes
-                        affinity: {
-                            nodeAffinity: {
-                                requiredDuringSchedulingIgnoredDuringExecution: {
-                                    nodeSelectorTerms: [{
-                                        matchExpressions: [{
-                                            key: "workload-type",
-                                            operator: "NotIn",
-                                            values: ["gpu-compute"],
-                                        }],
+                    // Avoid scheduling on GPU nodes
+                    affinity: {
+                        nodeAffinity: {
+                            requiredDuringSchedulingIgnoredDuringExecution: {
+                                nodeSelectorTerms: [{
+                                    matchExpressions: [{
+                                        key: "workload-type",
+                                        operator: "NotIn",
+                                        values: ["gpu-compute"],
                                     }],
-                                },
-                            },
-                        },
-                    },
-                    // For PKO v2 workspace pods
-                    workspaceTemplate: {
-                        resources: {
-                            requests: {
-                                cpu: "50m",
-                                memory: "64Mi",
-                            },
-                            limits: {
-                                cpu: "1000m",
-                                memory: "1Gi",
+                                }],
                             },
                         },
                     },
                 },
+                // For PKO v2 workspace pods
+                workspaceTemplate: {
+                    resources: {
+                        requests: {
+                            cpu: "50m",
+                            memory: "64Mi",
+                        },
+                        limits: {
+                            cpu: "1000m",
+                            memory: "1Gi",
+                        },
+                    },
+                },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [helmRepo] });
+        }, { provider: k8sProvider, parent: this, dependsOn: [namespace, secret] });
 
         this.namespace = pulumi.output(namespaceName);
         this.secretName = secret.metadata.name;

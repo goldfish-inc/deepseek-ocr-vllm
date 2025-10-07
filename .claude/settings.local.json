@@ -115,7 +115,12 @@
       "Bash(do kubectl patch \"$res\" -n flux-system -p '{\"\"\"\"metadata\"\"\"\":{\"\"\"\"finalizers\"\"\"\":null}}' --type=merge)",
       "Bash(do kubectl patch imagepolicy \"$policy\" -n flux-system -p '{\"\"metadata\"\":{\"\"finalizers\"\":null}}' --type=merge)",
       "Bash(do kubectl patch imagerepository \"$repo\" -n flux-system -p '{\"\"metadata\"\":{\"\"finalizers\"\":null}}' --type=merge)",
-      "Bash(pnpm ls:*)"
+      "Bash(pnpm ls:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(PULUMI_K8S_DELETE_UNREACHABLE=true pulumi refresh --yes)",
+      "Bash(scp:*)"
     ],
     "deny": [],
     "ask": []
