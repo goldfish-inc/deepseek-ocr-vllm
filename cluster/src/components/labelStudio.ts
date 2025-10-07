@@ -1,5 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
+import { LabelStudioNetworkPolicy } from "./labelStudioNetworkPolicy";
 
 export interface LabelStudioArgs {
     k8sProvider: k8s.Provider;
@@ -61,6 +62,14 @@ export class LabelStudio extends pulumi.ComponentResource {
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [ns] });
 
+        // Create Kubernetes secret for database credentials (security best practice)
+        const dbSecret = dbUrl ? new k8s.core.v1.Secret(`${name}-db-secret`, {
+            metadata: { name: "labelstudio-db-credentials", namespace },
+            stringData: {
+                DATABASE_URL: dbUrl as any,
+            },
+        }, { provider: k8sProvider, parent: this, dependsOn: [ns] }) : undefined;
+
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: "label-studio", namespace },
             spec: {
@@ -76,17 +85,21 @@ export class LabelStudio extends pulumi.ComponentResource {
                                 ports: [{ containerPort: 8080, name: "http" }],
                                 env: [
                                     { name: "LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED", value: "true" },
-                                    { name: "CSRF_TRUSTED_ORIGINS", value: "https://label.boathou.se" },
-                                    { name: "DJANGO_ALLOWED_HOSTS", value: "*" },
+                                    // Security: Derive CSRF_TRUSTED_ORIGINS from hostUrl dynamically
+                                    ...(hostUrl ? [{ name: "CSRF_TRUSTED_ORIGINS", value: hostUrl }] : []),
+                                    // Security: Restrict DJANGO_ALLOWED_HOSTS to actual hostname instead of wildcard
+                                    ...(hostUrl ? [{
+                                        name: "DJANGO_ALLOWED_HOSTS",
+                                        value: pulumi.interpolate`${hostUrl}`.apply(url => new URL(url).hostname)
+                                    }] : [{ name: "DJANGO_ALLOWED_HOSTS", value: "*" }]),
                                     // PDF rendering support (hybrid: pdf.js preview + page images for boxes)
                                     { name: "LABEL_STUDIO_PDF_RENDERER", value: "pdf.js" },
                                     { name: "PDF_CONVERT_TO_IMAGES", value: "true" },
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
-                                    // PostgreSQL configuration via standard Django URL
-                                    // Label Studio detects DATABASE_URL automatically; avoid extra overrides
+                                    // PostgreSQL configuration via Kubernetes Secret (security best practice)
                                     ...(dbUrl ? [
-                                        { name: "DATABASE_URL", value: dbUrl },
+                                        { name: "DATABASE_URL", valueFrom: { secretKeyRef: { name: "labelstudio-db-credentials", key: "DATABASE_URL" } } },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
@@ -103,12 +116,29 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     requests: { cpu: "100m", memory: "256Mi" },
                                     limits: { cpu: "500m", memory: "512Mi" },
                                 },
+                                // Health probes: Allow LS to retry DB connection without initContainer
+                                startupProbe: {
+                                    httpGet: { path: "/", port: 8080 as any },
+                                    initialDelaySeconds: 10,
+                                    periodSeconds: 5,
+                                    failureThreshold: 30,  // Allow 150s for DB connection + migrations
+                                },
+                                readinessProbe: {
+                                    httpGet: { path: "/", port: 8080 as any },
+                                    periodSeconds: 10,
+                                    failureThreshold: 3,
+                                },
+                                livenessProbe: {
+                                    httpGet: { path: "/", port: 8080 as any },
+                                    periodSeconds: 30,
+                                    failureThreshold: 3,
+                                },
                             },
                         ],
                     },
                 },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [ns, s3Secret] });
+        }, { provider: k8sProvider, parent: this, dependsOn: dbSecret ? [ns, s3Secret, dbSecret] : [ns, s3Secret] });
 
         const svc = new k8s.core.v1.Service(`${name}-svc`, {
             metadata: { name: "label-studio", namespace },
@@ -117,6 +147,13 @@ export class LabelStudio extends pulumi.ComponentResource {
                 ports: [{ port: 8080, targetPort: "http", name: "http" }],
             },
         }, { provider: k8sProvider, parent: this });
+
+        // Network policy for egress restrictions (security hardening)
+        const networkPolicy = postgresConfig ? new LabelStudioNetworkPolicy(`${name}-netpol`, {
+            k8sProvider,
+            namespace,
+            crunchyBridgeHost: postgresConfig.host,
+        }, { parent: this }) : undefined;
 
         this.namespace = ns.metadata.name;
         this.serviceName = svc.metadata.name;
