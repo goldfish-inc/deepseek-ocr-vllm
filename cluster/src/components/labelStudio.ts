@@ -67,6 +67,12 @@ export class LabelStudio extends pulumi.ComponentResource {
             metadata: { name: "labelstudio-db-credentials", namespace },
             stringData: {
                 DATABASE_URL: dbUrl as any,
+                // Extract password from URL for POSTGRE_PASSWORD env var
+                POSTGRE_PASSWORD: pulumi.output(dbUrl).apply(url => {
+                    const urlStr = url || "";
+                    const match = urlStr.match(/:\/\/[^:]+:([^@]+)@/);
+                    return match && match[1] ? decodeURIComponent(match[1]) : "";
+                }),
             },
         }, { provider: k8sProvider, parent: this, dependsOn: [ns] }) : undefined;
 
@@ -121,8 +127,14 @@ export class LabelStudio extends pulumi.ComponentResource {
                                     // File upload support: CSV, TSV, JSON, XLSX, TXT
                                     { name: "LABEL_STUDIO_FILE_UPLOAD_TYPES", value: "csv,tsv,json,jsonl,xlsx,txt" },
                                     // PostgreSQL configuration via Kubernetes Secret (security best practice)
+                                    // Label Studio requires POSTGRE_* vars OR properly formatted DATABASES env
                                     ...(dbUrl ? [
-                                        { name: "DATABASE_URL", valueFrom: { secretKeyRef: { name: "labelstudio-db-credentials", key: "DATABASE_URL" } } },
+                                        { name: "DJANGO_DB", value: "default" },
+                                        { name: "POSTGRE_NAME", value: "labelfish" },
+                                        { name: "POSTGRE_USER", value: "labelfish_owner" },
+                                        { name: "POSTGRE_PASSWORD", valueFrom: { secretKeyRef: { name: "labelstudio-db-credentials", key: "POSTGRE_PASSWORD" } } },
+                                        { name: "POSTGRE_PORT", value: "5432" },
+                                        { name: "POSTGRE_HOST", value: "p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com" },
                                     ] : []),
                                     ...(mlBackendUrl ? [{ name: "LABEL_STUDIO_ML_BACKEND_URL", value: mlBackendUrl }] : []),
                                     ...(hostUrl ? [{ name: "LABEL_STUDIO_HOST", value: hostUrl as any }] : []),
