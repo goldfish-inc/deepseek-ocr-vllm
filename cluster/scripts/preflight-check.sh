@@ -43,19 +43,42 @@ if [[ -n "$FLUX_CRDS" ]]; then
   ISSUES_FOUND=1
 fi
 
-# Check for namespace-scoped Flux resources with old metadata
+# Check for namespace-scoped Flux resources with stale Helm metadata
 echo "Checking for namespace-scoped Flux conflicts..."
-OLD_FLUX_NS_RESOURCES=$(kubectl get deploy,svc,sa,secret,configmap -n flux-system -o json 2>/dev/null | \
-  jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
-  select(.metadata.annotations["meta.helm.sh/release-name"] != "gitops-flux-283b7f22") |
-  "\(.kind)/\(.metadata.name) (release: \(.metadata.annotations["meta.helm.sh/release-name"]))"' 2>/dev/null || true)
 
-if [[ -n "$OLD_FLUX_NS_RESOURCES" ]]; then
-  echo "⚠️  Found namespace resources with old Flux metadata:"
-  echo "$OLD_FLUX_NS_RESOURCES"
-  echo ""
-  echo "These may cause deployment issues."
-  ISSUES_FOUND=1
+# Find all Flux release names in the namespace
+FLUX_RELEASES=$(kubectl get deploy,svc,sa,secret,configmap,networkpolicy -n flux-system -o json 2>/dev/null | \
+  jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
+  .metadata.annotations["meta.helm.sh/release-name"]' 2>/dev/null | sort -u || echo "")
+
+# If we have multiple different release names, there's a conflict
+RELEASE_COUNT=$(echo "$FLUX_RELEASES" | grep -c "gitops-flux-" || true)
+
+if [[ $RELEASE_COUNT -gt 1 ]]; then
+  # Get the most recent release name (highest timestamp in name)
+  LATEST_RELEASE=$(echo "$FLUX_RELEASES" | tail -1)
+
+  echo "⚠️  Found multiple Flux Helm releases, cleaning old ones:"
+  echo "$FLUX_RELEASES"
+
+  # Delete resources from old releases
+  while IFS= read -r old_release; do
+    if [[ "$old_release" != "$LATEST_RELEASE" && -n "$old_release" ]]; then
+      echo "  Removing resources from release: $old_release"
+      kubectl get deploy,svc,sa,secret,configmap,networkpolicy -n flux-system -o json 2>/dev/null | \
+        jq -r --arg release "$old_release" \
+        '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] == $release) |
+        "\(.kind) \(.metadata.name)"' 2>/dev/null | \
+        while IFS= read -r resource; do
+          if [[ -n "$resource" ]]; then
+            echo "    Deleting $resource..."
+            kubectl delete $resource -n flux-system --ignore-not-found || true
+          fi
+        done
+    fi
+  done <<< "$FLUX_RELEASES"
+
+  echo "✅ Cleaned up old Flux Helm releases"
 fi
 
 # Check for crashlooping pods that would block deployment
