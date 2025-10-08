@@ -64,6 +64,9 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
+        // Deploy Flux via Helm
+        // Note: If Pulumi Helm provider fails to apply resources (known bug),
+        // the post-deployment health check will catch it
         const release = new k8s.helm.v3.Release(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
@@ -73,18 +76,30 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             namespace: namespaceName,
             createNamespace,
             skipCrds: false,
+            // Wait for resources to be ready
+            skipAwait: false,
+            timeout: 300,
             values: {
                 installCRDs: true,
-                components: [
-                    "source-controller",
-                    "kustomize-controller",
-                    "helm-controller",
-                    "notification-controller",
-                    "image-automation-controller",
-                    "image-reflector-controller",
-                ],
+                cli: {
+                    image: "ghcr.io/fluxcd/flux-cli",
+                    tag: "v2.6.4",
+                },
+                // Ensure all controllers are enabled
+                sourceController: { create: true },
+                kustomizeController: { create: true },
+                helmController: { create: true },
+                notificationController: { create: true },
+                imageAutomationController: { create: true },
+                imageReflectorController: { create: true },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined });
+        }, {
+            provider: k8sProvider,
+            parent: this,
+            dependsOn: namespace ? [namespace] : undefined,
+            // Force replacement on version changes to avoid drift
+            replaceOnChanges: ["version"],
+        });
 
         const gitRepoUrl = sshSecret && cluster.gitops.repositoryUrl.startsWith("https://")
             ? cluster.gitops.repositoryUrl.replace("https://", "ssh://git@")
