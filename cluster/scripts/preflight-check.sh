@@ -61,34 +61,46 @@ echo "Checking for namespace-scoped Flux conflicts..."
 
 # Check if flux-system namespace exists first
 if kubectl get namespace flux-system &>/dev/null; then
-  # Find and delete ALL resources with gitops-flux-* Helm release annotation
-  # These always conflict when refactoring changes the Helm release name hash
-  echo "  Scanning for resources with Flux Helm metadata..."
+  # Find the CURRENT Flux Helm release name (most recent)
+  CURRENT_RELEASE=$(kubectl get secret -n flux-system -l owner=helm -l name=gitops-flux \
+    -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+    tr ' ' '\n' | grep '^sh.helm.release.v1.gitops-flux-' | sort -V | tail -1 | \
+    sed 's/sh.helm.release.v1.\(gitops-flux-[^.]*\)\..*/\1/' || true)
 
-  # Resource types that commonly have Helm ownership conflicts
-  RESOURCE_TYPES="networkpolicy,serviceaccount,secret,configmap,service,deployment"
+  if [[ -n "$CURRENT_RELEASE" ]]; then
+    echo "  Current Flux Helm release: $CURRENT_RELEASE"
+    echo "  Scanning for resources with STALE Flux Helm metadata..."
 
-  ALL_RESOURCES=$(kubectl get $RESOURCE_TYPES -n flux-system -o name 2>/dev/null || true)
+    # Resource types that commonly have Helm ownership conflicts
+    RESOURCE_TYPES="networkpolicy,serviceaccount,secret,configmap,service,deployment"
 
-  CLEANED=0
-  if [[ -n "$ALL_RESOURCES" ]]; then
-    while IFS= read -r resource; do
-      if [[ -n "$resource" ]]; then
-        RELEASE_NAME=$(kubectl get "$resource" -n flux-system \
-          -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
+    ALL_RESOURCES=$(kubectl get $RESOURCE_TYPES -n flux-system -o name 2>/dev/null || true)
 
-        if [[ "$RELEASE_NAME" == gitops-flux-* ]]; then
-          echo "    Found $resource with Helm release: $RELEASE_NAME"
-          echo "    Deleting to prevent ownership conflict..."
-          kubectl delete "$resource" -n flux-system --ignore-not-found || true
-          CLEANED=$((CLEANED + 1))
+    CLEANED=0
+    if [[ -n "$ALL_RESOURCES" ]]; then
+      while IFS= read -r resource; do
+        if [[ -n "$resource" ]]; then
+          RELEASE_NAME=$(kubectl get "$resource" -n flux-system \
+            -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}' 2>/dev/null || true)
+
+          # Only delete if it's a Flux resource BUT NOT the current release
+          if [[ "$RELEASE_NAME" == gitops-flux-* && "$RELEASE_NAME" != "$CURRENT_RELEASE" ]]; then
+            echo "    Found $resource with STALE Helm release: $RELEASE_NAME"
+            echo "    Deleting to prevent ownership conflict..."
+            kubectl delete "$resource" -n flux-system --ignore-not-found || true
+            CLEANED=$((CLEANED + 1))
+          fi
         fi
-      fi
-    done <<< "$ALL_RESOURCES"
+      done <<< "$ALL_RESOURCES"
 
-    if [[ $CLEANED -gt 0 ]]; then
-      echo "  ✅ Cleaned up $CLEANED Flux resources with stale Helm metadata"
+      if [[ $CLEANED -gt 0 ]]; then
+        echo "  ✅ Cleaned up $CLEANED Flux resources with stale Helm metadata"
+      else
+        echo "  ✅ No stale Flux resources found"
+      fi
     fi
+  else
+    echo "  No existing Flux Helm release found (first deployment)"
   fi
 else
   echo "  flux-system namespace does not exist yet (first deployment)"
