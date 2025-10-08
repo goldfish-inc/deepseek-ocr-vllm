@@ -62,7 +62,7 @@ echo "Checking for namespace-scoped Flux conflicts..."
 # Check if flux-system namespace exists first
 if kubectl get namespace flux-system &>/dev/null; then
   # Find the CURRENT Flux Helm release name (most recent)
-  CURRENT_RELEASE=$(kubectl get secret -n flux-system -l owner=helm -l name=gitops-flux \
+  CURRENT_RELEASE=$(kubectl get secret -n flux-system -l owner=helm \
     -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
     tr ' ' '\n' | grep '^sh.helm.release.v1.gitops-flux-' | sort -V | tail -1 | \
     sed 's/sh.helm.release.v1.\(gitops-flux-[^.]*\)\..*/\1/' || true)
