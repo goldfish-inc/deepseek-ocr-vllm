@@ -88,7 +88,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
 
         // Deploy Flux via k8s.helm.v4.Chart with SSA
         // skipAwait allows SSA to handle field manager conflicts during migration from v3
-        const release = new k8s.helm.v4.Chart(`${name}-flux`, {
+        const release = new k8s.helm.v4.Chart(`${name}-flux-v4`, {
             chart: "flux2",
             version: chartVersion,
             repositoryOpts: {
