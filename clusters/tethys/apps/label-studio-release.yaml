@@ -20,81 +20,41 @@ spec:
         name: heartex
         namespace: flux-system
   values:
-    # Image configuration
-    image:
-      repository: heartexlabs/label-studio
-      tag: "1.21.0"
-
-    # Persistence - using external PostgreSQL
-    persistence:
-      enabled: true
-      type: volume
-      size: 10Gi
-
-    # PostgreSQL configuration (external CrunchyBridge)
-    postgresql:
-      enabled: false  # Don't deploy PostgreSQL
-
-    # External database configuration
-    config:
-      db:
-        dialect: postgresql
+    global:
+      pgConfig:
         host: p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com
         port: 5432
-        name: labelfish
-        user: labelfish_owner
+        dbName: labelfish
+        userName: labelfish_owner
         password:
-          valueFrom:
-            secretKeyRef:
-              name: label-studio-db-credentials
-              key: POSTGRE_PASSWORD
-
-    # Environment variables for Label Studio
-    env:
-      - name: LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED
-        value: "true"
-      - name: CSRF_TRUSTED_ORIGINS
-        value: "https://label.boathou.se"
-      - name: DJANGO_ALLOWED_HOSTS
-        value: "label.boathou.se"
-      - name: LABEL_STUDIO_HOST
-        value: "https://label.boathou.se"
-
-    # ML Backend configuration
-    ml_backend:
-      enabled: true
-      url: "http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls"
-
-    # Resource configuration - NO LIMITS OR REQUESTS
-    # Due to K3s networking issues with resource constraints
-    resources: {}
-
-    # Service configuration
-    service:
-      type: ClusterIP
-      port: 8080
-
-    # Ingress handled by Cloudflare tunnel, not here
-    ingress:
+          secretName: label-studio-db-credentials
+          secretKey: POSTGRE_PASSWORD
+      extraEnvironmentVars:
+        LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
+        CSRF_TRUSTED_ORIGINS: "https://label.boathou.se"
+        DJANGO_ALLOWED_HOSTS: "label.boathou.se"
+        LABEL_STUDIO_HOST: "https://label.boathou.se"
+      persistence:
+        enabled: true
+        type: s3
+        config:
+          s3:
+            accessKeyExistingSecret: labelstudio-s3-credentials
+            accessKeyExistingSecretKey: AWS_ACCESS_KEY_ID
+            secretKeyExistingSecret: labelstudio-s3-credentials
+            secretKeyExistingSecretKey: AWS_SECRET_ACCESS_KEY
+            region: us-east-1
+            bucket: labelstudio-goldfish-uploads
+    app:
+      service:
+        type: ClusterIP
+        port: 8080
+        targetPort: 8080
+      resources: {}
+    postgresql:
       enabled: false
-
-    # Admin user configuration
-    initialUser:
-      email: "ryan@goldfish.io"
-      password: "ChangeMe2025!"
-
-    # S3 storage configuration
-    s3:
-      enabled: true
-      # These come from labelstudio-s3-credentials secret (created by Pulumi)
-      accessKeyExistingSecret: labelstudio-s3-credentials
-      accessKeyExistingSecretKey: AWS_ACCESS_KEY_ID
-      secretKeyExistingSecret: labelstudio-s3-credentials
-      secretKeyExistingSecretKey: AWS_SECRET_ACCESS_KEY
-      bucketExistingSecret: labelstudio-s3-credentials
-      bucketExistingSecretKey: AWS_STORAGE_BUCKET_NAME
-      regionExistingSecret: labelstudio-s3-credentials
-      regionExistingSecretKey: AWS_S3_REGION_NAME
+    redis:
+      enabled: false
 ---
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: HelmRepository
