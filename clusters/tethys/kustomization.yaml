@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../base/stacks
+  - infrastructure.yaml
   - version-monitoring.yaml
   - apps.yaml
 
