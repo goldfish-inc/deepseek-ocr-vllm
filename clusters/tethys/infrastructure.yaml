@@ -14,5 +14,5 @@ spec:
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
-      name: pulumi-kubernetes-operator
+      name: pulumi-kubernetes-operator-controller-manager
       namespace: pulumi-system
