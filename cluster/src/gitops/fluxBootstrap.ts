@@ -64,14 +64,29 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
-        // Deploy Flux via k8s.helm.v3.Chart (not Release)
-        // This avoids the Pulumi Helm provider bug where Release.upgrade() deletes
-        // resources without recreating them (https://github.com/pulumi/pulumi-kubernetes/issues/2625)
-        // Chart renders the manifest and applies it as native Kubernetes resources
-        const release = new k8s.helm.v3.Chart(`${name}-flux`, {
+        // Transformation to strip Helm hook annotations so Pulumi keeps the Deployments
+        const stripHelmHooks: pulumi.ResourceTransformation = ({ props, opts }) => {
+            const annotations = props?.metadata?.annotations;
+            if (annotations && annotations["helm.sh/hook"]) {
+                const cleaned = { ...props, metadata: { ...props.metadata, annotations: { ...annotations } } };
+                delete cleaned.metadata.annotations["helm.sh/hook"];
+                delete cleaned.metadata.annotations["helm.sh/hook-weight"];
+                delete cleaned.metadata.annotations["helm.sh/hook-delete-policy"];
+                return { props: cleaned, opts };
+            }
+            return undefined;
+        };
+
+        const fluxControllerTag = "v2.7.0";
+        const fluxCliTag = "v2.7.0";
+
+        // Deploy Flux via k8s.helm.v4.Chart
+        // Using Helm v4 API with transformation to strip hook annotations
+        // This ensures Pulumi manages the Deployments instead of treating them as hooks
+        const release = new k8s.helm.v4.Chart(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
-            fetchOpts: {
+            repositoryOpts: {
                 repo: "https://fluxcd-community.github.io/helm-charts",
             },
             namespace: namespaceName,
@@ -79,20 +94,38 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 installCRDs: true,
                 cli: {
                     image: "ghcr.io/fluxcd/flux-cli",
-                    tag: "v2.6.4",
+                    tag: fluxCliTag,
                 },
-                // Ensure all controllers are enabled
-                sourceController: { create: true },
-                kustomizeController: { create: true },
-                helmController: { create: true },
-                notificationController: { create: true },
-                imageAutomationController: { create: true },
-                imageReflectorController: { create: true },
+                sourceController: {
+                    image: "ghcr.io/fluxcd/source-controller",
+                    tag: fluxControllerTag,
+                },
+                kustomizeController: {
+                    image: "ghcr.io/fluxcd/kustomize-controller",
+                    tag: fluxControllerTag,
+                },
+                helmController: {
+                    image: "ghcr.io/fluxcd/helm-controller",
+                    tag: fluxControllerTag,
+                },
+                notificationController: {
+                    image: "ghcr.io/fluxcd/notification-controller",
+                    tag: fluxControllerTag,
+                },
+                imageAutomationController: {
+                    image: "ghcr.io/fluxcd/image-automation-controller",
+                    tag: fluxControllerTag,
+                },
+                imageReflectorController: {
+                    image: "ghcr.io/fluxcd/image-reflector-controller",
+                    tag: fluxControllerTag,
+                },
             },
         }, {
             provider: k8sProvider,
             parent: this,
             dependsOn: namespace ? [namespace] : undefined,
+            transformations: [stripHelmHooks],
         });
 
         const gitRepoUrl = sshSecret && cluster.gitops.repositoryUrl.startsWith("https://")
