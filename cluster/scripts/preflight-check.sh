@@ -40,28 +40,20 @@ if [[ -n "$OLD_FLUX_RESOURCES" ]]; then
   fi
 fi
 
-# Check for CRDs managed by Flux that should be owned by Helm
+# Check for CRDs managed by Flux
 echo "Checking for CRD ownership conflicts..."
 FLUX_CRDS=$(kubectl get crd -o json | \
   jq -r '.items[] | select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^gitops-flux-")) |
   .metadata.name' 2>/dev/null || true)
 
 if [[ -n "$FLUX_CRDS" ]]; then
-  echo "  Found Flux CRDs with stale Helm metadata:"
-  COUNT=0
+  echo "  Found Flux CRDs (Helm will manage these):"
   while IFS= read -r crd; do
     [[ -z "$crd" ]] && continue
     echo "    $crd"
-    if ! kubectl delete crd "$crd" --ignore-not-found >/dev/null 2>&1; then
-      echo "    ⚠️  Failed to delete CRD/$crd"
-      ISSUES_FOUND=1
-    else
-      COUNT=$((COUNT + 1))
-    fi
   done <<< "$FLUX_CRDS"
-  if [[ $COUNT -gt 0 ]]; then
-    echo "  ✅ Cleaned up $COUNT Flux CRDs"
-  fi
+  echo "  ℹ️  CRDs are cluster-wide and managed by Helm (skipCrds: false)"
+  echo "  ℹ️  No action needed - Helm will reconcile CRD ownership"
 fi
 
 # Check for namespace-scoped Flux resources with stale Helm metadata
