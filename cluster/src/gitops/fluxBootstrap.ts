@@ -64,7 +64,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
-        // Transformation to strip Helm hook annotations so Pulumi keeps the Deployments
+        // Strip Helm hook annotations so Pulumi manages controllers as standard resources.
         const stripHelmHooks: pulumi.ResourceTransformation = ({ props, opts }) => {
             const annotations = props?.metadata?.annotations;
             if (annotations && annotations["helm.sh/hook"]) {
@@ -77,7 +77,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             return undefined;
         };
 
-        // Flux v2.7.0 controller versions (each has independent versioning)
+        // Flux v2.7.0 controller versions (each component has its own tag cadence)
         const fluxCliTag = "v2.7.0";
         const sourceControllerTag = "v1.7.0";
         const kustomizeControllerTag = "v1.7.0";
@@ -86,16 +86,14 @@ export class FluxBootstrap extends pulumi.ComponentResource {
         const imageAutomationControllerTag = "v1.0.1";
         const imageReflectorControllerTag = "v1.0.1";
 
-        // Deploy Flux via k8s.helm.v4.Chart with SSA
-        // skipAwait allows SSA to handle field manager conflicts during migration from v3
-        const release = new k8s.helm.v4.Chart(`${name}-flux-v4`, {
+        // Deploy Flux via k8s.helm.v4.Chart so Pulumi owns SSA state from day one.
+        const release = new k8s.helm.v4.Chart(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
             repositoryOpts: {
                 repo: "https://fluxcd-community.github.io/helm-charts",
             },
             namespace: namespaceName,
-            skipAwait: true, // Allow SSA to handle field manager migration
             values: {
                 installCRDs: true,
                 cli: {
