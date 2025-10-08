@@ -61,19 +61,19 @@ jobs:
         cd cluster/
 
         # Check if all required components are present
-        REQUIRED_COMPONENTS=(
-          "sshKeyManager.ts"
-          "k3sTokenRotator.ts"
-          "securityHardening.ts"
-          "credentialSynchronizer.ts"
-          "selfInstallingFlux.ts"
-          "migrationOrchestrator.ts"
+        REQUIRED_PATHS=(
+          "src/components/sshKeyManager.ts"
+          "src/components/k3sTokenRotator.ts"
+          "src/components/securityHardening.ts"
+          "src/components/credentialSynchronizer.ts"
+          "src/components/migrationOrchestrator.ts"
+          "src/gitops/fluxBootstrap.ts"
         )
 
         MISSING_COMPONENTS=()
-        for component in "${REQUIRED_COMPONENTS[@]}"; do
-          if [ ! -f "src/components/$component" ]; then
-            MISSING_COMPONENTS+=("$component")
+        for path in "${REQUIRED_PATHS[@]}"; do
+          if [ ! -f "$path" ]; then
+            MISSING_COMPONENTS+=("$path")
           fi
         done
 
