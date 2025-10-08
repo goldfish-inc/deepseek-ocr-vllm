@@ -58,7 +58,8 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 },
                 type: "Opaque",
                 stringData: {
-                    token: githubToken,
+                    username: "git",
+                    password: githubToken,
                 },
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
