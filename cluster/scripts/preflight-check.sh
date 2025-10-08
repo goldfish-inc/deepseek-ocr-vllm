@@ -15,32 +15,53 @@ ISSUES_FOUND=0
 # Check for old Flux Helm releases with mismatched metadata
 echo "Checking for Flux Helm ownership conflicts..."
 OLD_FLUX_RESOURCES=$(kubectl get clusterrole,clusterrolebinding -o json | \
-  jq -r '.items[] | select(.metadata.annotations["meta.helm.sh/release-name"] | startswith("gitops-flux-")) |
-  select(.metadata.annotations["meta.helm.sh/release-name"] != "gitops-flux-283b7f22") |
+  jq -r '.items[] | select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^gitops-flux-")) |
   "\(.kind)/\(.metadata.name) (release: \(.metadata.annotations["meta.helm.sh/release-name"]))"' 2>/dev/null || true)
 
 if [[ -n "$OLD_FLUX_RESOURCES" ]]; then
-  echo "❌ Found resources with old Flux Helm metadata:"
-  echo "$OLD_FLUX_RESOURCES"
-  echo ""
-  echo "Run: kubectl delete clusterrole,clusterrolebinding -l 'app.kubernetes.io/instance!=gitops-flux-283b7f22' -l 'app.kubernetes.io/name=flux'"
-  ISSUES_FOUND=1
+  echo "  Found cluster-scoped resources with stale Flux Helm metadata:"
+  COUNT=0
+  while IFS= read -r resource; do
+    [[ -z "$resource" ]] && continue
+    echo "    $resource"
+    KIND=$(echo "$resource" | cut -d'/' -f1 | awk '{print tolower($1)}')
+    KIND=${KIND// (release:*/}
+    NAME_WITH_RELEASE=${resource#*/}
+    NAME=${NAME_WITH_RELEASE%% (*}
+    if ! kubectl delete "$KIND" "$NAME" --ignore-not-found >/dev/null 2>&1; then
+      echo "    ⚠️  Failed to delete $KIND/$NAME"
+      ISSUES_FOUND=1
+    else
+      COUNT=$((COUNT + 1))
+    fi
+  done <<< "$OLD_FLUX_RESOURCES"
+  if [[ $COUNT -gt 0 ]]; then
+    echo "  ✅ Cleaned up $COUNT cluster-scoped Flux resources"
+  fi
 fi
 
 # Check for CRDs managed by Flux that should be owned by Helm
 echo "Checking for CRD ownership conflicts..."
 FLUX_CRDS=$(kubectl get crd -o json | \
-  jq -r '.items[] | select(.metadata.labels["app.kubernetes.io/managed-by"] == "Helm") |
-  select(.metadata.labels["app.kubernetes.io/instance"] | startswith("gitops-flux-")) |
-  select(.metadata.labels["app.kubernetes.io/instance"] != "gitops-flux-283b7f22") |
+  jq -r '.items[] | select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^gitops-flux-")) |
   .metadata.name' 2>/dev/null || true)
 
 if [[ -n "$FLUX_CRDS" ]]; then
-  echo "❌ Found CRDs with old Flux ownership:"
-  echo "$FLUX_CRDS"
-  echo ""
-  echo "These will block Helm installation. Consider deleting or re-labeling."
-  ISSUES_FOUND=1
+  echo "  Found Flux CRDs with stale Helm metadata:"
+  COUNT=0
+  while IFS= read -r crd; do
+    [[ -z "$crd" ]] && continue
+    echo "    $crd"
+    if ! kubectl delete crd "$crd" --ignore-not-found >/dev/null 2>&1; then
+      echo "    ⚠️  Failed to delete CRD/$crd"
+      ISSUES_FOUND=1
+    else
+      COUNT=$((COUNT + 1))
+    fi
+  done <<< "$FLUX_CRDS"
+  if [[ $COUNT -gt 0 ]]; then
+    echo "  ✅ Cleaned up $COUNT Flux CRDs"
+  fi
 fi
 
 # Check for namespace-scoped Flux resources with stale Helm metadata
