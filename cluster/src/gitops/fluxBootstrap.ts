@@ -104,9 +104,11 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 },
                 secretRef: sshSecret ? {
                     name: "flux-system-ssh",
+                } : githubTokenSecret ? {
+                    name: "github-token",
                 } : undefined,
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [release, ...(sshSecret ? [sshSecret] : [])] });
+        }, { provider: k8sProvider, parent: this, dependsOn: [release, ...(sshSecret ? [sshSecret] : []), ...(githubTokenSecret ? [githubTokenSecret] : [])] });
 
         new k8s.apiextensions.CustomResource(`${name}-kustomization`, {
             apiVersion: "kustomize.toolkit.fluxcd.io/v1",
