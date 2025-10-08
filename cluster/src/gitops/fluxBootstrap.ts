@@ -71,9 +71,9 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             },
             namespace: namespaceName,
             createNamespace,
-            skipCrds: true,
+            skipCrds: false,
             values: {
-                installCRDs: false,
+                installCRDs: true,
                 components: [
                     "source-controller",
                     "kustomize-controller",
