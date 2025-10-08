@@ -52,7 +52,7 @@ the **@ebisu globalDB** (maritime intelligence platform).
 - **@oceanid**: "How was this document cleaned?" (ETL metadata, ML model versions, human corrections)
 - **@ebisu**: "What do we know about this vessel?" (domain intelligence, entity relationships, temporal changes)
 
-See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines.
+See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines and [docs/RESOURCE_OWNERSHIP.md](docs/RESOURCE_OWNERSHIP.md) for resource ownership contract.
 
 ## Getting Started
 
@@ -125,7 +125,6 @@ pulumi config set --path 'oceanid-cluster:cloudflareTunnelResources.limits.memor
 │   └── tsconfig.json
 ├── clusters/
 │   ├── base/
-│   │   ├── pulumi-system/         # Pulumi Kubernetes Operator manifests
 │   │   └── stacks/                # Stack CR definitions consumed by the operator
 │   └── tethys/                    # Cluster overlay referencing the base manifests
 ├── policy/

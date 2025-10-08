@@ -304,8 +304,9 @@ Use a single push‑to‑deploy flow:
 Before every cluster deployment, `cluster/scripts/preflight-check.sh` validates:
 
 **Ownership Conflicts** (blocking):
-- Flux Helm resources with mismatched release metadata
-- CRDs with incorrect ownership annotations
+- Flux Helm resources with **STALE** release metadata (different hash than current)
+- Preserves resources matching the current active Flux release
+- CRDs with incorrect ownership annotations (informational only)
 - Namespace resources blocking new installations
 
 **Operational Warnings** (non-blocking):
@@ -320,6 +321,25 @@ KUBECONFIG=~/.kube/k3s-config.yaml cluster/scripts/preflight-check.sh
 **Exit codes**:
 - `0`: All checks passed, safe to deploy
 - `1`: Blocking issues found, fix before deployment
+
+### Post-deployment Health Checks
+
+After every cluster deployment, `cluster/scripts/flux-health-check.sh` validates:
+
+**Flux Controllers**:
+- All 6 Flux controller deployments exist and are Ready
+- All controller pods are in Running state
+- GitRepository is reconciling successfully
+- Kustomization is applied without errors
+
+**Running manually**:
+```bash
+KUBECONFIG=~/.kube/k3s-config.yaml cluster/scripts/flux-health-check.sh
+```
+
+**Exit codes**:
+- `0`: All Flux controllers healthy
+- `1`: One or more controllers missing or unhealthy
 
 ### Testing Changes:
 ```bash
@@ -356,37 +376,46 @@ kubectl get imageupdateautomation flux-system -n flux-system
 ### Common Issues:
 
 1. **Deployment Blocked by Pre-flight Checks**:
-   - **Helm ownership conflicts**: Delete stale resources manually
-     ```bash
-     kubectl delete clusterrole,clusterrolebinding <resource-name>
-     ```
+   - **Helm ownership conflicts**: Pre-flight script auto-cleans stale resources
    - **CRD annotation mismatches**: Re-label or delete/recreate CRDs
    - **Namespace conflicts**: Clean up old Flux resources in `flux-system` namespace
+   - See `docs/RESOURCE_OWNERSHIP.md` for ownership contract
 
-2. **Self-Hosted Runner Offline**:
+2. **Post-deployment Health Check Fails**:
+   - **Flux controllers missing**: Pulumi Helm provider bug (known issue)
+   - **Manual recovery**: Extract manifest from Helm secret and apply manually
+     ```bash
+     kubectl get secret -n flux-system -l owner=helm -l name~=gitops-flux \
+       -o jsonpath='{.items[-1].data.release}' | base64 -d | base64 -d | gzip -d | \
+       jq -r '.manifest' | kubectl apply -f -
+     ```
+   - **Verify health**: Run `cluster/scripts/flux-health-check.sh`
+   - See `docs/RESOURCE_OWNERSHIP.md` for emergency procedures
+
+3. **Self-Hosted Runner Offline**:
    - Check runner status: `ssh tethys "systemctl status actions.runner.*"`
    - Restart runner: Follow GitHub docs for runner management
    - Fallback: Cannot deploy cluster changes until runner is online
 
-3. **SSH Connection Lost** (for local debugging):
+4. **SSH Connection Lost** (for local debugging):
    - Re-establish tunnel: `ssh -L 16443:localhost:6443 tethys -N &`
    - Verify kubeconfig: `KUBECONFIG=~/.kube/k3s-config.yaml`
 
-4. **Pulumi State Issues**:
+5. **Pulumi State Issues**:
    - Check ESC connectivity: `pulumi whoami`
    - Refresh state: `pulumi refresh` (local debugging only)
    - State conflicts: Let GitHub Actions handle deployment
 
-5. **Flux Authentication**:
+6. **Flux Authentication**:
    - Verify GitHub token: `kubectl get secret github-token -n flux-system`
    - Check repo access: `kubectl get gitrepository flux-system -n flux-system`
 
-6. **Image Updates Not Working**:
+7. **Image Updates Not Working**:
    - Check policies: `kubectl get imagepolicy -n flux-system`
    - Verify markers: Check `clusters/tethys/infrastructure.yaml`
    - Force reconcile: Annotate ImageUpdateAutomation resource
 
-7. **Label Studio Database Connection Issues**:
+8. **Label Studio Database Connection Issues**:
    - Verify ESC has correct credentials: `pulumi env get default/oceanid-cluster`
    - Test connection from cluster:
      ```bash
@@ -563,5 +592,14 @@ gh issue list --search "staging database"
 7. **ALWAYS** verify tunnel is active before kubectl operations
 8. **ALWAYS** create GitHub issues before starting implementation work
 9. **ALWAYS** reference issue numbers in commits and PRs
+10. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
+11. **ALWAYS** run health checks after deployment changes
 
 This infrastructure follows Infrastructure as Code principles with GitOps deployment, automated dependency management, and comprehensive security controls.
+
+## Documentation References
+
+- **Resource Ownership**: `docs/RESOURCE_OWNERSHIP.md` - Defines Pulumi vs Flux ownership boundaries
+- **Secrets Management**: `docs/SECRETS_MANAGEMENT.md` - ESC and 1Password integration
+- **Operations Overview**: `docs/operations/overview.md` - Day-to-day operations guide
+- **Self-Hosted Runner**: `docs/operations/self-hosted-runner.md` - GitHub Actions runner setup
