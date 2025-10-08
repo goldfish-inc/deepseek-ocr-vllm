@@ -77,16 +77,8 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             return undefined;
         };
 
-        // Flux v2.7.0 controller versions (each component has its own tag cadence)
-        const fluxCliTag = "v2.7.0";
-        const sourceControllerTag = "v1.7.0";
-        const kustomizeControllerTag = "v1.7.0";
-        const helmControllerTag = "v1.4.0";
-        const notificationControllerTag = "v1.7.1";
-        const imageAutomationControllerTag = "v1.0.1";
-        const imageReflectorControllerTag = "v1.0.1";
-
         // Deploy Flux via k8s.helm.v4.Chart so Pulumi owns SSA state from day one.
+        // Use chart's default controller versions - they're tested to work with the CRDs.
         const release = new k8s.helm.v4.Chart(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
@@ -96,34 +88,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             namespace: namespaceName,
             values: {
                 installCRDs: true,
-                cli: {
-                    image: "ghcr.io/fluxcd/flux-cli",
-                    tag: fluxCliTag,
-                },
-                sourceController: {
-                    image: "ghcr.io/fluxcd/source-controller",
-                    tag: sourceControllerTag,
-                },
-                kustomizeController: {
-                    image: "ghcr.io/fluxcd/kustomize-controller",
-                    tag: kustomizeControllerTag,
-                },
-                helmController: {
-                    image: "ghcr.io/fluxcd/helm-controller",
-                    tag: helmControllerTag,
-                },
-                notificationController: {
-                    image: "ghcr.io/fluxcd/notification-controller",
-                    tag: notificationControllerTag,
-                },
-                imageAutomationController: {
-                    image: "ghcr.io/fluxcd/image-automation-controller",
-                    tag: imageAutomationControllerTag,
-                },
-                imageReflectorController: {
-                    image: "ghcr.io/fluxcd/image-reflector-controller",
-                    tag: imageReflectorControllerTag,
-                },
             },
         }, {
             provider: k8sProvider,

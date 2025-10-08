@@ -4,9 +4,14 @@ We decided to rebuild the Flux installation from scratch so Pulumi can manage it
 
 ## Desired End State
 - `cluster/src/gitops/fluxBootstrap.ts` uses Helm v4 with hook-stripping transformations.
-- Flux components run at the v2.7.0 release levels (controller tags: source/kustomize v1.7.0, helm v1.4.0, notification v1.7.1, image automation/reflection v1.0.1, CLI v2.7.0).
+- Flux components use chart 2.16.4's default controller versions (tested with v1beta2 CRDs).
 - Pulumi owns SSA for all Flux resources (namespace, CRDs, controller workloads, GitRepository, Kustomization).
 - No legacy `kubectl-client-side-apply` managers remain on the Flux CRDs.
+
+## Lessons Learned
+- Controller image tags must match the CRD versions shipped with the chart.
+- Chart 2.16.4 ships v1beta2 CRDs; v2.7.0 controllers expect v1 APIs.
+- Always use chart's default controller versions unless explicitly upgrading CRDs first.
 
 ## Rebuild Procedure
 1. **Preparation**
