@@ -138,14 +138,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                     kind: "GitRepository",
                     name: gitRepository.metadata.name,
                 },
-                healthChecks: [
-                    {
-                        apiVersion: "kustomize.toolkit.fluxcd.io/v1",
-                        kind: "Kustomization",
-                        name: "flux-system",
-                        namespace: namespaceName,
-                    },
-                ],
+                // No health checks - avoid circular dependency on self
             },
         }, { provider: k8sProvider, parent: this, dependsOn: gitRepository });
 
