@@ -8,7 +8,7 @@ config:
     secure: AAABAGkwKvRyUT1RH9guDIW1gHRSKAgqz5Te55cQluTsjYFNSM756AnCeSvOd/xJacDLlOJTZIklZGGlGvJQn1PzVVNdEj6tY+vx8mHJY/CVVqJP
   cloudflare:apiToken:
     secure: AAABANgcDiwPBzKZluACnptCMq4aTgj3mH9qM6BiS/u87+lBQ8Zg/SL7QRFA7hwVHjVLqzlJmQ8nbpkQUc3T4pSSeiqzdX59
-  oceanid-cloud:enableLabelStudioDb: "false"
+  oceanid-cloud:enableLabelStudioDb: "true"
   oceanid-cloud:labelStudioOwnerPassword:
     secure: AAABAH/LQciJmQfHSP4jLNUHcIbck9QzDWFkP2WRwHb8OXiQJEpllMSxK4grjYhr4pvqEfpILf2Qr0DgewbaNnFsJayaCTlfa/dY0Q==
   oceanid-cloud:crunchyAdminUrl:

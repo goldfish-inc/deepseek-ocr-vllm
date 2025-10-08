@@ -13,6 +13,7 @@ import { HostCloudflared } from "./components/hostCloudflared";
 import { HostDockerService } from "./components/hostDockerService";
 import { HostModelPuller } from "./components/hostModelPuller";
 import { LsTritonAdapter } from "./components/lsTritonAdapter";
+import { LabelStudioSecrets } from "./components/labelStudioSecrets";
 import { getSentrySettings, toEnvVars } from "./sentry-config";
 import { K3sCluster, NodeConfig } from "./components/k3sCluster";
 import { ControlPlaneLoadBalancer } from "./components/controlPlaneLoadBalancer";
@@ -262,9 +263,26 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
 
 // Label Studio deployment moved to GitOps (Flux)
 // See clusters/tethys/apps/label-studio-release.yaml
-// Database URL and other secrets are now managed through Flux
-// const labelStudioDbUrl = cfg.requireSecret("labelStudioDbUrl");
-// const labelStudio = new LabelStudio(...); // REMOVED - Now managed by Flux
+// Secrets are synced from ESC to Kubernetes for Flux to consume
+const labelStudioDbUrl = cfg.getSecret("labelStudioDbUrl");
+const awsAccessKeyId = cfg.getSecret("aws.labelStudio.accessKeyId");
+const awsSecretAccessKey = cfg.getSecret("aws.labelStudio.secretAccessKey");
+const awsBucketName = cfg.get("aws.labelStudio.bucketName") || "labelstudio-goldfish-uploads";
+const awsRegion = cfg.get("aws.labelStudio.region") || "us-east-1";
+
+// Sync ESC secrets to Kubernetes for Flux-managed Label Studio
+let labelStudioSecrets: LabelStudioSecrets | undefined;
+if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
+    labelStudioSecrets = new LabelStudioSecrets("label-studio-secrets", {
+        k8sProvider,
+        namespace: namespaceName,
+        labelStudioDbUrl: labelStudioDbUrl as any,
+        awsAccessKeyId: awsAccessKeyId as any,
+        awsSecretAccessKey: awsSecretAccessKey as any,
+        awsBucketName,
+        awsRegion,
+    });
+}
 
 // GHCR image pull secret (private images)
 (() => {

@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ../base/stacks
   - version-monitoring.yaml
+  - apps.yaml
 
 patches:
   - target:
