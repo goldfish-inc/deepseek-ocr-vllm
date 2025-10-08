@@ -64,21 +64,17 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             }, { provider: k8sProvider, parent: this, dependsOn: namespace ? [namespace] : undefined })
             : undefined;
 
-        // Deploy Flux via Helm
-        // Note: If Pulumi Helm provider fails to apply resources (known bug),
-        // the post-deployment health check will catch it
-        const release = new k8s.helm.v3.Release(`${name}-flux`, {
+        // Deploy Flux via k8s.helm.v3.Chart (not Release)
+        // This avoids the Pulumi Helm provider bug where Release.upgrade() deletes
+        // resources without recreating them (https://github.com/pulumi/pulumi-kubernetes/issues/2625)
+        // Chart renders the manifest and applies it as native Kubernetes resources
+        const release = new k8s.helm.v3.Chart(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
-            repositoryOpts: {
+            fetchOpts: {
                 repo: "https://fluxcd-community.github.io/helm-charts",
             },
             namespace: namespaceName,
-            createNamespace,
-            skipCrds: false,
-            // Wait for resources to be ready
-            skipAwait: false,
-            timeout: 300,
             values: {
                 installCRDs: true,
                 cli: {
@@ -97,8 +93,6 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             provider: k8sProvider,
             parent: this,
             dependsOn: namespace ? [namespace] : undefined,
-            // Force replacement on version changes to avoid drift
-            replaceOnChanges: ["version"],
         });
 
         const gitRepoUrl = sshSecret && cluster.gitops.repositoryUrl.startsWith("https://")
