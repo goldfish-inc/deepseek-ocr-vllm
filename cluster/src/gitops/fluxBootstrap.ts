@@ -77,12 +77,17 @@ export class FluxBootstrap extends pulumi.ComponentResource {
             return undefined;
         };
 
-        const fluxControllerTag = "v2.7.0";
+        // Flux v2.7.0 controller versions (each has independent versioning)
         const fluxCliTag = "v2.7.0";
+        const sourceControllerTag = "v1.7.0";
+        const kustomizeControllerTag = "v1.7.0";
+        const helmControllerTag = "v1.4.0";
+        const notificationControllerTag = "v1.7.1";
+        const imageAutomationControllerTag = "v1.0.1";
+        const imageReflectorControllerTag = "v1.0.1";
 
-        // Deploy Flux via k8s.helm.v4.Chart
-        // Using Helm v4 API with transformation to strip hook annotations
-        // This ensures Pulumi manages the Deployments instead of treating them as hooks
+        // Deploy Flux via k8s.helm.v4.Chart with SSA
+        // skipAwait allows SSA to handle field manager conflicts during migration from v3
         const release = new k8s.helm.v4.Chart(`${name}-flux`, {
             chart: "flux2",
             version: chartVersion,
@@ -90,6 +95,7 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 repo: "https://fluxcd-community.github.io/helm-charts",
             },
             namespace: namespaceName,
+            skipAwait: true, // Allow SSA to handle field manager migration
             values: {
                 installCRDs: true,
                 cli: {
@@ -98,27 +104,27 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 },
                 sourceController: {
                     image: "ghcr.io/fluxcd/source-controller",
-                    tag: fluxControllerTag,
+                    tag: sourceControllerTag,
                 },
                 kustomizeController: {
                     image: "ghcr.io/fluxcd/kustomize-controller",
-                    tag: fluxControllerTag,
+                    tag: kustomizeControllerTag,
                 },
                 helmController: {
                     image: "ghcr.io/fluxcd/helm-controller",
-                    tag: fluxControllerTag,
+                    tag: helmControllerTag,
                 },
                 notificationController: {
                     image: "ghcr.io/fluxcd/notification-controller",
-                    tag: fluxControllerTag,
+                    tag: notificationControllerTag,
                 },
                 imageAutomationController: {
                     image: "ghcr.io/fluxcd/image-automation-controller",
-                    tag: fluxControllerTag,
+                    tag: imageAutomationControllerTag,
                 },
                 imageReflectorController: {
                     image: "ghcr.io/fluxcd/image-reflector-controller",
-                    tag: fluxControllerTag,
+                    tag: imageReflectorControllerTag,
                 },
             },
         }, {
