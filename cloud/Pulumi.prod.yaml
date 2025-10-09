@@ -14,3 +14,5 @@ config:
   oceanid-cloud:crunchyAdminUrl:
     secure: AAABAH2qRWfN4sr36P7qJKXuEBNlQ8yX3HS90V40e3lNzkie2OjY7xAfbbvlBhqzf1EHlXoDp/gUyS0d2WoIKHjvy75tEjNgPG+fi3Pu2OigPLB/NgLocHqGTZucrlbcsq54jLgT/eZMkBVz1cVo+atp+FRlD6CterqHsTJlyoOpQYtZ3QFjQ4RFHg46x7Ufw+4GWDcb90x0sQiSiFL1OEZ7QW6BDOd/tItqL95/SYwRjl2Z1HguiN4/LRuiqXYC729zrKKzTZjb
   oceanid-cloud:cfAccessServiceTokenId: fa362617-bc0c-490a-a064-51ca12134a60
+  oceanid-cloud:cleandataOwnerPassword:
+    secure: AAABALae8fd1qRTfy/2GTuQir6TWxSb4mUCWtfh3wrosGwPKPIF0tXmc4iLzPBu6R4fKTIxjVofIwbJIZCod0RMshbvJWLHQw3ddbA==

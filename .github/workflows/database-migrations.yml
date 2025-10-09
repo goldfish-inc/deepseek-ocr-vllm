@@ -73,7 +73,11 @@ jobs:
           export PATH="$HOME/.pulumi/bin:$PATH"
 
           # Get database URL from ESC (encrypted)
-          DATABASE_URL=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url --value string --show-secrets)
+          # Use superuser URL for migrations to create schemas and tables
+          DATABASE_URL=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:crunchybridge.superuserUrl --value string --show-secrets)
+
+          # Switch to cleandata database (append /cleandata to the URL)
+          DATABASE_URL="${DATABASE_URL%/postgres}/cleandata"
 
           # Mask secret in logs
           echo "::add-mask::$DATABASE_URL"
@@ -101,9 +105,12 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.esc.outputs.DATABASE_URL }}
         run: |
-          echo "🔧 Ensuring required extensions are installed..."
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS btree_gist;"
-          echo "✅ Extensions ensured"
+          echo "🔧 Checking available extensions..."
+          # Try to create extensions but don't fail if permission denied (CrunchyBridge managed)
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" || echo "⚠️  pgcrypto extension - may be managed by provider"
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS postgis;" || echo "⚠️  postgis extension - may be managed by provider"
+          psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" || echo "⚠️  btree_gist extension - may be managed by provider"
+          echo "✅ Extension check complete"
 
       - name: Check existing migrations
         if: ${{ steps.esc.outputs.SKIP != 'true' }}

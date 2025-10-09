@@ -82,6 +82,32 @@ export const labelStudioDbUrl: pulumi.Output<string> | undefined = labelStudioDb
 export const labelStudioDbReady: pulumi.Output<boolean> | undefined = labelStudioDb?.outputs.ready;
 
 // =============================================================================
+// CLEANDATA DATABASE (for CSV ingestion, staging, curation pipeline)
+// =============================================================================
+// Separate database for our data pipeline (stage.*, curated.*, control.*, etc.)
+// This keeps Label Studio's internal data separate from our cleaned data
+
+const enableCleandataDb = cfg.getBoolean("enableCleandataDb") ?? false;
+let cleandataDb: PostgresDatabase | undefined;
+
+if (enableCleandataDb) {
+    // Admin URL for CrunchyBridge cluster (must have CREATEDB privilege)
+    const adminUrl = cfg.requireSecret("crunchyAdminUrl");
+    const cleandataOwnerPassword = cfg.requireSecret("cleandataOwnerPassword");
+
+    cleandataDb = new PostgresDatabase("cleandata", {
+        adminUrl,
+        databaseName: "cleandata",
+        ownerRole: "cleandata_owner",
+        ownerPassword: cleandataOwnerPassword,
+        bootstrapSqlPath: "sql/migrations/V1__staging_baseline.sql", // Initial schema
+    });
+}
+
+export const cleandataDbUrl: pulumi.Output<string> | undefined = cleandataDb?.outputs.connectionUrl;
+export const cleandataDbReady: pulumi.Output<boolean> | undefined = cleandataDb?.outputs.ready;
+
+// =============================================================================
 // CLOUDFLARE DNS
 // =============================================================================
 
