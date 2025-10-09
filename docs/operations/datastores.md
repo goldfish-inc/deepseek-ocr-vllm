@@ -37,18 +37,22 @@ This document catalogs the storages we use, what each one is for, and how to con
   - Keep this DB separate from analytics schemas to avoid accidental cross‑writes
   - Backups: daily; retain ≥7 days
 
-## 3) Analytics / Clean Data DB (stage/control/label/curated)
+## 3) Analytics / Clean Data DB (cleandata database)
 
 - Purpose: Store ingested documents, extracted spans, and curated tables
 - Engine: Postgres (CrunchyBridge)
-- ESC key (used by Annotations Sink):
-  - `pulumiConfig.oceanid-cluster:postgres_url`
+- ESC keys:
+  - `pulumiConfig.oceanid-cluster:cleandataDbUrl` (used by CSV Ingestion Worker)
+  - `pulumiConfig.oceanid-cluster:postgres_url` (legacy, being phased out)
 - Schema ownership:
-  - `stage.*`: sink writes documents, extractions, table_ingest, pdf_boxes, etc.
+  - `stage.*`: CSV worker writes documents, extractions, cleaning_rules, review_queue, etc.
   - `control.*`: migration bookkeeping (control.schema_versions)
-  - `curated.*`, `label.*`, `raw.*`: created via `sql/migrations/*`
+  - `curated.*`: IMO registry, RFMO vessels, flag registry, temporal events
+  - `label.*`: Label Studio integration mappings
+  - `raw.*`: Unprocessed source data
 - Migrations:
-  - Run via `.github/workflows/database-migrations.yml` or `make db:migrate`
+  - Consolidated schema: `sql/migrations/consolidated_cleandata_schema.sql`
+  - Run via `.github/workflows/database-migrations.yml`
 
 ## 4) Model Dataset (Hugging Face)
 
@@ -68,13 +72,14 @@ This document catalogs the storages we use, what each one is for, and how to con
   - Schema: Managed by Label Studio's own migrations (automatic on startup)
   - ESC key: `pulumiConfig.oceanid-cluster:labelStudioDbUrl`
 
-- **Database: `postgres`** (Analytics/clean data)
-  - User: `u_ogfzdegyvvaj3g4iyuvlu5yxmi` (auto-created)
+- **Database: `cleandata`** (Analytics/clean data pipeline)
+  - User: `postgres` (superuser for migrations)
   - Schemas: `stage`, `control`, `curated`, `label`, `raw`
-  - Managed by: SQL migrations in `sql/migrations/` via GitHub Actions workflow
-  - ESC key: `pulumiConfig.oceanid-cluster:postgres_url`
+  - Managed by: Consolidated schema in `sql/migrations/consolidated_cleandata_schema.sql`
+  - ESC key: `pulumiConfig.oceanid-cluster:cleandataDbUrl`
+  - Used by: CSV Ingestion Worker, future data pipeline components
 
-**Important**: Both databases are in the **same CrunchyBridge cluster** but properly isolated. The `labelfish` database is exclusively for Label Studio app data, while the `postgres` database contains all analytics schemas managed by our SQL migrations.
+**Important**: Both databases are in the **same CrunchyBridge cluster** but properly isolated. The `labelfish` database is exclusively for Label Studio app data, while the `cleandata` database contains all data pipeline schemas for staging, curation, and reference data.
 
 ## How to Configure via ESC
 
@@ -85,7 +90,11 @@ This document catalogs the storages we use, what each one is for, and how to con
 esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:labelStudioDbUrl
 # Returns: postgres://labelfish_owner:***@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish
 
-# Analytics DB (already configured)
+# Clean Data DB (NEW - used by CSV Ingestion Worker)
+esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:cleandataDbUrl
+# Returns: postgres://postgres:***@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/cleandata
+
+# Legacy Analytics DB (being phased out)
 esc env get default/oceanid-cluster --value pulumiConfig.oceanid-cluster:postgres_url
 # Returns: postgres://u_ogfzdegyvvaj3g4iyuvlu5yxmi:***@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/postgres
 ```
@@ -143,12 +152,14 @@ psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schem
 
 - **Can S3 replace the Label Studio DB?** → No. LS requires a relational DB; S3 stores files only.
 
-- **Can we share the same DB for LS and analytics?** → We use separate databases (`labelfish` vs `postgres`) in the same CrunchyBridge cluster for blast-radius isolation and ownership clarity.
+- **Can we share the same DB for LS and analytics?** → We use separate databases (`labelfish` vs `cleandata`) in the same CrunchyBridge cluster for blast-radius isolation and ownership clarity.
 
-- **Do we need to run SQL migrations for Label Studio?** → No. Label Studio applies its own migrations automatically on startup to the `labelfish` database. Our SQL migrations (`.github/workflows/database-migrations.yml`) only apply to the analytics `postgres` database.
+- **Do we need to run SQL migrations for Label Studio?** → No. Label Studio applies its own migrations automatically on startup to the `labelfish` database. Our SQL migrations only apply to the `cleandata` database.
 
-- **What database does the CI/CD workflow apply migrations to?** → The `database-migrations.yml` workflow uses `postgres_url` which points to the `postgres` database (not `labelfish`). It creates/updates schemas: `stage`, `control`, `curated`, `label`, `raw`.
+- **What database does the CI/CD workflow apply migrations to?** → The `database-migrations.yml` workflow now targets the `cleandata` database. It manages schemas: `stage`, `control`, `curated`, `label`, `raw`.
 
 - **Why do database migrations fail in GitHub Actions?** → The CrunchyBridge database has firewall rules that only allow specific IPs. GitHub Actions runners use dynamic IPs from large CIDR ranges. For security, we don't whitelist all GitHub IPs. Run migrations manually from an allowed IP or use workflow_dispatch with a self-hosted runner that has database access.
 
-- **Where is the ebisu backend database?** → Ebisu backend uses the same CrunchyBridge analytics database (`postgres_url`) to read from curated schemas. Label Studio (deployed in oceanid cluster) is separate.
+- **What's the difference between cleandata and the old postgres database?** → The `cleandata` database is the new dedicated database for our data pipeline (CSV ingestion, staging, curation). The old `postgres` database is being phased out. All new data pipeline components should use `cleandata`.
+
+- **Where is the ebisu backend database?** → Ebisu backend will read from the `cleandata` database's curated schemas. Label Studio (deployed in oceanid cluster) uses the separate `labelfish` database.

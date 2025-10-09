@@ -71,16 +71,49 @@ flowchart TB
 
 ## Milestones
 
-1) GPU + Pre‑labels (Done)
+### Phase 1: Data Ingestion Pipeline (Completed Oct 2025)
+
+1) **GPU + Pre‑labels** ✅
    - Triton on GPU, Cloudflare tunnel, Adapter, DistilBERT support
-2) Annotations Sink (Done)
+
+2) **Annotations Sink** ✅
    - Write annotations to HF; persist cleaned extractions to PG
-3) Postgres Baseline (Planned)
-   - Add control.*and raw.* schemas; add views for freshness and duplicates
-4) Curated Layer (Planned)
-   - Add SQL/dbt jobs to populate curated.* aligned with Ebisu
-5) CI & QA (Planned)
-   - Smoke tests for adapter/sink; data quality checks on stage/curated
+
+3) **CSV Ingestion Worker** ✅
+   - Go microservice processing Label Studio webhooks
+   - Confidence scoring and rule-based data cleaning
+   - Bulk PostgreSQL inserts with pq.CopyInSchema
+   - Deployed to Kubernetes with <128Mi footprint
+
+4) **Cleandata Database** ✅
+   - Separate database for data pipeline (cleandata)
+   - Consolidated schema with all tables and indexes
+   - Full medallion architecture: raw → stage → curated
+   - Database migrations via GitHub Actions
+
+### Phase 2: Data Processing & Quality (In Progress)
+
+5) **Review Queue Manager** (Planned)
+   - Human-in-the-loop validation system
+   - Priority-based review assignment
+   - Integration with Label Studio annotations
+
+6) **Curated Layer Population** (Planned)
+   - SQL/dbt jobs to populate curated.* aligned with Ebisu
+   - IMO registry reconciliation
+   - RFMO vessel deduplication
+
+### Phase 3: Production Readiness (Planned)
+
+7) **CI & QA**
+   - Smoke tests for adapter/sink
+   - Data quality checks on stage/curated
+   - Automated testing for CSV worker
+
+8) **Monitoring & Observability**
+   - Prometheus metrics integration
+   - Data freshness monitoring
+   - Pipeline health dashboards
 
 ## Acceptance Criteria
 

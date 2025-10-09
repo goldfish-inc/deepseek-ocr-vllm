@@ -34,8 +34,9 @@ the **@ebisu globalDB** (maritime intelligence platform).
 │  Components:                                                 │
 │  - Triton Inference (Calypso GPU): Models                   │
 │  - Label Studio: Annotation + review UI                     │
-│  - Staging DB: Document versions + cleaning audit           │
-│  - Ingestion Worker: Automated CSV processing               │
+│  - Cleandata DB: Separate database for data pipeline        │
+│  - CSV Ingestion Worker: Go service for data cleaning       │
+│  - Staging Pipeline: Confidence scoring + human review      │
 └──────────────────────┬──────────────────────────────────────┘
                        │ Promotion (audited)
                        ▼
