@@ -51,7 +51,7 @@ spec:
       service:
         type: ClusterIP
         port: 8080
-        targetPort: 8080
+        targetPort: 8085  # Nginx container listens on 8085
       resources: {}
       nodeSelector:
         kubernetes.io/hostname: srv712429  # Database only accessible from control plane
