@@ -23,6 +23,7 @@ import { SMEReadiness } from "./components/smeReadiness";
 import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
 import { ProjectBootstrapper } from "./components/projectBootstrapper";
+import { CSVIngestionWorker } from "./components/csvIngestionWorker";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -618,6 +619,23 @@ if (enableProjectBootstrapperService) {
         nerLabelsJson: nerLabelsJson as any,
         allowedOrigins: ["https://label.boathou.se"],
     });
+}
+
+// CSV Ingestion Worker: processes CSV files from Label Studio webhooks
+const enableCsvIngestionWorker = cfg.getBoolean("enableCsvIngestionWorker") ?? true;
+let csvIngestionWorker: CSVIngestionWorker | undefined;
+if (enableCsvIngestionWorker) {
+    const csvWorkerImageTag = cfg.get("csvWorkerImageTag") || "main";
+    csvIngestionWorker = new CSVIngestionWorker("csv-ingestion-worker", {
+        namespace: namespaceName,
+        dbUrl: labelStudioDbUrl as any,  // Same database as Label Studio & annotations sink
+        s3Bucket: awsBucketName,  // Same S3 bucket as Label Studio
+        s3Region: awsRegion,
+        labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",
+        reviewManagerUrl: "http://review-queue-manager.apps.svc.cluster.local:8080",
+        imageTag: csvWorkerImageTag,
+        replicas: 2,
+    }, { provider: k8sProvider });
 }
 
 // Optional: host-level Cloudflared connector on Calypso for GPU access

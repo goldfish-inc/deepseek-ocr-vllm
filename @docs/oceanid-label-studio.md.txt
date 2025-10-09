@@ -1,0 +1,504 @@
+# Label Studio + Triton Technical Workplan
+
+  Goal: Stand up a production‑grade annotation, cleaning, and training platform where
+  SMEs do minimal review work, predictions improve continuously (active learning), and
+  Crunchy Bridge Postgres holds clean, queryable, versioned data with full lineage.
+
+  Outcomes:
+
+  - PDF extraction with OCR + table recognition (Docling) and prelabels in Label
+    Studio.
+  - CSV/XLSX auto‑cleaning with SME triage only for ambiguous items.
+  - Continuous training (DistilBERT NER + table repair) served via Triton on your
+    GPU workstation.
+  - Active learning loops and quality gates; clean data persisted in Postgres with
+    history.
+
+  ———
+
+  ## 1) Label Studio Foundation
+
+  Outcome
+
+  - SMEs can upload to S3 via LS; projects exist for PDFs and CSV/XLSX; ML backend is
+    connected; webhooks deliver tasks/events to our services.
+
+  How
+
+  - Configure S3 import and export storage in LS UI; enable CORS or presigned URLs so
+    LS can render assets.
+  - Create two projects:
+      - PDF Multipage Extraction
+      - CSV/XLSX Cleaning Review
+  - Connect ML backend to the in‑cluster adapter URL (/predict_ls) that calls Triton.
+  - Register webhooks: TASK_CREATED, TASKS_BULK_CREATED, ANNOTATION_CREATED,
+    ANNOTATION_UPDATED to the ingest/sink endpoints.
+
+  Tests
+
+  - Upload a sample PDF to the PDF project; task created; thumbnail renders; no CORS
+    errors.
+  - Upload CSV/XLSX to the table project; task created (or deferred if auto‑clean
+    passes threshold).
+  - LS “Model” tab shows the ML backend status “ready”.
+
+  ———
+
+  ## 2) GPU/Triton Inference Stack
+
+  Outcome
+
+  - Single GPU inference entry point for both Docling (PDF OCR/tables) and DistilBERT
+    (NER), callable from LS via the adapter.
+
+  How
+
+  - Run Triton on the GPU workstation with models:
+      - Docling/Granite: PDF → table/region predictions (+ OCR text)
+      - DistilBERT NER (ONNX) for text spans
+  - LS‑Triton adapter normalizes inputs/outputs to LS format and exposes:
+      - POST /predict_ls for prelabels
+      - POST /train to enqueue training jobs
+
+  Tests
+
+  - Health: GET /health returns {ok:true}.
+  - Smoke: POST /predict with sample text returns dummy NER spans; POST /predict_ls
+    with LS payload returns predictions list.
+  - GPU utilization visible during inference; latency < 2s for short docs.
+
+  ———
+
+  ## 3) PDF Project Configuration (Multipage)
+
+  Outcome
+
+  - SMEs see multi‑page PDFs with pre‑drawn table/field boxes; they only adjust edge
+    cases.
+
+  How
+
+  - Labeling config (baseline):
+
+    <View>
+      <RectangleLabels name="rectangles" toName="pdf" showInline="true">
+        <Label value="Table" background="gold"/>
+        <Label value="Figure" background="purple"/>
+        <Label value="Section" background="blue"/>
+        <Label value="KeyValue" background="green"/>
+      </RectangleLabels>
+      <Image valueList="$pages" name="pdf"/>
+    </View>
+  - Task payload:
+      - data.pages: S3 image URLs per page (or presigned)
+      - data.pdf_url: S3 URL to the original PDF
+      - data.meta: {org_id, doc_type, source, published_at, file_hash}
+
+  Tests
+
+  - Create a task with 3 page images in data.pages; UI shows page nav.
+  - Import a Docling‑processed PDF: prelabels appear on correct pages (item_index
+    matches).
+
+  ———
+
+  ## 4) PDF Ingest + Docling OCR/Table Recognition
+
+  Outcome
+
+  - Original PDFs are processed for OCR and table structures, page images generated,
+    predictions stored as LS prelabels, lineage in Postgres.
+
+  How
+
+  - Ingest worker (triggered by TASK_CREATED):
+      - Generate or validate page images.
+      - Run Docling on the original PDF to produce:
+          - OCR tokens (text + bbox)
+          - Table bboxes and cell grid
+      - Store artifacts in S3; write metadata into Postgres stage schema.
+  - Prelabel via adapter → Triton (Docling model) producing:
+      - LS rectangle predictions with item_index, percent coords, label, confidence,
+        and optional table_id and snippet text.
+
+  Tests
+
+  - On task creation, S3 contains:
+      - /pdf/<doc_id>/<version>/pages/0001.jpg …
+      - /pdf/<doc_id>/<version>/ocr/tokens.json
+      - /pdf/<doc_id>/<version>/tables/tables.json
+  - Postgres:
+      - stage.document_versions has a new version row.
+      - stage.document_pages count = number of images.
+      - stage.tables and stage.table_cells populated.
+  - LS task reload shows prelabels; select a box shows expected label and confidence
+    in raw JSON.
+
+  ———
+
+  ## 5) CSV/XLSX Auto‑Cleaning and SME Triage
+
+  Outcome
+
+  - CSV/XLSX sources are cleaned automatically using rules + ML; SMEs only see
+    low‑confidence/ambiguous rows in LS for correction.
+
+  How
+
+  - Ingest worker (batch or webhook‑driven):
+      - Load CSV/XLSX into memory.
+      - Apply stage.cleaning_rules (DB‑driven) and ML heuristics.
+      - Write each cell to stage.csv_extractions with:
+          - raw_value, cleaned_value, confidence, rule_chain, needs_review flag.
+  - LS tasks created only for rows/cells with needs_review = true:
+      - Show “raw → cleaned” suggestion and a single editable field, plus reason for
+        ambiguity.
+
+  Tests
+
+  - Historical file: ≥85% of cells have confidence >= threshold and are not surfaced
+    to LS.
+  - Ambiguous sample rows appear as tasks; SME edits propagate to
+    stage.training_corpus and update cleaned_value.
+
+  ———
+
+  ## 6) Webhooks and Annotation Sink
+
+  Outcome
+
+  - All LS events persist to Postgres with raw JSON; PDF rectangles and CSV
+    corrections are written to staging tables with full provenance.
+
+  How
+
+  - Endpoints (idempotent, append‑only):
+      - /ingest handles task creation; links to S3 assets; seeds stage.document*.
+      - /webhook handles annotation create/update:
+          - PDF: write stage.pdf_boxes (percent + pixel + page) and, when applicable,
+            link to table_id; write human field values to stage.extractions.
+          - CSV/XLSX: write SME corrections to stage.training_corpus and update
+            stage.csv_extractions review status.
+  - Log all events to stage.event_log with signature verification.
+
+  Tests
+
+  - Save an annotation; corresponding rows appear in the right tables within 3
+    seconds.
+  - Duplicate webhooks do not double‑insert (idempotent key on LS annotation ids).
+
+  ———
+
+  ## 7) Postgres Stage Schema and Lineage
+
+  Outcome
+
+  - A single normalized, versioned store for documents, predictions, human labels, and
+    cleaning lineage, queryable for analytics and training.
+
+  How
+
+  - Stage schema includes (minimum):
+      - documents, document_versions, document_pages
+      - ocr_tokens, tables, table_cells
+      - pdf_boxes (prelabel vs human), extractions
+      - csv_extractions, training_corpus
+      - prediction, event_log
+  - Views for “latest” by doc_id and per‑org filtering; GIN indexes on JSONB; B‑tree
+    on (org_id, doc_type, published_at).
+
+  Tests
+
+  - Query: “latest extractions by doc_type and date range” runs < 500ms on sample set.
+  - Updating the same document creates a new document_version; previous versions
+    remain intact.
+
+  ———
+
+  ## 8) Training Dataset Builds (HF)
+
+  Outcome
+
+  - Nightly (or threshold‑based) dataset materialization to Hugging Face for NER and
+    table repair; reproducible snapshots.
+
+  How
+
+  - Builders create splits from stage tables:
+      - PDF NER: map SME boxes to OCR tokens → BIO tags.
+      - Table repair: pairs of Docling cell text → SME corrected text with features
+        (row/col/headers).
+      - CSV repair: raw → cleaned with context (column name, source, rule hints).
+  - Push to HF_DATASET_REPO with versioned commits; keep manifest (commit refs) in
+    Postgres.
+
+  Tests
+
+  - New commit appears in HF dataset repo with expected record counts.
+  - Sampling a few records matches ground truth in Postgres (spot‑check).
+
+  ———
+
+  ## 9) Model Training + Serving (Triton)
+
+  Outcome
+
+  - DistilBERT NER and (optional) table/CSV repair models re‑trained, published to
+    HF_MODEL_REPO, deployed to Triton, and reflected in LS predictions.
+
+  How
+
+  - Training job (K8s job via /train):
+      - Pull dataset from HF (by commit SHA).
+      - Train/evaluate; export ONNX; upload to HF_MODEL_REPO (tagged).
+      - Roll Triton model repository to the new version; adapter /setup shows
+        model_version.
+  - Maintain config: thresholds per field/entity; gating for model rollout (A/
+    B optional).
+
+  Tests
+
+  - Model artifact exists in HF_MODEL_REPO with metadata.
+  - Adapter /setup returns updated version; predictions differ appropriately on a
+    regression set.
+  - Offline F1 and online acceptance both improve or hold steady.
+
+  ———
+
+  ## 10) Active Learning
+
+  Outcome
+
+  - The system prioritizes the most informative cases for SME review, accelerating
+    model improvements.
+
+  How
+
+  - Sampling strategies (combined):
+      - Low confidence (below threshold).
+      - Disagreement (model vs rules or model vs previous model).
+      - Drift (source/time buckets with shifting distributions).
+  - Route sampled items to LS with clear “why selected” metadata.
+
+  Tests
+
+  - AL queue contains items with expected reasons and scores.
+  - After SME corrections, next training cycle shows metric improvements on targeted
+    entities/sources.
+
+  ———
+
+  ## 11) Promotion to Curated Schema
+
+  Outcome
+
+  - Clean, trusted tables fed from staging with auditability and rollback.
+
+  How
+
+  - Promotion job:
+      - Apply quality gates (confidence, SME approval, completeness per doc_type).
+      - Write to curated.* tables with source_version and promotion_log.
+      - Maintain slowly changing dimensions if needed (SCD2) for key entities.
+
+  Tests
+
+  - Spot‑check promoted rows match staging gold values.
+  - Rollback: revert to previous promotion safely using promotion_log.
+
+  ———
+
+  ## 12) Observability, Quality, and Gates
+
+  Outcome
+
+  - Clear visibility into throughput, quality, SME workload, and model health;
+    guardrails prevent bad data from shipping.
+
+  How
+
+  - Metrics and dashboards:
+      - Coverage (% prelabels used), SME minutes/doc, correction rate.
+      - CSV acceptance rate, cell confidence histograms.
+      - Model F1 by entity; drift metrics; AL sampling rates.
+  - Quality gates:
+      - Minimum acceptance per source/doc_type.
+      - Block promotion on failure; alert SMEs/admins.
+
+  Tests
+
+  - Dashboards load with non‑zero metrics after first day.
+  - Simulated low‑quality run blocks promotion and emits alerts.
+
+  ———
+
+  ## 13) Security and Compliance
+
+  Outcome
+
+  - Principle‑of‑least‑privilege, secrets safe, assets controlled, and data lineage
+    preserved.
+
+  How
+
+  - Secrets: ENV or K8s Secrets for HF tokens, DB creds; no secrets in code.
+  - S3 policy: limit access to LS host and ingest workers; prefer presigned URLs.
+  - Webhooks: verify signatures; store raw events (tamper‑evident).
+  - PII: if present, mask in logs; restrict export.
+
+  Tests
+
+  - Rotating HF token cuts access immediately until updated.
+  - Invalid webhook signature rejected; logged.
+
+  ———
+
+  ## 14) Performance and Reliability
+
+  Outcome
+
+  - Scales to large document volumes and big CSVs; GPU resources used efficiently;
+    retries and backpressure.
+
+  How
+
+  - Batching and queues for Docling and CSV cleaning; backpressure when GPU is
+    saturated.
+  - Concurrency caps per source; exponential backoff on S3/DB.
+  - Shard by org/doc_type if needed.
+
+  Tests
+
+  - Load test: 100 PDFs (avg 5 pages) → SLA met (e.g., first prelabels within 30s).
+  - CSV of 500k cells: auto‑clean in < X minutes; < 5% tasks to SMEs.
+
+  ———
+
+  ## 15) SME/Operator Runbooks and UX
+
+  Outcome
+
+  - SMEs and operators can perform their roles smoothly with minimal instructions.
+
+  How
+
+  - SME PDF guide: how to adjust boxes, hotkeys, what to ignore.
+  - SME CSV guide: accept/correct; examples of common issues.
+  - Operator SOP: connect ML backend, troubleshoot webhooks, retrain, rollback.
+
+  Tests
+
+  - New SME follows guide and completes a task with no assistance.
+  - Operator performs a retrain and sees new model version go live.
+
+  ———
+
+  ## Data Contracts (Canonical Examples)
+
+  PDF Task (input)
+
+  {
+    "data": {
+      "pages": [
+        "https://s3/…/doc123/pages/0001.jpg",
+        "https://s3/…/doc123/pages/0002.jpg"
+      ],
+      "pdf_url": "https://s3/…/doc123/original.pdf",
+      "meta": {
+        "org_id": "acme",
+        "doc_type": "rfmo_report",
+        "source": "IATTC",
+        "published_at": "2025-09-01",
+        "file_hash": "sha256:…"
+      }
+    }
+  }
+
+  PDF Prediction (prelabel result element)
+
+  {
+    "id": "auto-1",
+    "type": "rectanglelabels",
+    "value": {
+      "x": 12.3,
+      "y": 18.5,
+      "width": 45.0,
+      "height": 10.0,
+      "rectanglelabels": ["Table"]
+    },
+    "item_index": 1,
+    "to_name": "pdf",
+    "from_name": "rectangles",
+    "original_width": 2550,
+    "original_height": 3300,
+    "score": 0.92,
+    "meta": { "table_id": "tbl-7", "snippet": "Vessel | IMO | ..." }
+  }
+
+  CSV/XLSX Extraction Row
+
+  {
+    "document_id": 42,
+    "row_index": 123,
+    "column_name": "VESSEL_NAME",
+    "raw_value": "ST. \"NIKOLA",
+    "cleaned_value": "ST. NIKOLA",
+    "confidence": 0.91,
+    "rule_chain": [15, 27, 33],
+    "needs_review": false
+  }
+
+  CSV Review Task (LS text)
+
+  {
+    "data": {
+      "row_index": 123,
+      "column_name": "VESSEL_NAME",
+      "raw_value": "ST. \"NIKOLA",
+      "auto_cleaned": "ST. NIKOLA",
+      "reason": "Unescaped quote; Cyrillic pattern"
+    }
+  }
+
+  ———
+
+  ## Acceptance Gates (Go/No‑Go)
+
+  - PDF Prelabels: ≥80% of table regions correct (IoU > 0.5) on validation set; median
+    SME time/doc ≤ target.
+  - CSV Auto‑clean: ≥85% of cells auto‑accepted; ambiguous routed to SMEs; no “dirty”
+    inserts into curated.
+  - Training Loop: Dataset commits and model releases are versioned and reproducible;
+    adapter exposes new model_version.
+  - Active Learning: Sampling regularly surfaces low‑confidence/drift cases; next
+    training improves targeted metrics.
+  - Promotion: Only passes quality gates; rollback tested; lineage queryable.
+
+  ———
+
+  ## Next Steps (only if deferred from initial build)
+
+  - A/B model gating per source/doc_type with automatic fallback.
+  - Source‑specific threshold tuning driven by live acceptance analytics.
+  - Table structure export to Parquet for external analytics engines.
+  - Semantic search over OCR tokens (optional vector index).
+  - Automated rule mining: convert frequent SME corrections into new cleaning_rules.
+
+  ———
+
+  ## What You Configure vs. What We Implement
+
+  You configure
+
+  - S3 in LS (imports/exports); two LS projects; ML backend URL; webhooks.
+
+  We implement
+
+  - Ingest and annotation sink endpoints (idempotent, secure, observable).
+  - Triton model plumbing and adapter mappings for LS.
+  - Stage schema migrations and promotion jobs.
+  - Dataset builders, training jobs, and active learning strategies.
+  - Dashboards, gates, and runbooks.
+
+  This plan integrates active learning and quality gates from day one and produces a
+  clean, versioned data source with full lineage that your analytics stack can trust.

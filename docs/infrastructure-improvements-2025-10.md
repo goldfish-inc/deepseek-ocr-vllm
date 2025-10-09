@@ -297,6 +297,37 @@ kubectl run -n apps test --rm -i --image=postgres:16-alpine \
   -- nc -zv p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com 5432
 ```
 
+### Cloudflare Tunnel Configuration (RESOLVED ✅)
+
+**Problem**: Cloudflare tunnels use remote configuration management via API, not local ConfigMap files
+
+**Root Cause**:
+- Pulumi creates a ConfigMap with tunnel ingress rules
+- Cloudflared ignores the ConfigMap and uses Cloudflare-managed config from the API
+- The "version=X" in logs indicates remote config version number
+- Local ConfigMap changes don't take effect until remote config is updated
+
+**Resolution**:
+- Updated tunnel configuration via Cloudflare API to version 10
+- Fixed service name: `label-studio` → `label-studio-ls-app`
+- Fixed service port: `targetPort: 8080` → `targetPort: 8085` (nginx container port)
+
+**Lesson Learned**:
+When updating Cloudflare tunnel ingress rules, ALWAYS update via API:
+```bash
+TUNNEL_ID="6ff4dfd7-2b77-4a4f-84d9-3241bea658dc"
+ACCOUNT_ID="8fa97474778c8a894925c148ca829739"
+CF_TOKEN=$(pulumi config get oceanid-cluster:cloudflareAdminToken)
+
+curl -X PUT \
+  "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" \
+  -H "Authorization: Bearer ${CF_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"ingress": [...], "warp-routing": {"enabled": true}}}'
+```
+
+**Future Fix**: Update Pulumi code to manage tunnel config via Cloudflare API instead of ConfigMap
+
 ---
 
 ## Documentation Updates
