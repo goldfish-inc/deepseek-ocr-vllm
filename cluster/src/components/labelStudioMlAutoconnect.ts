@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Label Studio ML Auto-connect")
 
 # Configuration
-LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://label-studio.apps.svc.cluster.local:8080")
+LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://label-studio-ls-app.apps.svc.cluster.local:8080")
 ML_BACKEND_URL = os.getenv("ML_BACKEND_URL", "http://ls-triton-adapter.apps.svc.cluster.local:9090")
 API_TOKEN = os.getenv("LABEL_STUDIO_API_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "http://ls-ml-autoconnect.apps.svc.cluster.local:8080/webhook")

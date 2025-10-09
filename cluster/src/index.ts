@@ -126,7 +126,7 @@ const minioHostname = pulumi.interpolate`minio.${clusterConfig.nodeTunnel.hostna
 const enableAppsStack = cfg.getBoolean("enableAppsStack") ?? false;
 
 const extraIngressRules: Array<{ hostname: pulumi.Input<string>; service: pulumi.Input<string>; noTLSVerify?: pulumi.Input<boolean> }>= [
-    { hostname: labelHostname, service: pulumi.output("http://label-studio.apps.svc.cluster.local:8080"), noTLSVerify: false }, // Service deployed by Flux
+    { hostname: labelHostname, service: pulumi.output("http://label-studio-ls-app.apps.svc.cluster.local:8080"), noTLSVerify: false }, // Service deployed by Flux
     // Note: GPU service is handled by HostCloudflared on Calypso, not this tunnel
 ];
 
@@ -361,7 +361,7 @@ def main():
     p.add_argument("--description", default=None)
     args = p.parse_args()
 
-    ls_url = os.getenv("LABEL_STUDIO_URL") or "http://label-studio.apps.svc.cluster.local:8080"
+    ls_url = os.getenv("LABEL_STUDIO_URL") or "http://label-studio-ls-app.apps.svc.cluster.local:8080"
     pat = os.getenv("LABEL_STUDIO_PAT")
     backend_url = os.getenv("ML_BACKEND_URL") or "http://ls-triton-adapter.apps.svc.cluster.local:9090"
     if not pat:
@@ -481,7 +481,7 @@ if __name__ == "__main__":
                         image: "python:3.11-slim",
                         command: ["python", "/app/provision.py", "--title", "NER_Data", "--description", "Universal document NER (PDF, CSV, XLSX, text). Pre-labels via adapter; SMEs review & approve."],
                         env: [
-                            { name: "LABEL_STUDIO_URL", value: "http://label-studio.apps.svc.cluster.local:8080" },
+                            { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
                             { name: "ML_BACKEND_URL", value: pulumi.interpolate`${lsAdapter.serviceUrl}` as any },
                             ...(cfg.get("nerLabels") ? [{ name: "NER_LABELS", value: cfg.get("nerLabels")! }] : []),
                             { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: provSecret.metadata.name, key: "LABEL_STUDIO_PAT" } } },
@@ -531,7 +531,7 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
                 name: "verify", image: "python:3.11-slim",
                 command: ["python", "/app/verify.py"],
                 env: [
-                    { name: "LABEL_STUDIO_URL", value: "http://label-studio.apps.svc.cluster.local:8080" },
+                    { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
                     { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: sec.metadata.name, key: "LABEL_STUDIO_PAT" } } },
                 ] as any,
                 volumeMounts: [{ name: "code", mountPath: "/app" }],
