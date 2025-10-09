@@ -626,9 +626,12 @@ const enableCsvIngestionWorker = cfg.getBoolean("enableCsvIngestionWorker") ?? t
 let csvIngestionWorker: CSVIngestionWorker | undefined;
 if (enableCsvIngestionWorker) {
     const csvWorkerImageTag = cfg.get("csvWorkerImageTag") || "main";
+    // Get cleandata database URL for CSV worker (separate from Label Studio DB)
+    const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
+
     csvIngestionWorker = new CSVIngestionWorker("csv-ingestion-worker", {
         namespace: namespaceName,
-        dbUrl: labelStudioDbUrl as any,  // Same database as Label Studio & annotations sink
+        dbUrl: cleandataDbUrl as any,  // Uses cleandata database (separate from Label Studio)
         s3Bucket: awsBucketName,  // Same S3 bucket as Label Studio
         s3Region: awsRegion,
         labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",
