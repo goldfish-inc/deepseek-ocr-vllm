@@ -76,18 +76,74 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/claude-code-gh" git push origin main
 - Git operations (disabled)
 - GitHub CLI (uses token)
 
-## Critical Connection Setup (for debugging only)
+## Cluster Access
 
-### K3s Cluster Access
+### Primary Method: Cloudflare WARP (Recommended)
 
-**IMPORTANT**: The cluster uses a custom kubeconfig that requires SSH tunneling.
+**IMPORTANT**: The cluster is now accessible via Cloudflare WARP with Zero Trust private network routing. This is the **preferred method** for all kubectl operations.
+
+#### Setup:
+```bash
+# 1. Ensure WARP client is installed and connected
+warp-cli status  # Should show "Connected"
+
+# 2. Use the WARP kubeconfig
+export KUBECONFIG=~/.kube/k3s-warp.yaml
+
+# 3. Test connection
+kubectl get nodes
+```
+
+#### How It Works:
+- WARP routes traffic to cluster private IPs (`10.42.0.0/16`, `10.43.0.0/16`, `192.168.2.0/24`) through Cloudflare tunnel
+- K8s API accessible at `https://10.43.0.1:443` (kubernetes.default service)
+- Client certificates work end-to-end (Layer 4 routing, no TLS termination)
+- No SSH tunnels needed!
+
+#### WARP Configuration:
+- **Organization**: `goldfishinc.cloudflareaccess.com`
+- **Mode**: Gateway with WARP (not consumer mode)
+- **Split Tunnel Policy**: Include mode with oceanid cluster CIDRs
+  - `10.42.0.0/16` - K8s Pod Network
+  - `10.43.0.0/16` - K8s Service Network (API endpoint)
+  - `192.168.2.0/24` - Calypso GPU
+  - `172.21.0.0/16` - Manowar network (do not modify)
+  - `172.20.0.0/16` - Manowar network (do not modify)
+
+#### Troubleshooting WARP:
+```bash
+# Check WARP status
+warp-cli status
+
+# Reconnect if needed
+warp-cli disconnect && warp-cli connect
+
+# Verify kubeconfig
+echo $KUBECONFIG  # Should be ~/.kube/k3s-warp.yaml
+
+# Test connection
+kubectl get nodes
+
+# Run full verification
+./scripts/complete-warp-setup.sh
+```
+
+#### WARP Requirements:
+- ✅ WARP client installed: `brew install --cask cloudflare-warp`
+- ✅ Enrolled in Zero Trust organization: `goldfishinc`
+- ✅ Split tunnel policy includes oceanid CIDRs (configured via API)
+- ✅ Mode: Gateway with WARP (not 1.1.1.1 consumer mode)
+
+### Fallback Method: SSH Tunnel (Legacy/Emergency Only)
+
+**Note**: This method is deprecated in favor of WARP. Use only if WARP is unavailable.
 
 #### Correct Connection Process:
 ```bash
 # 1. Establish SSH tunnel to correct port (16443, NOT 6443)
 ssh -L 16443:localhost:6443 tethys -N &
 
-# 2. Use the correct kubeconfig
+# 2. Use the SSH tunnel kubeconfig
 export KUBECONFIG=~/.kube/k3s-config.yaml
 
 # 3. Test connection
@@ -583,22 +639,24 @@ gh issue list --search "staging database"
 
 ## Key Reminders for AI Assistants
 
-1. **ALWAYS** establish SSH tunnel to port 16443 before kubectl commands
-2. **ALWAYS** use `KUBECONFIG=~/.kube/k3s-config.yaml`
-3. **NEVER** store secrets in git - use Pulumi ESC
-4. **ALWAYS** test connections before running complex operations
-5. **ALWAYS** use proper error handling for connection issues
-6. **NEVER** assume standard kubeconfig paths work
-7. **ALWAYS** verify tunnel is active before kubectl operations
-8. **ALWAYS** create GitHub issues before starting implementation work
-9. **ALWAYS** reference issue numbers in commits and PRs
-10. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
-11. **ALWAYS** run health checks after deployment changes
+1. **ALWAYS** use Cloudflare WARP for kubectl access (preferred method)
+2. **ALWAYS** use `KUBECONFIG=~/.kube/k3s-warp.yaml` (WARP kubeconfig)
+3. **ALWAYS** verify WARP is connected before kubectl commands: `warp-cli status`
+4. **NEVER** store secrets in git - use Pulumi ESC
+5. **ALWAYS** test connections before running complex operations
+6. **ALWAYS** use proper error handling for connection issues
+7. **ALWAYS** create GitHub issues before starting implementation work
+8. **ALWAYS** reference issue numbers in commits and PRs
+9. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
+10. **ALWAYS** run health checks after deployment changes
+11. **FALLBACK ONLY**: Use SSH tunnel (`~/.kube/k3s-config.yaml`) if WARP is unavailable
 
 This infrastructure follows Infrastructure as Code principles with GitOps deployment, automated dependency management, and comprehensive security controls.
 
 ## Documentation References
 
+- **Cloudflare WARP Setup**: `docs/cloudflare-warp-setup.md` - Architecture and setup guide for WARP-based cluster access
+- **WARP Quick Start**: `docs/warp-next-action.md` - Quick reference for WARP configuration
 - **Resource Ownership**: `docs/RESOURCE_OWNERSHIP.md` - Defines Pulumi vs Flux ownership boundaries
 - **Secrets Management**: `docs/SECRETS_MANAGEMENT.md` - ESC and 1Password integration
 - **Operations Overview**: `docs/operations/overview.md` - Day-to-day operations guide

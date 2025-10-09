@@ -46,11 +46,15 @@ spec:
             region: us-east-1
             bucket: labelstudio-goldfish-uploads
     app:
+      image:
+        tag: "1.21.0"  # Override chart default (1.20.0) to use latest version
       service:
         type: ClusterIP
         port: 8080
         targetPort: 8080
       resources: {}
+      nodeSelector:
+        kubernetes.io/hostname: srv712429  # Database only accessible from control plane
     postgresql:
       enabled: false
     redis:
