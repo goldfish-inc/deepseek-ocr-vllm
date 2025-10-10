@@ -334,6 +334,7 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -355,116 +356,136 @@ def access_token(ls_url: str, pat: str) -> str:
         sys.exit(2)
     return json.loads(body)["access"]
 
-    def label_config_xml(labels):
-        tags = "\n".join([f"      <Label value=\"{l}\"/>" for l in labels])
-        return (
-            "<View>\n"
-            "  <Header value=\"Document Text\"/>\n"
-            "  <Text name=\"text\" value=\"$text\"/>\n"
-            "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
-            f"{tags}\n"
-            "  </Labels>\n"
-            "  <Relations name=\"rels\" toName=\"text\"/>\n"
-            "</View>"
-        )
+def label_config_xml(labels):
+    tags = "\n".join([f"      <Label value=\"{l}\"/>" for l in labels])
+    return (
+        "<View>\n"
+        "  <Header value=\"Document Text\"/>\n"
+        "  <Text name=\"text\" value=\"$text\"/>\n"
+        "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
+        f"{tags}\n"
+        "  </Labels>\n"
+        "  <Relations name=\"rels\" toName=\"text\"/>\n"
+        "</View>"
+    )
 
-    def api_headers(token):
-        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+def api_headers(token):
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    def parse_json(body, default=None):
-        try:
-            return json.loads(body)
-        except Exception:
-            return default
+def parse_json(body, default=None):
+    try:
+        return json.loads(body)
+    except Exception:
+        return default
 
-    def ensure_import_storage(ls_url, token, project_id, bucket, prefix, region, regex_filter, endpoint, aws_key, aws_secret, title):
-        try:
-            project_param = int(project_id)
-        except Exception:
-            project_param = project_id
-        base = ls_url.rstrip("/")
-        headers = api_headers(token)
-        code, body = http("GET", f"{base}/api/storages/s3/", headers=headers)
-        if code != 200:
-            raise RuntimeError(f"List import storage failed: {code} {body}")
-        storages = parse_json(body, []) or []
-        target = None
-        for item in storages:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
-                target = item
-                break
-        payload = {
-            "project": project_param,
-            "bucket": bucket,
-            "prefix": prefix,
-            "title": title,
-            "region_name": region,
-            "regex_filter": regex_filter,
-            "use_blob_urls": True,
-            "presign": True,
-            "recursive_scan": True,
-        }
-        if endpoint:
-            payload["s3_endpoint"] = endpoint
-        if aws_key and aws_secret:
-            payload["aws_access_key_id"] = aws_key
-            payload["aws_secret_access_key"] = aws_secret
-        storage_id = target.get("id") if target else None
-        if storage_id:
-            code, resp = http("PATCH", f"{base}/api/storages/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
-            if code not in (200, 201):
-                print(f"Update import storage failed: {code} {resp}", file=sys.stderr)
-        else:
-            code, resp = http("POST", f"{base}/api/storages/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
-            if code not in (200, 201):
-                raise RuntimeError(f"Create import storage failed: {code} {resp}")
-            target = parse_json(resp, {}) or {}
-            storage_id = target.get("id")
-        return storage_id
+def slugify(title, project_id):
+    raw = (title or "").lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+    if not slug:
+        slug = f"project-{project_id}"
+    return f"{slug}-{project_id}"
 
-    def ensure_export_storage(ls_url, token, project_id, bucket, prefix, region, endpoint, aws_key, aws_secret, title):
-        try:
-            project_param = int(project_id)
-        except Exception:
-            project_param = project_id
-        base = ls_url.rstrip("/")
-        headers = api_headers(token)
-        code, body = http("GET", f"{base}/api/storages/export/s3/", headers=headers)
-        if code != 200:
-            raise RuntimeError(f"List export storage failed: {code} {body}")
-        storages = parse_json(body, []) or []
-        target = None
-        for item in storages:
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
-                target = item
-                break
-        payload = {
-            "project": project_param,
-            "bucket": bucket,
-            "prefix": prefix,
-            "title": title,
-            "region_name": region,
-        }
-        if endpoint:
-            payload["s3_endpoint"] = endpoint
-        if aws_key and aws_secret:
-            payload["aws_access_key_id"] = aws_key
-            payload["aws_secret_access_key"] = aws_secret
-        if target and target.get("id"):
-            storage_id = target.get("id")
-            code, resp = http("PATCH", f"{base}/api/storages/export/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
-            if code not in (200, 201):
-                print(f"Update export storage failed: {code} {resp}", file=sys.stderr)
-            return storage_id
-        code, resp = http("POST", f"{base}/api/storages/export/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
+def resolve_prefix(base, slug, project_id, default_suffix):
+    base = (base or "").strip()
+    formatted = base.replace("{project_id}", str(project_id)).replace("{project}", slug)
+
+    if formatted != base or ("{project_id}" in base or "{project}" in base):
+        candidate = formatted
+    else:
+        parts = [base.rstrip("/"), slug, default_suffix]
+        candidate = "/".join([part for part in parts if part])
+
+    candidate = candidate.strip("/")
+    return (candidate + "/") if candidate else ""
+
+def ensure_import_storage(ls_url, token, project_id, bucket, prefix, region, regex_filter, endpoint, aws_key, aws_secret, title):
+    try:
+        project_param = int(project_id)
+    except Exception:
+        project_param = project_id
+    base = ls_url.rstrip("/")
+    headers = api_headers(token)
+    code, body = http("GET", f"{base}/api/storages/s3/", headers=headers)
+    if code != 200:
+        raise RuntimeError(f"List import storage failed: {code} {body}")
+    storages = parse_json(body, []) or []
+    target = None
+    for item in storages:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
+            target = item
+            break
+    payload = {
+        "project": project_param,
+        "bucket": bucket,
+        "prefix": prefix,
+        "title": title,
+        "region_name": region,
+        "regex_filter": regex_filter,
+        "use_blob_urls": True,
+        "presign": True,
+        "recursive_scan": True,
+    }
+    if endpoint:
+        payload["s3_endpoint"] = endpoint
+    if aws_key and aws_secret:
+        payload["aws_access_key_id"] = aws_key
+        payload["aws_secret_access_key"] = aws_secret
+    storage_id = target.get("id") if target else None
+    if storage_id:
+        code, resp = http("PATCH", f"{base}/api/storages/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
         if code not in (200, 201):
-            raise RuntimeError(f"Create export storage failed: {code} {resp}")
-        created = parse_json(resp, {}) or {}
-        return created.get("id")
+            print(f"Update import storage failed: {code} {resp}", file=sys.stderr)
+    else:
+        code, resp = http("POST", f"{base}/api/storages/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
+        if code not in (200, 201):
+            raise RuntimeError(f"Create import storage failed: {code} {resp}")
+        target = parse_json(resp, {}) or {}
+        storage_id = target.get("id")
+    return storage_id
+
+def ensure_export_storage(ls_url, token, project_id, bucket, prefix, region, endpoint, aws_key, aws_secret, title):
+    try:
+        project_param = int(project_id)
+    except Exception:
+        project_param = project_id
+    base = ls_url.rstrip("/")
+    headers = api_headers(token)
+    code, body = http("GET", f"{base}/api/storages/export/s3/", headers=headers)
+    if code != 200:
+        raise RuntimeError(f"List export storage failed: {code} {body}")
+    storages = parse_json(body, []) or []
+    target = None
+    for item in storages:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
+            target = item
+            break
+    payload = {
+        "project": project_param,
+        "bucket": bucket,
+        "prefix": prefix,
+        "title": title,
+        "region_name": region,
+    }
+    if endpoint:
+        payload["s3_endpoint"] = endpoint
+    if aws_key and aws_secret:
+        payload["aws_access_key_id"] = aws_key
+        payload["aws_secret_access_key"] = aws_secret
+    if target and target.get("id"):
+        storage_id = target.get("id")
+        code, resp = http("PATCH", f"{base}/api/storages/export/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
+        if code not in (200, 201):
+            print(f"Update export storage failed: {code} {resp}", file=sys.stderr)
+        return storage_id
+    code, resp = http("POST", f"{base}/api/storages/export/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
+    if code not in (200, 201):
+        raise RuntimeError(f"Create export storage failed: {code} {resp}")
+    created = parse_json(resp, {}) or {}
+    return created.get("id")
 
     def sync_import_storage(ls_url, token, storage_id):
         if not storage_id:
@@ -547,8 +568,8 @@ def main():
     # Configure S3 storages when credentials available
     bucket = os.getenv("AWS_BUCKET_NAME")
     region = os.getenv("AWS_REGION_NAME") or "us-east-1"
-    import_prefix = os.getenv("S3_IMPORT_PREFIX", "")
-    export_prefix = os.getenv("S3_EXPORT_PREFIX", "annotations/")
+    base_import_prefix = os.getenv("S3_IMPORT_PREFIX", "")
+    base_export_prefix = os.getenv("S3_EXPORT_PREFIX", "")
     regex_filter = os.getenv("S3_IMPORT_REGEX", ".*")
     import_title = os.getenv("S3_IMPORT_TITLE", "S3 Import")
     export_title = os.getenv("S3_EXPORT_TITLE", "S3 Export")
@@ -556,18 +577,22 @@ def main():
     aws_key = os.getenv("AWS_ACCESS_KEY_ID")
     aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
     try:
-        project_id_int = int(pid)
+        project_numeric_id = int(pid)
     except Exception:
-        project_id_int = pid
+        project_numeric_id = None
+    project_identifier = project_numeric_id if project_numeric_id is not None else pid
+    slug = slugify(args.title, project_identifier)
+    import_prefix = resolve_prefix(base_import_prefix, slug, project_identifier, "import")
+    export_prefix = resolve_prefix(base_export_prefix, slug, project_identifier, "export")
     if bucket:
         try:
-            import_id = ensure_import_storage(ls_url, token, project_id_int, bucket, import_prefix, region, regex_filter, endpoint, aws_key, aws_secret, import_title)
+            import_id = ensure_import_storage(ls_url, token, project_identifier, bucket, import_prefix, region, regex_filter, endpoint, aws_key, aws_secret, import_title)
             if import_id:
                 sync_import_storage(ls_url, token, import_id)
         except Exception as exc:
             print(f"Import storage setup warning: {exc}", file=sys.stderr)
         try:
-            ensure_export_storage(ls_url, token, project_id_int, bucket, export_prefix, region, endpoint, aws_key, aws_secret, export_title)
+            ensure_export_storage(ls_url, token, project_identifier, bucket, export_prefix, region, endpoint, aws_key, aws_secret, export_title)
         except Exception as exc:
             print(f"Export storage setup warning: {exc}", file=sys.stderr)
 

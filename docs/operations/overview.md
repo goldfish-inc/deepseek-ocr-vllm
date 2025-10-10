@@ -102,7 +102,7 @@ flowchart LR
   - Connects ML backend: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
   - Applies a full NER labeling interface from ESC/labels.json
   - Registers task‑create webhooks to the sink `/ingest`
-- **S3 storage is wired automatically per project.** The provisioner calls `/api/storages/s3/` and `/api/storages/export/s3/` to create (or update) project‑scoped import/export storage using the bucket/region/prefix settings from ESC (`aws.labelStudio.*`). Import storage defaults to presigned URLs (`use_blob_urls: true`, `presign: true`) and immediately triggers `/sync`, so raw documents appear in the queue without any manual UI work.
+- **S3 storage is wired automatically per project.** The provisioner calls `/api/storages/s3/` and `/api/storages/export/s3/` to create (or update) project‑scoped import/export storage using the bucket/region/prefix settings from ESC (`aws.labelStudio.*`). Each project gets its own folder (prefix resolved via `{project}` / `{project_id}` tokens, or automatically appended as `<slug>-<id>/import` / `.../export`). Import storage defaults to presigned URLs (`use_blob_urls: true`, `presign: true`) and immediately triggers `/sync`, so raw documents appear in the queue without any manual UI work.
 - Customize prefixes, regex filters, titles, or a custom S3 endpoint by setting these Pulumi config keys / ESC values:
   - `aws.labelStudio.bucketName`, `aws.labelStudio.region`, optional `aws.labelStudio.endpoint`
   - `aws.labelStudio.importPrefix`, `aws.labelStudio.exportPrefix`

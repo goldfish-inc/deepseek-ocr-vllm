@@ -27,6 +27,10 @@ This document catalogs the storages we use, what each one is for, and how to con
 - Label Studio Helm chart reads `AWS_*` env vars for file persistence (`persistence.type: s3`).
 - **Per-project storage is now automated**:
   - The provisioner job calls `/api/storages/s3/` and `/api/storages/export/s3/` to create project-scoped import/export storage using the ESC values above.
+  - Prefix templating:
+    - `aws.labelStudio.importPrefix` / `exportPrefix` act as base paths. They support `{project}` (slugified title + id) and `{project_id}` placeholders.
+    - If no placeholders are provided, we append `/<project-slug>-<id>/import/` (or `/export/`) automatically so each project lands in its own folder.
+    - Example (defaults): `raw-uploads/ner-data-123/import/` for uploads, `annotations/ner-data-123/export/` for completed labels.
   - Import storage defaults to presigned URLs (`use_blob_urls=true`, `presign=true`) and triggers `/sync` immediately so assets appear without manual UI work.
   - Update prefixes/regex/titles via the Pulumi config keys listed above.
 - Remember to configure bucket CORS (`https://label.boathou.se` origin, GET/PUT/POST methods) so presigned URLs load correctly from the browser.

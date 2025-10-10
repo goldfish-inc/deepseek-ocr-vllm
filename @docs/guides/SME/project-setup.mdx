@@ -57,6 +57,7 @@ flowchart LR
 | ---- | -------------- | ------------ | ----- |
 | Create a project | Dashboard → New Project | Title/description saved | Project is provisioned with S3 + ML backend within ~1 minute |
 | Upload files | Project → Tasks → Upload | Files land in S3 (import prefix) and appear as tasks automatically | Supports PDF, CSV/XLSX, TXT, images |
+| Where are my files? | Ops can provide the exact path | Default: `raw-uploads/<project-slug>-<id>/import/` for uploads, `annotations/<project-slug>-<id>/export/` for labeled data | Paths are auto-created; ask Ops if you need a custom location |
 | Check storage status | Project → Cloud Storage | You should see “S3 Import” and “S3 Export” entries already added by Ops | Contact Ops if you need a different bucket/prefix |
 | Get model suggestions | Open any task → “Get predictions” | Triton Adapter provides pre-labels | Works best when “Show predictions” is enabled |
 | Verify webhooks | Project → Settings → Webhooks | Expect `/ingest` and `/webhook` entries | Webhooks keep the pipeline up to date |
@@ -207,6 +208,9 @@ Ops now provisions S3 storage automatically when a project is created. The defau
 - **Import storage** (Files mode) pointing at `s3://labelstudio-goldfish-uploads/<prefix>` with `use_blob_urls` + presigned URLs enabled, so assets appear instantly.
 - **Export storage** writing completed annotations to a dedicated S3 prefix.
 - The import storage is synced as soon as the project is provisioned, so any files dropped in the bucket show up in the task list without manual steps.
+- Default folder structure (unless Ops overrides it):
+  - Source files: `raw-uploads/<project-slug>-<project-id>/import/`
+  - Annotations: `annotations/<project-slug>-<project-id>/export/`
 
 You only need to file a ticket if you want to change bucket/prefix/regex settings for your project.
 
@@ -284,6 +288,12 @@ classDef tip fill:#eef7ff,stroke:#87b0ff,color:#003b82;
 - Go to Settings → Cloud Storage. You should see “S3 Import” and “S3 Export”.
 - If they are missing, don’t add them manually—ping Ops so we can rerun the provisioner or adjust the bucket/prefix.
 - Remember: uploads still land in the bucket even if the UI entry is temporarily absent.
+
+**Where in S3 are my files?**
+
+- By default, uploads go to `raw-uploads/<project-slug>-<project-id>/import/` and completed annotations to `annotations/<project-slug>-<project-id>/export/`.
+- The `<project-slug>` is based on the project title (lowercase, hyphenated) plus the internal numeric id.
+- If you need a custom folder layout, let Ops know and we’ll update the configuration.
 
 **Uploaded files aren’t showing up as tasks**
 
