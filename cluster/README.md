@@ -32,16 +32,31 @@ Monitoring:
 
 ### Kubeconfig Provisioning (CI Service)
 
-- The self‑hosted workflow loads kubeconfig into `$RUNNER_TEMP/kubeconfig.yaml` and exports `KUBECONFIG`.
-- Preferred source: Pulumi ESC key `pulumiConfig.oceanid-cluster:kubeconfig` (stored as a secret value).
-- Alternative: Pre‑configure the runner environment to export `KUBECONFIG` to an existing kubeconfig file path.
+- The self‑hosted workflow sets `KUBECONFIG` for the Pulumi program. There is no default path in code; CI must provide it.
+- Preferred: store a path in ESC and have the runner read the file directly.
+- Optional: store base64 content in ESC; the workflow will decode to a temp file.
+- Alternative: pre‑configure the runner environment to export `KUBECONFIG` to an existing kubeconfig file path.
 
-Store kubeconfig in ESC (recommended):
+ESC keys supported by the workflow:
+
+- `pulumiConfig.oceanid-cluster:kubeconfigPath` (plaintext path)
+- `pulumiConfig.oceanid-cluster:kubeconfigB64` (single‑line base64)
+
+Examples:
 
 ```bash
+# 1) Store path (recommended)
 esc env set default/oceanid-cluster \
-  pulumiConfig.oceanid-cluster:kubeconfig \
-  "$(cat ~/.kube/k3s-config.yaml)" \
+  pulumiConfig.oceanid-cluster:kubeconfigPath \
+  "/home/ubuntu/.kube/k3s-config.yaml" \
+  --plaintext
+
+# 2) Store base64 (ensure single line)
+# macOS: base64 | tr -d '\n'    Linux: base64 -w 0
+KUBECONFIG_B64=$(base64 ~/.kube/k3s-config.yaml | tr -d '\n')
+esc env set default/oceanid-cluster \
+  pulumiConfig.oceanid-cluster:kubeconfigB64 \
+  "$KUBECONFIG_B64" \
   --secret
 ```
 
@@ -50,7 +65,7 @@ Pulumi config/env requirements:
 - `oceanid-cluster:kubeconfigPath` Pulumi config key, or
 - `KUBECONFIG` environment variable set by the CI job.
 
-There is no default path: if neither is provided, the program fails fast with a clear error.
+If neither is provided, the program fails fast with a clear error.
 
 ### Manual Fallback (Discouraged)
 

@@ -58,19 +58,33 @@ jobs:
           curl -fsSL https://get.pulumi.com/esc/install.sh | sh
           echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
 
-      - name: Load kubeconfig from ESC (optional)
+      - name: Load kubeconfig from ESC (path or base64, optional)
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          # Try to load kubeconfig content from ESC. If not present, skip.
-          if esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfig --show-secrets --value string >/dev/null 2>&1; then
-            esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfig --show-secrets --value string > "$RUNNER_TEMP/kubeconfig.yaml"
-            echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig.yaml" >> "$GITHUB_ENV"
-            echo "✅ KUBECONFIG loaded from ESC into $RUNNER_TEMP/kubeconfig.yaml"
-          else
-            echo "ℹ️  No kubeconfig found in ESC key pulumiConfig.oceanid-cluster:kubeconfig (skipping)"
+          # 1) If kubeconfigPath is present in ESC, export it directly
+          if esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigPath --value string >/dev/null 2>&1; then
+            KCPATH=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigPath --value string)
+            if [ -n "$KCPATH" ]; then
+              echo "KUBECONFIG=$KCPATH" >> "$GITHUB_ENV"
+              echo "✅ Using KUBECONFIG path from ESC: $KCPATH"
+              exit 0
+            fi
           fi
+
+          # 2) Else, if kubeconfigB64 is present, materialize a file and export
+          if esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigB64 --show-secrets --value string >/dev/null 2>&1; then
+            KCB64=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigB64 --show-secrets --value string)
+            if [ -n "$KCB64" ]; then
+              echo "$KCB64" | base64 -d > "$RUNNER_TEMP/kubeconfig.yaml"
+              echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig.yaml" >> "$GITHUB_ENV"
+              echo "✅ Decoded kubeconfig from ESC into $RUNNER_TEMP/kubeconfig.yaml"
+              exit 0
+            fi
+          fi
+
+          echo "ℹ️  No kubeconfigPath or kubeconfigB64 found in ESC; will use runner environment KUBECONFIG if set."
 
       - name: Ensure KUBECONFIG is set
         run: |
