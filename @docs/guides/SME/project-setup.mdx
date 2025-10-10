@@ -6,7 +6,7 @@ This guide shows how to set up a Label Studio project for SMEs with the correct 
 
 - URL: `https://label.boathou.se`
 - Access: Cloudflare Access (use your SME email)
-- Storage: S3/MinIO is pre‑configured on the backend; uploads are durable
+- Storage: Each project automatically gets S3 import/export storage (preconfigured per project by Ops)
 - Optional (scripted): Label Studio PAT if you want to run a helper script
 
 ```mermaid
@@ -156,16 +156,15 @@ Predictions appear under “Get predictions” and, if Auto‑annotation is enab
 
 You do not need to configure Cloud Storage to persist uploads — the backend already stores files in S3/MinIO.
 
-Only configure Cloud Storage if you want LS to import tasks from an external bucket:
+### Good news: Storage is pre-configured
 
-- Settings → Cloud Storage → Add Source → Amazon S3
-- Bucket: provided by ops (if using our managed bucket) or your own
-- Region: e.g., `us-east-1`
-- Prefix: optional (folder)
-- Credentials: access key ID and secret (contact ops for project‑scoped credentials)
-- Import strategy: choose whether to copy or reference (we recommend copying for stability)
+Ops now provisions S3 storage automatically when a project is created. The default setup includes:
 
-If you’re unsure, skip this step and upload via the UI — your files will still be stored in S3 via the backend.
+- **Import storage** (Files mode) pointing at `s3://labelstudio-goldfish-uploads/<prefix>` with `use_blob_urls` + presigned URLs enabled, so assets appear instantly.
+- **Export storage** writing completed annotations to a dedicated S3 prefix.
+- The import storage is synced as soon as the project is provisioned, so any files dropped in the bucket show up in the task list without manual steps.
+
+You only need to file a ticket if you want to change bucket/prefix/regex settings for your project.
 
 ## 6) Webhooks (Verify)
 
