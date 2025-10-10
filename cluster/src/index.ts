@@ -270,6 +270,7 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
 // See clusters/tethys/apps/label-studio-release.yaml
 // Secrets are synced from ESC to Kubernetes for Flux to consume
 const labelStudioDbUrl = cfg.getSecret("labelStudioDbUrl");
+const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
 const awsAccessKeyId = cfg.getSecret("aws.labelStudio.accessKeyId");
 const awsSecretAccessKey = cfg.getSecret("aws.labelStudio.secretAccessKey");
 const awsBucketName = cfg.get("aws.labelStudio.bucketName") || "labelstudio-goldfish-uploads";
@@ -595,7 +596,7 @@ const smeReadiness = new SMEReadiness("sme-ready", {
 const hfRepo = cfg.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
 const hfToken = cfg.getSecret("hfAccessToken");
 // Use the same labelfish database as Label Studio (now retrieved directly from ESC)
-const annotationsSinkDbUrl = cfg.requireSecret("labelStudioDbUrl"); // Same database as Label Studio
+const annotationsSinkDbUrl = cleandataDbUrl; // Use cleandata database for pipeline outputs
 const schemaVersion = cfg.get("schemaVersion") || "1.0.0";
 const sinkImage = cfg.get("sinkImage");
 const sinkImageTag = cfg.get("sinkImageTag") || "main";
@@ -640,9 +641,6 @@ if (enableCsvIngestionWorker) {
     // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
     const csvWorkerImage = cfg.get("csvWorkerImage");
     const csvWorkerImageTag = cfg.get("csvWorkerImageTag") || "main";
-    // Get cleandata database URL for CSV worker (separate from Label Studio DB)
-    const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
-
     csvIngestionWorker = new CSVIngestionWorker("csv-ingestion-worker", {
         namespace: namespaceName,
         dbUrl: cleandataDbUrl as any,  // Uses cleandata database (separate from Label Studio)

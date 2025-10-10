@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,28 +18,77 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr     string
-	DatabaseURL    string
-	HFToken        string
-	HFRepo         string
-	SchemaVersion  string
-	SubdirTemplate string
+	ListenAddr        string
+	DatabaseURL       string
+	HFToken           string
+	HFRepo            string
+	HFBranch          string
+	SchemaVersion     string
+	EnableDBIndex     bool
+	OutboxBatchSize   int
+	OutboxInterval    time.Duration
+	OutboxLockTimeout time.Duration
+	OutboxMaxAttempts int
 }
 
 func loadConfig() *Config {
+	batchSize := getIntEnv("OUTBOX_BATCH_SIZE", 100)
+	interval := getDurationEnv("OUTBOX_INTERVAL", 15*time.Second)
+	lockTimeout := getDurationEnv("OUTBOX_LOCK_TIMEOUT", 5*time.Minute)
+	maxAttempts := getIntEnv("OUTBOX_MAX_ATTEMPTS", 12)
+	enableIndex := getBoolEnv("ENABLE_DB_INDEX", true)
+
 	return &Config{
-		ListenAddr:     getEnv("LISTEN_ADDR", ":8080"),
-		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		HFToken:        os.Getenv("HF_TOKEN"),
-		HFRepo:         getEnv("HF_REPO", "goldfish-inc/oceanid-annotations"),
-		SchemaVersion:  getEnv("SCHEMA_VERSION", "1.0.0"),
-		SubdirTemplate: getEnv("SUBDIR_TEMPLATE", "annotations/{date}/project-{project_id}.jsonl"),
+		ListenAddr:        getEnv("LISTEN_ADDR", ":8080"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		HFToken:           os.Getenv("HF_TOKEN"),
+		HFRepo:            getEnv("HF_REPO", "goldfish-inc/oceanid-annotations"),
+		HFBranch:          getEnv("HF_BRANCH", "main"),
+		SchemaVersion:     getEnv("SCHEMA_VERSION", "1.0.0"),
+		EnableDBIndex:     enableIndex,
+		OutboxBatchSize:   batchSize,
+		OutboxInterval:    interval,
+		OutboxLockTimeout: lockTimeout,
+		OutboxMaxAttempts: maxAttempts,
 	}
 }
 
 func getEnv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return fallback
+}
+
+func getIntEnv(key string, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if v, err := strconv.Atoi(value); err == nil {
+			return v
+		}
+		log.Printf("Invalid integer for %s: %s", key, value)
+	}
+	return fallback
+}
+
+func getDurationEnv(key string, fallback time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if dur, err := time.ParseDuration(value); err == nil {
+			return dur
+		}
+		if secs, err := strconv.Atoi(value); err == nil {
+			return time.Duration(secs) * time.Second
+		}
+		log.Printf("Invalid duration for %s: %s", key, value)
+	}
+	return fallback
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if v, err := strconv.ParseBool(value); err == nil {
+			return v
+		}
+		log.Printf("Invalid boolean for %s: %s", key, value)
 	}
 	return fallback
 }
@@ -121,7 +171,28 @@ func initDB(cfg *Config) error {
 		w_pt DOUBLE PRECISION,
 		h_pt DOUBLE PRECISION,
 		created_at TIMESTAMPTZ DEFAULT NOW()
-	);`
+	);
+
+	CREATE TABLE IF NOT EXISTS stage.annotations_outbox (
+		id BIGSERIAL PRIMARY KEY,
+		event_id TEXT UNIQUE,
+		project_id TEXT NOT NULL,
+		payload JSONB NOT NULL,
+		schema_version TEXT,
+		shard_path TEXT,
+		created_at TIMESTAMPTZ DEFAULT NOW(),
+		processed_at TIMESTAMPTZ,
+		attempts INT DEFAULT 0,
+		last_error TEXT,
+		locked_at TIMESTAMPTZ
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_annotations_outbox_pending
+		ON stage.annotations_outbox (processed_at, created_at);
+
+	CREATE INDEX IF NOT EXISTS idx_annotations_outbox_project
+		ON stage.annotations_outbox (project_id, processed_at);
+	`
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		// Log but don't fail - tables might already exist
@@ -174,14 +245,14 @@ func webhookHandler(cfg *Config) http.HandlerFunc {
 			payload.Task["id"],
 			payload.Project["id"])
 
-		// Process annotation if database is available
-		if db != nil && payload.Action == "ANNOTATION_CREATED" {
+		if db != nil && cfg.EnableDBIndex && payload.Action == "ANNOTATION_CREATED" {
 			go processAnnotation(payload)
 		}
 
-		// Store to HuggingFace if configured
-		if cfg.HFToken != "" && cfg.HFRepo != "" {
-			go storeToHuggingFace(cfg, payload)
+		if db != nil && cfg.HFToken != "" && cfg.HFRepo != "" && shouldEnqueueAction(payload.Action) {
+			if err := enqueueAnnotation(payload, cfg); err != nil {
+				log.Printf("Failed to enqueue annotation for HuggingFace: %v", err)
+			}
 		}
 
 		// Return success immediately
@@ -212,7 +283,7 @@ func ingestHandler(cfg *Config) http.HandlerFunc {
 			len(payload.Annotations))
 
 		// Process tasks if database is available
-		if db != nil {
+		if db != nil && cfg.EnableDBIndex {
 			go processTasks(payload)
 		}
 
@@ -223,6 +294,15 @@ func ingestHandler(cfg *Config) http.HandlerFunc {
 			"project_id": payload.ProjectID,
 			"task_count": len(payload.Tasks),
 		})
+	}
+}
+
+func shouldEnqueueAction(action string) bool {
+	switch strings.ToUpper(action) {
+	case "ANNOTATION_CREATED", "ANNOTATION_UPDATED":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -372,38 +452,6 @@ func processCSVTask(task map[string]interface{}, rows []interface{}) {
 	}
 }
 
-func storeToHuggingFace(cfg *Config, payload WebhookPayload) {
-	// Format annotation for storage
-	record := map[string]interface{}{
-		"timestamp":  time.Now().Format(time.RFC3339),
-		"action":     payload.Action,
-		"project_id": payload.Project["id"],
-		"task_id":    payload.Task["id"],
-		"annotation": payload.Annotation,
-		"task_data":  payload.Task["data"],
-	}
-
-	// Convert to JSONL
-	jsonData, err := json.Marshal(record)
-	if err != nil {
-		log.Printf("Error marshaling HF record: %v", err)
-		return
-	}
-
-	// Generate file path
-	date := time.Now().Format("2025-10-06")
-	projectID := fmt.Sprintf("%v", payload.Project["id"])
-
-	filepath := strings.ReplaceAll(cfg.SubdirTemplate, "{date}", date)
-	filepath = strings.ReplaceAll(filepath, "{project_id}", projectID)
-
-	log.Printf("Would store to HuggingFace: repo=%s, path=%s, size=%d",
-		cfg.HFRepo, filepath, len(jsonData))
-
-	// Note: Actual HF upload requires HTTP client to call HF API
-	// This is simplified for the Go version
-}
-
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	status := map[string]interface{}{
 		"ok":       true,
@@ -432,6 +480,19 @@ func main() {
 	if err := initDB(cfg); err != nil {
 		log.Printf("Warning: Database initialization failed: %v", err)
 		// Continue without database
+	}
+
+	var outboxCancel context.CancelFunc
+	if db != nil && cfg.HFToken != "" && cfg.HFRepo != "" {
+		processor := newOutboxProcessor(db, cfg)
+		ctx, cancel := context.WithCancel(context.Background())
+		outboxCancel = cancel
+		log.Printf("Outbox processor enabled: repo=%s batch=%d interval=%s branch=%s",
+			cfg.HFRepo, cfg.OutboxBatchSize, cfg.OutboxInterval, cfg.HFBranch)
+		go processor.run(ctx)
+	}
+	if outboxCancel != nil {
+		defer outboxCancel()
 	}
 
 	mux := http.NewServeMux()

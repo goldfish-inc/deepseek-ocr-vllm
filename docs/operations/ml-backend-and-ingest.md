@@ -12,8 +12,8 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
     - CSV → header‑aware flattening → NER (simplified in Go)
 - Sink: `annotations-sink` (**Go service**, ~50Mi RAM) in namespace `apps`
   - Health: `/health` (includes DB connectivity status)
-  - Webhook: `/webhook` for annotation events (appends JSONL to HF dataset; writes spans to stage.extractions)
-  - Ingest: `/ingest` for task‑create events (writes raw rows to `stage.table_ingest` and flattened text to `stage.documents`)
+  - Webhook: `/webhook` for annotation events — enqueues to a Postgres outbox and asynchronously commits JSONL shards to the Hugging Face dataset repo (`hfDatasetRepo`), while keeping spans in `stage.*` tables for metrics/QC.
+  - Ingest: `/ingest` for task-create events (writes raw rows to `stage.table_ingest` and flattened text to `stage.documents`)
 - Provisioner (one‑off Job): `ls-provisioner-ner-data`
   - Connects ML backend to project `NER_Data`
   - Applies full NER labeling interface (from ESC `NER_LABELS` or `labels.json`)
