@@ -160,6 +160,26 @@ psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schem
 
 - **Why do database migrations fail in GitHub Actions?** → The CrunchyBridge database has firewall rules that only allow specific IPs. GitHub Actions runners use dynamic IPs from large CIDR ranges. For security, we don't whitelist all GitHub IPs. Run migrations manually from an allowed IP or use workflow_dispatch with a self-hosted runner that has database access.
 
+- **How do I add a new node to the CrunchyBridge firewall?** → Use the `cb` CLI:
+  ```bash
+  # List current firewall rules
+  cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
+
+  # Add new node IP (use /32 for single IP)
+  cb network add-firewall-rule \
+    --network ooer7tenangenjelkxbkgz6sdi \
+    --rule <NODE_IP>/32 \
+    --description "<hostname> - K3s worker node"
+
+  # Verify connectivity from the node
+  ssh <node> "nc -zv 18.116.211.217 5432"
+  ```
+  Current allowlist (as of 2025-10-10):
+  - `157.173.210.123/32` - srv712429 (tethys)
+  - `191.101.1.3/32` - srv712695 (styx)
+
+  See `CLAUDE.md` "CrunchyBridge Firewall Management" section for details.
+
 - **What's the difference between cleandata and the old postgres database?** → The `cleandata` database is the new dedicated database for our data pipeline (CSV ingestion, staging, curation). The old `postgres` database is being phased out. All new data pipeline components should use `cleandata`.
 
 - **Where is the ebisu backend database?** → Ebisu backend will read from the `cleandata` database's curated schemas. Label Studio (deployed in oceanid cluster) uses the separate `labelfish` database.

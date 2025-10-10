@@ -494,6 +494,39 @@ kubectl get imageupdateautomation flux-system -n flux-system
      - Database: `labelfish`
      - URL format: `postgresql://user:pass@host:5432/labelfish?sslmode=require`
 
+9. **Worker Pods Cannot Reach CrunchyBridge** (timeout on database connections):
+   - **Root Cause**: Worker node IP not in CrunchyBridge firewall allowlist
+   - **Symptom**: Pods timeout connecting to database (15s timeout), CrashLoopBackOff
+   - **Diagnosis**:
+     ```bash
+     # SSH to the affected node and test connectivity
+     nc -zv 18.116.211.217 5432
+     ```
+   - **Fix**: Add node IP to CrunchyBridge firewall using `cb` CLI
+     ```bash
+     # List networks
+     cb network list
+
+     # Add firewall rule (use /32 for single IP)
+     cb network add-firewall-rule \
+       --network <NETWORK_ID> \
+       --rule <NODE_IP>/32 \
+       --description "<node-hostname> - K3s worker node"
+     ```
+   - **Verification**:
+     ```bash
+     # Test connectivity from node
+     nc -zv 18.116.211.217 5432
+
+     # Delete crashlooping pod to force fresh restart
+     kubectl -n apps delete pod <pod-name>
+
+     # Verify pod starts successfully
+     kubectl -n apps get pods -l app=<app-name>
+     kubectl -n apps logs <pod-name> --tail=30
+     ```
+   - See issue #92 for detailed resolution example
+
 ## Database Management
 
 ### Label Studio Database (Crunchy Bridge)
@@ -535,6 +568,54 @@ kubectl -n apps run dbtest --rm -i --image=postgres:16-alpine \
   --env="DATABASE_URL=<url>" \
   --command -- sh -c 'psql "$DATABASE_URL" -c "SELECT current_database(), current_user;"'
 ```
+
+### CrunchyBridge Firewall Management
+
+**Network**: `ebisu-network` (ID: `ooer7tenangenjelkxbkgz6sdi`)
+
+CrunchyBridge uses IP-based firewall allowlists to control database access. All cluster nodes that run pods connecting to the database must be in the allowlist.
+
+**Current Allowlist** (as of 2025-10-10):
+- `157.173.210.123/32` - srv712429 (tethys) - Boston K3s control plane + worker
+- `191.101.1.3/32` - srv712695 (styx) - Phoenix K3s worker node
+
+**Adding New Nodes**:
+```bash
+# Authenticate with CrunchyBridge CLI (one-time)
+cb network list  # Will prompt browser login
+
+# List current firewall rules
+cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
+
+# Add new node IP (use /32 for single IP)
+cb network add-firewall-rule \
+  --network ooer7tenangenjelkxbkgz6sdi \
+  --rule <NODE_IP>/32 \
+  --description "<hostname> - K3s worker node"
+
+# Verify connectivity from node
+ssh <node> "nc -zv 18.116.211.217 5432"
+```
+
+**CIDR Notation**:
+- `/32` = Single IP address (use for individual nodes)
+- `/24` = 256 addresses (e.g., `192.168.1.0/24` = `192.168.1.0` - `192.168.1.255`)
+- Always use `/32` for K3s nodes unless using a subnet
+
+**Removing Decommissioned Nodes**:
+```bash
+# List rules to find the rule ID
+cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
+
+# Remove the rule
+cb network remove-firewall-rule --network ooer7tenangenjelkxbkgz6sdi --rule <RULE_ID>
+```
+
+**Important Notes**:
+- Firewall changes take effect immediately (no restart required)
+- Pods on newly allowed nodes may need manual restart to clear CrashLoopBackOff state
+- Always test connectivity with `nc -zv` before restarting pods
+- Keep descriptions up-to-date for node identification
 
 ## Security Considerations
 
