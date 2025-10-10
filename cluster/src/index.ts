@@ -281,6 +281,7 @@ const awsExportPrefix = cfg.get("aws.labelStudio.exportPrefix") || "annotations/
 const awsImportRegex = cfg.get("aws.labelStudio.importRegex") || ".*\\.(csv|xlsx|xls|pdf|jpg|jpeg|png|txt)$";
 const awsImportTitle = cfg.get("aws.labelStudio.importTitle") || "S3 Import";
 const awsExportTitle = cfg.get("aws.labelStudio.exportTitle") || "S3 Export";
+const nerLabelsJson = cfg.get("nerLabels");
 
 // Sync ESC secrets to Kubernetes for Flux-managed Label Studio
 let labelStudioSecrets: LabelStudioSecrets | undefined;
@@ -784,7 +785,6 @@ const enableProjectBootstrapperService = cfg.getBoolean("enableProjectBootstrapp
 let projectBootstrapper: ProjectBootstrapper | undefined;
 if (enableProjectBootstrapperService) {
     const lsPat = cfg.getSecret("labelStudioPat");
-    const nerLabelsJson = cfg.get("nerLabels");
     const bootstrapperImage = cfg.get("bootstrapperImage");
     const bootstrapperImageTag = cfg.get("bootstrapperImageTag") || "main";
 
