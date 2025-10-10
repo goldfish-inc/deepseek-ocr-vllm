@@ -15,7 +15,8 @@ export interface CSVIngestionWorkerArgs {
 export class CSVIngestionWorker extends pulumi.ComponentResource {
     public readonly deployment: k8s.apps.v1.Deployment;
     public readonly service: k8s.core.v1.Service;
-    public readonly serviceMonitor: k8s.apiextensions.CustomResource;
+    // ServiceMonitor disabled until Prometheus is installed
+    // public readonly serviceMonitor: k8s.apiextensions.CustomResource;
 
     constructor(name: string, args: CSVIngestionWorkerArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:apps:CSVIngestionWorker", name, {}, opts);
@@ -218,28 +219,28 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
             },
         }, { parent: this });
 
-        // ServiceMonitor for Prometheus
-        this.serviceMonitor = new k8s.apiextensions.CustomResource(`${name}-servicemonitor`, {
-            apiVersion: "monitoring.coreos.com/v1",
-            kind: "ServiceMonitor",
-            metadata: {
-                namespace: args.namespace,
-                labels: {
-                    ...labels,
-                    "prometheus": "kube-prometheus",
-                },
-            },
-            spec: {
-                selector: {
-                    matchLabels: labels,
-                },
-                endpoints: [{
-                    port: "http",
-                    interval: "30s",
-                    path: "/metrics",
-                }],
-            },
-        }, { parent: this });
+        // ServiceMonitor for Prometheus - disabled until Prometheus is installed
+        // this.serviceMonitor = new k8s.apiextensions.CustomResource(`${name}-servicemonitor`, {
+        //     apiVersion: "monitoring.coreos.com/v1",
+        //     kind: "ServiceMonitor",
+        //     metadata: {
+        //         namespace: args.namespace,
+        //         labels: {
+        //             ...labels,
+        //             "prometheus": "kube-prometheus",
+        //         },
+        //     },
+        //     spec: {
+        //         selector: {
+        //             matchLabels: labels,
+        //         },
+        //         endpoints: [{
+        //             port: "http",
+        //             interval: "30s",
+        //             path: "/metrics",
+        //         }],
+        //     },
+        // }, { parent: this });
 
         // Register outputs
         this.registerOutputs({
