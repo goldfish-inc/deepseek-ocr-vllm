@@ -13,14 +13,24 @@ This document catalogs the storages we use, what each one is for, and how to con
 
 - Purpose: Durable storage of uploaded files and Cloud Storage task sources
 - Bucket: `labelstudio-goldfish-uploads`
-- ESC keys (cluster stack):
+- ESC / Pulumi config keys (cluster stack):
   - `pulumiConfig.oceanid-cluster:aws.labelStudio.accessKeyId`
   - `pulumiConfig.oceanid-cluster:aws.labelStudio.secretAccessKey`
-  - `pulumiConfig.ocean-cluster:aws.labelStudio.bucketName`
+  - `pulumiConfig.oceanid-cluster:aws.labelStudio.bucketName`
   - `pulumiConfig.oceanid-cluster:aws.labelStudio.region`
-- LS Deployment uses these via env:
-  - `USE_BLOB_URLS=true`, `AWS_*`
-- Note: S3 is not a database; it stores files referenced by tasks.
+  - Optional overrides:
+    - `aws.labelStudio.endpoint` (S3-compatible endpoint)
+    - `aws.labelStudio.importPrefix`
+    - `aws.labelStudio.exportPrefix`
+    - `aws.labelStudio.importRegex`
+    - `aws.labelStudio.importTitle` / `aws.labelStudio.exportTitle`
+- Label Studio Helm chart reads `AWS_*` env vars for file persistence (`persistence.type: s3`).
+- **Per-project storage is now automated**:
+  - The provisioner job calls `/api/storages/s3/` and `/api/storages/export/s3/` to create project-scoped import/export storage using the ESC values above.
+  - Import storage defaults to presigned URLs (`use_blob_urls=true`, `presign=true`) and triggers `/sync` immediately so assets appear without manual UI work.
+  - Update prefixes/regex/titles via the Pulumi config keys listed above.
+- Remember to configure bucket CORS (`https://label.boathou.se` origin, GET/PUT/POST methods) so presigned URLs load correctly from the browser.
+- Note: S3 remains a file store; all project metadata/annotations still live in Postgres.
 
 ## 2) Label Studio App DB (labelfish)
 
