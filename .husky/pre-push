@@ -1,0 +1,48 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Pre-push hook to run Go tests for CSV ingestion worker
+# This prevents pushing broken code that would cause deploy failures
+
+echo "🧪 Running pre-push checks..."
+
+# Check if CSV worker code changed
+CSV_WORKER_CHANGED=$(git diff --name-only @{upstream}...HEAD 2>/dev/null | grep '^apps/csv-ingestion-worker/' || true)
+
+if [ -n "$CSV_WORKER_CHANGED" ]; then
+    echo "📦 CSV ingestion worker code changed, running tests..."
+
+    cd apps/csv-ingestion-worker
+
+    # Check if Go is installed
+    if ! command -v go >/dev/null 2>&1; then
+        echo "⚠️  Go not installed, skipping tests"
+        cd ../..
+        exit 0
+    fi
+
+    # Run go test
+    echo "  → Running go test..."
+    if ! go test ./...; then
+        echo "❌ CSV worker tests failed!"
+        echo "Fix the tests before pushing, or use --no-verify to skip this check."
+        cd ../..
+        exit 1
+    fi
+
+    # Check if code compiles
+    echo "  → Checking if code compiles..."
+    if ! go build -o /dev/null .; then
+        echo "❌ CSV worker build failed!"
+        echo "Fix the build errors before pushing, or use --no-verify to skip this check."
+        cd ../..
+        exit 1
+    fi
+
+    cd ../..
+    echo "✅ CSV worker tests passed"
+else
+    echo "  CSV worker unchanged, skipping tests"
+fi
+
+echo "✅ Pre-push checks complete"

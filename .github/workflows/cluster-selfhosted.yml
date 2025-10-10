@@ -104,6 +104,60 @@ jobs:
           chmod +x cluster/scripts/preflight-check.sh
           cluster/scripts/preflight-check.sh
 
+      - name: Validate Container Images
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "🔍 Validating container images before deployment..."
+
+          # Get CSV worker image from ESC
+          CSV_IMAGE=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:csvWorkerImage --value string || echo "")
+
+          if [ -n "$CSV_IMAGE" ]; then
+            echo "📦 Testing CSV worker image: $CSV_IMAGE"
+
+            # Pull image
+            docker pull "$CSV_IMAGE" || {
+              echo "❌ Failed to pull CSV worker image: $CSV_IMAGE"
+              exit 1
+            }
+
+            # Run smoke test - container should start
+            docker run --rm -d \
+              --name csv-worker-test \
+              -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
+              -e S3_BUCKET="test-bucket" \
+              -e LABEL_STUDIO_URL="http://test" \
+              "$CSV_IMAGE" || {
+              echo "❌ CSV worker container failed to start"
+              exit 1
+            }
+
+            # Wait for startup (max 15 seconds)
+            echo "⏳ Waiting for container to initialize..."
+            for i in {1..15}; do
+              if ! docker ps | grep -q csv-worker-test; then
+                echo "❌ Container crashed during startup!"
+                docker logs csv-worker-test 2>&1 || true
+                exit 1
+              fi
+              sleep 1
+            done
+
+            # Check if health endpoint exists (may fail if DB not reachable, that's ok)
+            docker exec csv-worker-test wget --spider -q http://localhost:8080/live || {
+              echo "⚠️  Health endpoint not responding (expected without real DB)"
+            }
+
+            # Cleanup
+            docker stop csv-worker-test || true
+
+            echo "✅ CSV worker image validation passed"
+          else
+            echo "ℹ️  No csvWorkerImage in ESC, skipping validation"
+          fi
+
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1
         with:
