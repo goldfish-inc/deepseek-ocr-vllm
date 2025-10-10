@@ -71,7 +71,7 @@ flowchart TB
 
 ## Milestones
 
-### Phase 1: Data Ingestion Pipeline (Completed Oct 2025)
+### Phase 1: Data Ingestion Pipeline (In Progress - Oct 2025)
 
 1) **GPU + Pre‑labels** ✅
    - Triton on GPU, Cloudflare tunnel, Adapter, DistilBERT support
@@ -79,17 +79,26 @@ flowchart TB
 2) **Annotations Sink** ✅
    - Write annotations to HF; persist cleaned extractions to PG
 
-3) **CSV Ingestion Worker** ✅
+3) **CSV Ingestion Worker** ⚠️ **BLOCKED - Schema/Code Mismatches**
    - Go microservice processing Label Studio webhooks
    - Confidence scoring and rule-based data cleaning
    - Bulk PostgreSQL inserts with pq.CopyInSchema
-   - Deployed to Kubernetes with <128Mi footprint
+   - **CRITICAL ISSUES**:
+     - Schema/code mismatch in `cleaning_rules` (expects `source_type`, `source_name`, `column_name`, `is_active` but schema has `applies_to_columns[]`, `applies_to_sources[]`, `active`)
+     - Missing `processing_stage` column in `document_processing_log`
+     - `csv_extractions` column type mismatches (`rule_chain`, `similarity`, `review_status`)
+     - Missing IMO/MMSI validators (only regex currently)
+     - Missing source-specific rule fallback logic
+     - Threshold sign bug (trusted/untrusted)
+     - No review queue population
+     - Webhook signature verification incomplete
+     - See #85 for full details
 
-4) **Cleandata Database** ✅
+4) **Cleandata Database** ⚠️ **PARTIAL - Schema Inconsistencies**
    - Separate database for data pipeline (cleandata)
-   - Consolidated schema with all tables and indexes
+   - Consolidated schema created BUT does not match worker code expectations
    - Full medallion architecture: raw → stage → curated
-   - Database migrations via GitHub Actions
+   - **NEEDS**: Schema alignment decision (consolidated vs V3-V6 migrations)
 
 ### Phase 2: Data Processing & Quality (In Progress)
 
