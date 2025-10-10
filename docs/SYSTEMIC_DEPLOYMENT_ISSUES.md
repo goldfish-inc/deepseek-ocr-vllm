@@ -46,7 +46,26 @@ csv-ingestion-worker-zzz  ghcr.io/.../csv-ingestion-worker@sha256:8f54f5f991cd..
 
 ### Fix Status
 
-✅ Implemented for CSV Worker (via immutable SHA tags)
+✅ **RESOLVED** (commit `b749889`, deployed 2025-10-10)
+
+**Implementation:**
+- CI tags images with full commit SHA: `ghcr.io/.../csv-ingestion-worker:b74988961c2aa75b0395ad6657791b56671c9907`
+- `deploy-cluster.yml` updates ESC `pulumiConfig.oceanid-cluster:csvWorkerImage`
+- Pulumi deployment detects image change → triggers rolling update automatically
+- No manual `kubectl rollout restart` needed
+
+**Verified Working:**
+```bash
+$ kubectl -n apps get pod csv-ingestion-worker-deployment-09c71547-7d8bbc7bc4-jgqlg \
+    -o jsonpath='{.spec.containers[0].image}'
+ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:b74988961c2aa75b0395ad6657791b56671c9907
+
+$ kubectl -n apps exec deploy/csv-ingestion-worker-deployment-09c71547 -- \
+    wget -qO- http://localhost:8080/health
+{"status":"healthy","rules_loaded":1,"timestamp":"2025-10-10T02:54:45Z"}
+```
+
+**Next:** Roll out to adapter, sink, project-bootstrapper, training-worker
 
 **Option A: Use Immutable Image Tags** (Recommended and now used for CSV Worker)
 ```yaml
