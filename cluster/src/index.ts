@@ -625,6 +625,8 @@ if (enableProjectBootstrapperService) {
 const enableCsvIngestionWorker = cfg.getBoolean("enableCsvIngestionWorker") ?? true;
 let csvIngestionWorker: CSVIngestionWorker | undefined;
 if (enableCsvIngestionWorker) {
+    // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
+    const csvWorkerImage = cfg.get("csvWorkerImage");
     const csvWorkerImageTag = cfg.get("csvWorkerImageTag") || "main";
     // Get cleandata database URL for CSV worker (separate from Label Studio DB)
     const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
@@ -636,7 +638,8 @@ if (enableCsvIngestionWorker) {
         s3Region: awsRegion,
         labelStudioUrl: "http://label-studio.apps.svc.cluster.local:8080",
         reviewManagerUrl: "http://review-queue-manager.apps.svc.cluster.local:8080",
-        imageTag: csvWorkerImageTag,
+        image: (csvWorkerImage as any) || undefined,
+        imageTag: csvWorkerImage ? undefined : csvWorkerImageTag,
         replicas: 2,
     }, { provider: k8sProvider });
 }

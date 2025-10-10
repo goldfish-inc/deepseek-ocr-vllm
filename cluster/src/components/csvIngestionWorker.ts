@@ -8,6 +8,8 @@ export interface CSVIngestionWorkerArgs {
     s3Region?: pulumi.Input<string>;
     labelStudioUrl: pulumi.Input<string>;
     reviewManagerUrl?: pulumi.Input<string>;
+    // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
+    image?: pulumi.Input<string>;
     imageTag?: pulumi.Input<string>;
     replicas?: pulumi.Input<number>;
 }
@@ -23,6 +25,8 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
 
         const labels = { app: "csv-ingestion-worker", component: "data-pipeline" };
         const imageTag = args.imageTag || "main";
+        const baseImage = "ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker";
+        const imageRef = args.image || pulumi.interpolate`${baseImage}:${imageTag}`;
 
         // ConfigMap for confidence thresholds
         const confidenceConfig = new k8s.core.v1.ConfigMap(`${name}-config`, {
@@ -84,7 +88,7 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
                         },
                         containers: [{
                             name: "csv-worker",
-                            image: pulumi.interpolate`ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:${imageTag}`,
+                            image: imageRef,
                             imagePullPolicy: "Always",
                             ports: [{
                                 name: "http",

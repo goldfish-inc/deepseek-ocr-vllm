@@ -31,6 +31,35 @@ flowchart LR
 - **Review Queue**: Flags low-confidence data for human validation
 - **Metrics**: Prometheus-compatible metrics endpoint
 
+## Local Development
+
+### Docker Buildx Workflow (Recommended)
+
+**IMPORTANT**: Always use Docker Buildx for local development, not `go build`. This ensures:
+- Platform consistency (same image locally and in CI)
+- No architecture drift (avoid "works on my Mac" issues)
+- Multi-platform builds (linux/amd64, linux/arm64)
+- Test the actual container that deploys to production
+
+```bash
+# Build multi-platform image locally
+cd apps/csv-ingestion-worker
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:local \
+  --load .
+
+# Test the container
+docker run --rm -p 8080:8080 \
+  -e DATABASE_URL="postgresql://..." \
+  -e S3_BUCKET="test-bucket" \
+  ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:local
+
+# Health check
+curl http://localhost:8080/health
+```
+
+**Note**: The compiled `csv-ingestion-worker` binary is gitignored. CI builds the production image via GitHub Actions.
+
 ## Configuration
 
 ### Environment Variables
@@ -95,7 +124,7 @@ spec:
     spec:
       containers:
       - name: csv-worker
-        image: ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:main
+        image: ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:${GIT_SHA}
         resources:
           requests:
             memory: "64Mi"

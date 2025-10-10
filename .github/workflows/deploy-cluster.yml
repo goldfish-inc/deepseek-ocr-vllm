@@ -14,6 +14,9 @@ on:
       sink_image:
         description: 'Sink image tag (leave empty to use latest SHA)'
         required: false
+      csv_image:
+        description: 'CSV worker image tag (leave empty to use latest SHA)'
+        required: false
 
 permissions:
   contents: read
@@ -52,12 +55,19 @@ jobs:
             SINK_IMAGE="ghcr.io/goldfish-inc/oceanid/annotations-sink:${COMMIT_SHA}"
           fi
 
+          CSV_IMAGE="${{ inputs.csv_image }}"
+          if [ -z "$CSV_IMAGE" ]; then
+            CSV_IMAGE="ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:${COMMIT_SHA}"
+          fi
+
           echo "adapter_image=${ADAPTER_IMAGE}" >> $GITHUB_OUTPUT
           echo "sink_image=${SINK_IMAGE}" >> $GITHUB_OUTPUT
+          echo "csv_image=${CSV_IMAGE}" >> $GITHUB_OUTPUT
 
           echo "Will deploy:"
           echo "  Adapter: ${ADAPTER_IMAGE}"
           echo "  Sink: ${SINK_IMAGE}"
+          echo "  CSV Worker: ${CSV_IMAGE}"
 
       - name: Update ESC config with new image tags
         run: |
@@ -70,6 +80,11 @@ jobs:
             "pulumiConfig.oceanid-cluster:sinkImage" \
             "${{ steps.images.outputs.sink_image }}" \
             --plaintext
+
+          esc env set default/oceanid-cluster \
+            "pulumiConfig.oceanid-cluster:csvWorkerImage" \
+            "${{ steps.images.outputs.csv_image }}" \
+            --plaintext
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
@@ -80,6 +95,7 @@ jobs:
           echo "Image tags updated to:"
           echo "  Adapter: ${{ steps.images.outputs.adapter_image }}"
           echo "  Sink: ${{ steps.images.outputs.sink_image }}"
+          echo "  CSV Worker: ${{ steps.images.outputs.csv_image }}"
           echo ""
           echo "Cluster applies are handled by a GitHub self-hosted runner on a host with kubeconfig access (e.g., tethys)."
           echo "Ensure the runner is online; pushes to main that touch cluster/ will trigger an apply via cluster-selfhosted.yml."
