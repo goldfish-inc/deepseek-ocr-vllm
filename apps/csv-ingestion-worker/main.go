@@ -101,10 +101,11 @@ func main() {
 	}
 	defer db.Close()
 
-	// Initialize S3 client
+	// Initialize S3 client (non-fatal - will be needed when webhooks arrive)
 	s3Client, err := initS3Client(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize S3 client: %v", err)
+		log.Printf("Warning: Failed to initialize S3 client: %v (will retry on webhook)", err)
+		s3Client = nil // Will be lazy-initialized when needed
 	}
 
 	// Initialize metrics
