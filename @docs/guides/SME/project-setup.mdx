@@ -19,6 +19,50 @@ flowchart LR
   Verify --> Done[Ready]
 ```
 
+## How Everything Connects
+
+```mermaid
+flowchart LR
+  subgraph S3["S3 Buckets (Ops managed)"]
+    Import[(Import Prefix)]
+    Export[(Annotations Prefix)]
+  end
+
+  Import -->|Auto-sync| LSProject["Label Studio Project"]
+  LSProject -->|Pre-labels| Adapter["ML Backend (Triton Adapter)"]
+  LSProject -->|Webhooks| Sink["Annotations Sink"]
+  LSProject -->|Exports| Export
+  Adapter -->|Suggestions| SMEUI["SME Browser"]
+  Sink --> HF["Hugging Face Dataset"]
+  Sink --> PG["Clean Data DB (cleandata)"]
+
+  classDef storage fill:#eef7ff,stroke:#87b0ff,color:#003b82;
+  classDef service fill:#fdf2d0,stroke:#f4b63d,color:#5c3f00;
+  classDef human fill:#daf5d8,stroke:#5daa4b,color:#2f6b25;
+
+  class Import,Export,S3 storage;
+  class LSProject,Sink,Adapter service;
+  class SMEUI human;
+```
+
+**Key takeaways for SMEs**
+
+- Files you drop into the shared S3 prefix appear in your project automatically—no manual configuration or sync buttons needed.
+- Completed annotations are copied safely to a separate S3 prefix and forwarded to the training dataset; you do not have to download exports manually.
+- Model suggestions come from the in-cluster “Triton Adapter” service; reconnect via Settings → Model if the project is cloned or duplicated.
+
+## Quick Reference
+
+| Task | Where to click | What happens | Notes |
+| ---- | -------------- | ------------ | ----- |
+| Create a project | Dashboard → New Project | Title/description saved | Project is provisioned with S3 + ML backend within ~1 minute |
+| Upload files | Project → Tasks → Upload | Files land in S3 (import prefix) and appear as tasks automatically | Supports PDF, CSV/XLSX, TXT, images |
+| Check storage status | Project → Cloud Storage | You should see “S3 Import” and “S3 Export” entries already added by Ops | Contact Ops if you need a different bucket/prefix |
+| Get model suggestions | Open any task → “Get predictions” | Triton Adapter provides pre-labels | Works best when “Show predictions” is enabled |
+| Verify webhooks | Project → Settings → Webhooks | Expect `/ingest` and `/webhook` entries | Webhooks keep the pipeline up to date |
+
+If something looks off (missing storage, predictions not appearing, etc.), skip to the FAQ section at the end of this guide.
+
 ## 1) Create Project
 
 - Click New Project
@@ -212,9 +256,59 @@ This will:
 
 If your project title is different or you prefer ID‑based targeting, use `scripts/provision-ls-project.py --id <ID>`.
 
-## Troubleshooting
+## FAQ & Troubleshooting
 
-- No Labeling Interface found: paste the minimal XML or run the script
-- Backend test fails: confirm URL and that the adapter is reachable in cluster; try again
-- No predictions: ensure the Model is connected and Auto‑annotation/Show predictions are enabled
-- Webhooks missing: ask ops to re‑register; tasks and annotations should trigger sink endpoints
+```mermaid
+mindmap
+  root((Need help?))
+    Storage
+      "Entries missing?":::action
+      "All good by default":::ok
+    Uploads
+      "Files not appearing":::action
+      "Check file type":::tip
+    Predictions
+      "No suggestions":::action
+      "Reconnect model":::tip
+    Webhooks
+      "Errors in list":::action
+      "Contact Ops":::tip
+
+classDef ok fill:#daf5d8,stroke:#5daa4b,color:#2f6b25;
+classDef action fill:#ffe0e0,stroke:#ff7a7a,color:#b30000;
+classDef tip fill:#eef7ff,stroke:#87b0ff,color:#003b82;
+```
+
+**Storage entries are missing in the UI**
+
+- Go to Settings → Cloud Storage. You should see “S3 Import” and “S3 Export”.
+- If they are missing, don’t add them manually—ping Ops so we can rerun the provisioner or adjust the bucket/prefix.
+- Remember: uploads still land in the bucket even if the UI entry is temporarily absent.
+
+**Uploaded files aren’t showing up as tasks**
+
+- Refresh the project once; large PDFs can take a minute to process.
+- Check that the filename matches the allowed patterns (default accepts `.pdf, .csv, .xlsx, .xls, .txt, .jpg, .png`).
+- If the file is outside the managed prefix, ask Ops to update the prefix or drop the file into the correct folder.
+
+**Model suggestions are missing**
+
+- Settings → Model → ensure the URL is `http://ls-triton-adapter.apps.svc.cluster.local:9090`.
+- Click “Test”. If it fails, press “Reconnect” (no credentials needed) and retest.
+- In Settings → Annotation, confirm “Show predictions” (and optionally “Auto-annotation”) is enabled.
+
+**Webhook status shows errors**
+
+- Settings → Webhooks should list `/ingest` and `/webhook`. If you see errors, click “Last log” and share the message with Ops.
+- Do not delete the webhook entries; Ops will fix the downstream service.
+
+**Need a different S3 bucket or custom prefix?**
+
+- Submit an Ops request with the desired bucket, prefix, and (optionally) a regex of allowed file types.
+- Ops updates Pulumi and reruns the provisioner so everyone keeps a consistent setup.
+
+**How to contact Ops**
+
+- Slack: `#ops-support`
+- Request form: “AI Ops Support” in the internal portal
+- Include project name, approximate time of issue, and screenshots or error messages if available
