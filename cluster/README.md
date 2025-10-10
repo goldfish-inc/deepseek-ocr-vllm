@@ -21,7 +21,7 @@ This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational 
 
 ## Deployment Model (Default)
 
-This stack is deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). Do not run `pulumi up` from GitHub‑hosted runners.
+This stack is deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). The workflow is responsible for providing `KUBECONFIG` to the Pulumi program. Do not run `pulumi up` from GitHub‑hosted runners without a self‑hosted agent and kubeconfig.
 
 ### Self‑Hosted Actions Runner (Required)
 
@@ -29,6 +29,28 @@ Install a GitHub Actions runner on tethys and register it to this repository or 
 
 Monitoring:
 - GitHub Actions → Deploy Cluster (self‑hosted)
+
+### Kubeconfig Provisioning (CI Service)
+
+- The self‑hosted workflow loads kubeconfig into `$RUNNER_TEMP/kubeconfig.yaml` and exports `KUBECONFIG`.
+- Preferred source: Pulumi ESC key `pulumiConfig.oceanid-cluster:kubeconfig` (stored as a secret value).
+- Alternative: Pre‑configure the runner environment to export `KUBECONFIG` to an existing kubeconfig file path.
+
+Store kubeconfig in ESC (recommended):
+
+```bash
+esc env set default/oceanid-cluster \
+  pulumiConfig.oceanid-cluster:kubeconfig \
+  "$(cat ~/.kube/k3s-config.yaml)" \
+  --secret
+```
+
+Pulumi config/env requirements:
+
+- `oceanid-cluster:kubeconfigPath` Pulumi config key, or
+- `KUBECONFIG` environment variable set by the CI job.
+
+There is no default path: if neither is provided, the program fails fast with a clear error.
 
 ### Manual Fallback (Discouraged)
 
@@ -40,7 +62,11 @@ pnpm install && pnpm build
 PULUMI_CONFIG_PASSPHRASE=… pulumi up
 ```
 
-Prereqs: SSH tunnel to control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access)) and kubeconfig at `~/.kube/k3s-config.yaml`.
+Prereqs: SSH tunnel to control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access)) and `KUBECONFIG` exported to your kubeconfig path, e.g.:
+
+```bash
+export KUBECONFIG=~/.kube/k3s-config.yaml
+```
 
 ## Stack Configuration
 

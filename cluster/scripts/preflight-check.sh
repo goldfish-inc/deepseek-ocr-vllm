@@ -4,8 +4,11 @@ set -euo pipefail
 # Pre-flight checks for cluster deployment
 # Catches ownership conflicts before Pulumi/Helm deployment
 
-KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s-config.yaml}"
-export KUBECONFIG
+# Require KUBECONFIG to be provided by the workflow environment
+if [ -z "${KUBECONFIG:-}" ]; then
+  echo "❌ KUBECONFIG is not set. The CI workflow must provide a kubeconfig via environment or ESC."
+  exit 1
+fi
 
 echo "🔍 Running pre-flight checks..."
 

@@ -53,18 +53,41 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
+      - name: Install ESC CLI
+        run: |
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: Load kubeconfig from ESC (optional)
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Try to load kubeconfig content from ESC. If not present, skip.
+          if esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfig --show-secrets --value string >/dev/null 2>&1; then
+            esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfig --show-secrets --value string > "$RUNNER_TEMP/kubeconfig.yaml"
+            echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig.yaml" >> "$GITHUB_ENV"
+            echo "✅ KUBECONFIG loaded from ESC into $RUNNER_TEMP/kubeconfig.yaml"
+          else
+            echo "ℹ️  No kubeconfig found in ESC key pulumiConfig.oceanid-cluster:kubeconfig (skipping)"
+          fi
+
+      - name: Ensure KUBECONFIG is set
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBECONFIG:-}" ]; then
+            echo "❌ KUBECONFIG is not set. Configure the self-hosted runner to export KUBECONFIG or store kubeconfig in ESC."
+            exit 1
+          fi
+          if [ ! -f "$KUBECONFIG" ]; then
+            echo "❌ KUBECONFIG path '$KUBECONFIG' does not exist or is not a file."
+            exit 1
+          fi
+          echo "✅ Using kubeconfig at: $KUBECONFIG"
+
       - name: Pre-flight Checks
         run: |
           chmod +x cluster/scripts/preflight-check.sh
-          # Try common kubeconfig locations for self-hosted runner
-          if [ -f "$HOME/.kube/k3s-config.yaml" ]; then
-            export KUBECONFIG="$HOME/.kube/k3s-config.yaml"
-          elif [ -f "/home/ubuntu/.kube/k3s-config.yaml" ]; then
-            export KUBECONFIG="/home/ubuntu/.kube/k3s-config.yaml"
-          else
-            echo "⚠️  Kubeconfig not found, skipping pre-flight checks"
-            exit 0
-          fi
           cluster/scripts/preflight-check.sh
 
       - name: Authenticate to Pulumi Cloud (OIDC)
@@ -87,15 +110,6 @@ jobs:
         if: always()
         run: |
           chmod +x cluster/scripts/flux-health-check.sh
-          # Try common kubeconfig locations for self-hosted runner
-          if [ -f "$HOME/.kube/k3s-config.yaml" ]; then
-            export KUBECONFIG="$HOME/.kube/k3s-config.yaml"
-          elif [ -f "/home/ubuntu/.kube/k3s-config.yaml" ]; then
-            export KUBECONFIG="/home/ubuntu/.kube/k3s-config.yaml"
-          else
-            echo "⚠️  Kubeconfig not found, skipping health check"
-            exit 0
-          fi
           # Give controllers time to stabilize after deployment
           echo "Waiting 30 seconds for controllers to stabilize..."
           sleep 30

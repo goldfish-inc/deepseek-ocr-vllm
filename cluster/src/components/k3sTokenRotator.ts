@@ -45,7 +45,7 @@ export class K3sTokenRotator extends pulumi.ComponentResource {
             onePasswordItemId,
             rotationIntervalDays = 90,
             enableAutoRotation = true,
-            kubeconfigPath = "./kubeconfig.yaml"
+            kubeconfigPath
         } = args;
 
         // Check if rotation is needed
@@ -184,13 +184,15 @@ export class K3sTokenRotator extends pulumi.ComponentResource {
         }
 
         // Verify cluster health
+        const exportLine = kubeconfigPath ? `export KUBECONFIG=\"${kubeconfigPath}\"` : "";
+
         const clusterHealthCheck = new command.local.Command(`${name}-health-check`, {
             create: pulumi.interpolate`
                 # Wait a bit for all nodes to stabilize
                 sleep 30
 
                 # Check cluster health
-                export KUBECONFIG="${kubeconfigPath}"
+                ${exportLine}
 
                 echo "Checking cluster health..."
                 kubectl get nodes --no-headers > /tmp/node_status.txt

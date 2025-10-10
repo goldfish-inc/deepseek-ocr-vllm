@@ -67,7 +67,9 @@ export interface ClusterConfig {
 const cfg = new Config();
 const stack = getStack();
 
-const kubeconfigPath = cfg.get("kubeconfigPath") ?? process.env.KUBECONFIG ?? "./kubeconfig.yaml";
+// Source kubeconfig exclusively from Pulumi config or environment. Do not
+// default to a repo-local file; CI/workflow must provide it.
+const kubeconfigPath = cfg.get("kubeconfigPath") ?? (process.env.KUBECONFIG || "");
 const clusterName = cfg.get("clusterName") ?? `oceanid-${stack}`;
 
 const tunnelId = cfg.get("cloudflare_tunnel_id") ?? cfg.require("cloudflareTunnelId");

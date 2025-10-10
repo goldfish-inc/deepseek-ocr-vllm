@@ -4,8 +4,11 @@ set -euo pipefail
 # Flux controller health check
 # Automatically reapplies the Flux Helm template if controllers are missing.
 
-KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s-config.yaml}"
-export KUBECONFIG
+# Require KUBECONFIG to be provided by the workflow environment
+if [ -z "${KUBECONFIG:-}" ]; then
+  echo "❌ KUBECONFIG is not set. The CI workflow must provide a kubeconfig via environment or ESC."
+  exit 1
+fi
 
 if ! command -v kubectl >/dev/null 2>&1; then
   echo "❌ kubectl CLI not found in PATH"
