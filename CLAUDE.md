@@ -52,12 +52,17 @@ Allowed local Pulumi commands (read/config only):
 
 **Git Operations**:
 ```bash
-# Standard git push (uses default SSH keys)
-git push origin main
-
-# Or use Claude Code's dedicated key explicitly
+# REQUIRED: Always use explicit SSH key for Claude Code
 GIT_SSH_COMMAND="ssh -i ~/.ssh/claude-code-gh" git push origin main
+
+# Standard git push does NOT work (SSH agent not configured)
+# git push origin main  # ❌ Will fail with "Permission denied (publickey)"
 ```
+
+**IMPORTANT for AI Assistants**:
+- Always use `GIT_SSH_COMMAND="ssh -i ~/.ssh/claude-code-gh"` when pushing
+- Do NOT use plain `git push` - it will fail due to SSH agent configuration
+- The claude-code-gh key is the only authorized key for this repo
 
 **GitHub CLI**:
 - Uses `gh auth` token (not SSH)
