@@ -17,6 +17,12 @@ on:
       csv_image:
         description: 'CSV worker image tag (leave empty to use latest SHA)'
         required: false
+      bootstrapper_image:
+        description: 'Project bootstrapper image tag (leave empty to use latest SHA)'
+        required: false
+      training_worker_image:
+        description: 'Training worker image tag (leave empty to use latest SHA)'
+        required: false
 
 permissions:
   contents: read
@@ -60,14 +66,28 @@ jobs:
             CSV_IMAGE="ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:${COMMIT_SHA}"
           fi
 
+          BOOTSTRAPPER_IMAGE="${{ inputs.bootstrapper_image }}"
+          if [ -z "$BOOTSTRAPPER_IMAGE" ]; then
+            BOOTSTRAPPER_IMAGE="ghcr.io/goldfish-inc/oceanid/project-bootstrapper:${COMMIT_SHA}"
+          fi
+
+          TRAINING_WORKER_IMAGE="${{ inputs.training_worker_image }}"
+          if [ -z "$TRAINING_WORKER_IMAGE" ]; then
+            TRAINING_WORKER_IMAGE="ghcr.io/goldfish-inc/oceanid/training-worker:${COMMIT_SHA}"
+          fi
+
           echo "adapter_image=${ADAPTER_IMAGE}" >> $GITHUB_OUTPUT
           echo "sink_image=${SINK_IMAGE}" >> $GITHUB_OUTPUT
           echo "csv_image=${CSV_IMAGE}" >> $GITHUB_OUTPUT
+          echo "bootstrapper_image=${BOOTSTRAPPER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "training_worker_image=${TRAINING_WORKER_IMAGE}" >> $GITHUB_OUTPUT
 
           echo "Will deploy:"
           echo "  Adapter: ${ADAPTER_IMAGE}"
           echo "  Sink: ${SINK_IMAGE}"
           echo "  CSV Worker: ${CSV_IMAGE}"
+          echo "  Bootstrapper: ${BOOTSTRAPPER_IMAGE}"
+          echo "  Training Worker: ${TRAINING_WORKER_IMAGE}"
 
       - name: Update ESC config with new image tags
         run: |
@@ -85,6 +105,16 @@ jobs:
             "pulumiConfig.oceanid-cluster:csvWorkerImage" \
             "${{ steps.images.outputs.csv_image }}" \
             --plaintext
+
+          esc env set default/oceanid-cluster \
+            "pulumiConfig.oceanid-cluster:bootstrapperImage" \
+            "${{ steps.images.outputs.bootstrapper_image }}" \
+            --plaintext
+
+          esc env set default/oceanid-cluster \
+            "pulumiConfig.oceanid-cluster:trainingWorkerImage" \
+            "${{ steps.images.outputs.training_worker_image }}" \
+            --plaintext
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
@@ -96,6 +126,8 @@ jobs:
           echo "  Adapter: ${{ steps.images.outputs.adapter_image }}"
           echo "  Sink: ${{ steps.images.outputs.sink_image }}"
           echo "  CSV Worker: ${{ steps.images.outputs.csv_image }}"
+          echo "  Bootstrapper: ${{ steps.images.outputs.bootstrapper_image }}"
+          echo "  Training Worker: ${{ steps.images.outputs.training_worker_image }}"
           echo ""
           echo "Cluster applies are handled by a GitHub self-hosted runner on a host with kubeconfig access (e.g., tethys)."
           echo "Ensure the runner is online; pushes to main that touch cluster/ will trigger an apply via cluster-selfhosted.yml."
