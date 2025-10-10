@@ -275,6 +275,12 @@ const awsAccessKeyId = cfg.getSecret("aws.labelStudio.accessKeyId");
 const awsSecretAccessKey = cfg.getSecret("aws.labelStudio.secretAccessKey");
 const awsBucketName = cfg.get("aws.labelStudio.bucketName") || "labelstudio-goldfish-uploads";
 const awsRegion = cfg.get("aws.labelStudio.region") || "us-east-1";
+const awsS3Endpoint = cfg.get("aws.labelStudio.endpoint") || undefined;
+const awsImportPrefix = cfg.get("aws.labelStudio.importPrefix") || "raw-uploads/";
+const awsExportPrefix = cfg.get("aws.labelStudio.exportPrefix") || "annotations/";
+const awsImportRegex = cfg.get("aws.labelStudio.importRegex") || ".*\\.(csv|xlsx|xls|pdf|jpg|jpeg|png|txt)$";
+const awsImportTitle = cfg.get("aws.labelStudio.importTitle") || "S3 Import";
+const awsExportTitle = cfg.get("aws.labelStudio.exportTitle") || "S3 Export";
 
 // Sync ESC secrets to Kubernetes for Flux-managed Label Studio
 let labelStudioSecrets: LabelStudioSecrets | undefined;
@@ -348,18 +354,125 @@ def access_token(ls_url: str, pat: str) -> str:
         sys.exit(2)
     return json.loads(body)["access"]
 
-def label_config_xml(labels):
-    tags = "\n".join([f"      <Label value=\"{l}\"/>" for l in labels])
-    return (
-        "<View>\n"
-        "  <Header value=\"Document Text\"/>\n"
-        "  <Text name=\"text\" value=\"$text\"/>\n"
-        "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
-        f"{tags}\n"
-        "  </Labels>\n"
-        "  <Relations name=\"rels\" toName=\"text\"/>\n"
-        "</View>"
-    )
+    def label_config_xml(labels):
+        tags = "\n".join([f"      <Label value=\"{l}\"/>" for l in labels])
+        return (
+            "<View>\n"
+            "  <Header value=\"Document Text\"/>\n"
+            "  <Text name=\"text\" value=\"$text\"/>\n"
+            "  <Labels name=\"label\" toName=\"text\" showInline=\"true\">\n"
+            f"{tags}\n"
+            "  </Labels>\n"
+            "  <Relations name=\"rels\" toName=\"text\"/>\n"
+            "</View>"
+        )
+
+    def api_headers(token):
+        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    def parse_json(body, default=None):
+        try:
+            return json.loads(body)
+        except Exception:
+            return default
+
+    def ensure_import_storage(ls_url, token, project_id, bucket, prefix, region, regex_filter, endpoint, aws_key, aws_secret, title):
+        try:
+            project_param = int(project_id)
+        except Exception:
+            project_param = project_id
+        base = ls_url.rstrip("/")
+        headers = api_headers(token)
+        code, body = http("GET", f"{base}/api/storages/s3/", headers=headers)
+        if code != 200:
+            raise RuntimeError(f"List import storage failed: {code} {body}")
+        storages = parse_json(body, []) or []
+        target = None
+        for item in storages:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
+                target = item
+                break
+        payload = {
+            "project": project_param,
+            "bucket": bucket,
+            "prefix": prefix,
+            "title": title,
+            "region_name": region,
+            "regex_filter": regex_filter,
+            "use_blob_urls": True,
+            "presign": True,
+            "recursive_scan": True,
+        }
+        if endpoint:
+            payload["s3_endpoint"] = endpoint
+        if aws_key and aws_secret:
+            payload["aws_access_key_id"] = aws_key
+            payload["aws_secret_access_key"] = aws_secret
+        storage_id = target.get("id") if target else None
+        if storage_id:
+            code, resp = http("PATCH", f"{base}/api/storages/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
+            if code not in (200, 201):
+                print(f"Update import storage failed: {code} {resp}", file=sys.stderr)
+        else:
+            code, resp = http("POST", f"{base}/api/storages/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
+            if code not in (200, 201):
+                raise RuntimeError(f"Create import storage failed: {code} {resp}")
+            target = parse_json(resp, {}) or {}
+            storage_id = target.get("id")
+        return storage_id
+
+    def ensure_export_storage(ls_url, token, project_id, bucket, prefix, region, endpoint, aws_key, aws_secret, title):
+        try:
+            project_param = int(project_id)
+        except Exception:
+            project_param = project_id
+        base = ls_url.rstrip("/")
+        headers = api_headers(token)
+        code, body = http("GET", f"{base}/api/storages/export/s3/", headers=headers)
+        if code != 200:
+            raise RuntimeError(f"List export storage failed: {code} {body}")
+        storages = parse_json(body, []) or []
+        target = None
+        for item in storages:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("project")) == str(project_param) and item.get("bucket") == bucket and item.get("prefix") == prefix:
+                target = item
+                break
+        payload = {
+            "project": project_param,
+            "bucket": bucket,
+            "prefix": prefix,
+            "title": title,
+            "region_name": region,
+        }
+        if endpoint:
+            payload["s3_endpoint"] = endpoint
+        if aws_key and aws_secret:
+            payload["aws_access_key_id"] = aws_key
+            payload["aws_secret_access_key"] = aws_secret
+        if target and target.get("id"):
+            storage_id = target.get("id")
+            code, resp = http("PATCH", f"{base}/api/storages/export/s3/{storage_id}", headers=headers, data=json.dumps(payload).encode("utf-8"))
+            if code not in (200, 201):
+                print(f"Update export storage failed: {code} {resp}", file=sys.stderr)
+            return storage_id
+        code, resp = http("POST", f"{base}/api/storages/export/s3/", headers=headers, data=json.dumps(payload).encode("utf-8"))
+        if code not in (200, 201):
+            raise RuntimeError(f"Create export storage failed: {code} {resp}")
+        created = parse_json(resp, {}) or {}
+        return created.get("id")
+
+    def sync_import_storage(ls_url, token, storage_id):
+        if not storage_id:
+            return
+        base = ls_url.rstrip("/")
+        headers = api_headers(token)
+        code, body = http("POST", f"{base}/api/storages/s3/{storage_id}/sync", headers=headers)
+        if code not in (200, 201, 202, 204):
+            print(f"Sync import storage failed: {code} {body}", file=sys.stderr)
 
 def main():
     p = argparse.ArgumentParser()
@@ -430,6 +543,33 @@ def main():
         print(f"Patch project failed: {code} {resp}", file=sys.stderr)
         sys.exit(6)
 
+    # Configure S3 storages when credentials available
+    bucket = os.getenv("AWS_BUCKET_NAME")
+    region = os.getenv("AWS_REGION_NAME") or "us-east-1"
+    import_prefix = os.getenv("S3_IMPORT_PREFIX", "")
+    export_prefix = os.getenv("S3_EXPORT_PREFIX", "annotations/")
+    regex_filter = os.getenv("S3_IMPORT_REGEX", ".*")
+    import_title = os.getenv("S3_IMPORT_TITLE", "S3 Import")
+    export_title = os.getenv("S3_EXPORT_TITLE", "S3 Export")
+    endpoint = os.getenv("AWS_S3_ENDPOINT")
+    aws_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+    try:
+        project_id_int = int(pid)
+    except Exception:
+        project_id_int = pid
+    if bucket:
+        try:
+            import_id = ensure_import_storage(ls_url, token, project_id_int, bucket, import_prefix, region, regex_filter, endpoint, aws_key, aws_secret, import_title)
+            if import_id:
+                sync_import_storage(ls_url, token, import_id)
+        except Exception as exc:
+            print(f"Import storage setup warning: {exc}", file=sys.stderr)
+        try:
+            ensure_export_storage(ls_url, token, project_id_int, bucket, export_prefix, region, endpoint, aws_key, aws_secret, export_title)
+        except Exception as exc:
+            print(f"Export storage setup warning: {exc}", file=sys.stderr)
+
     # Import sample task (optional)
     sample = [{"data": {"text": "Vessel NEREUS IMO 8819421 arrived at BURELA on 2023-01-01."}}]
     code, _ = http("POST", f"{ls_url.rstrip('/')}/api/projects/{pid}/import", headers=auth, data=json.dumps(sample).encode("utf-8"))
@@ -474,6 +614,40 @@ if __name__ == "__main__":
         stringData: { LABEL_STUDIO_PAT: lsPat as any },
     }, { provider: k8sProvider });
 
+    const provisionerEnv: pulumi.Input<k8s.types.input.core.v1.EnvVar>[] = [
+        { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
+        { name: "ML_BACKEND_URL", value: pulumi.interpolate`${lsAdapter.serviceUrl}` as any },
+        { name: "AWS_BUCKET_NAME", value: awsBucketName },
+        { name: "AWS_REGION_NAME", value: awsRegion },
+        { name: "S3_IMPORT_PREFIX", value: awsImportPrefix },
+        { name: "S3_EXPORT_PREFIX", value: awsExportPrefix },
+        { name: "S3_IMPORT_REGEX", value: awsImportRegex },
+        { name: "S3_IMPORT_TITLE", value: awsImportTitle },
+        { name: "S3_EXPORT_TITLE", value: awsExportTitle },
+        { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: provSecret.metadata.name, key: "LABEL_STUDIO_PAT" } } },
+    ];
+
+    if (awsS3Endpoint) {
+        provisionerEnv.push({ name: "AWS_S3_ENDPOINT", value: awsS3Endpoint });
+    }
+
+    if (nerLabelsJson) {
+        provisionerEnv.push({ name: "NER_LABELS", value: nerLabelsJson });
+    }
+
+    if (labelStudioSecrets) {
+        provisionerEnv.push(
+            {
+                name: "AWS_ACCESS_KEY_ID",
+                valueFrom: { secretKeyRef: { name: labelStudioSecrets.s3SecretName, key: "AWS_ACCESS_KEY_ID" } },
+            },
+            {
+                name: "AWS_SECRET_ACCESS_KEY",
+                valueFrom: { secretKeyRef: { name: labelStudioSecrets.s3SecretName, key: "AWS_SECRET_ACCESS_KEY" } },
+            }
+        );
+    }
+
     new k8s.batch.v1.Job("ls-provisioner-ner-data", {
         metadata: { name: "ls-provisioner-ner-data", namespace: "apps" },
         spec: {
@@ -486,12 +660,7 @@ if __name__ == "__main__":
                         name: "provision",
                         image: "python:3.11-slim",
                         command: ["python", "/app/provision.py", "--title", "NER_Data", "--description", "Universal document NER (PDF, CSV, XLSX, text). Pre-labels via adapter; SMEs review & approve."],
-                        env: [
-                            { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
-                            { name: "ML_BACKEND_URL", value: pulumi.interpolate`${lsAdapter.serviceUrl}` as any },
-                            ...(cfg.get("nerLabels") ? [{ name: "NER_LABELS", value: cfg.get("nerLabels")! }] : []),
-                            { name: "LABEL_STUDIO_PAT", valueFrom: { secretKeyRef: { name: provSecret.metadata.name, key: "LABEL_STUDIO_PAT" } } },
-                        ] as any,
+                        env: provisionerEnv as any,
                         volumeMounts: [{ name: "code", mountPath: "/app" }],
                     }],
                     volumes: [{ name: "code", configMap: { name: provConfig.metadata.name } }],

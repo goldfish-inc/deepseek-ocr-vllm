@@ -33,6 +33,7 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
 - Health: `/health`
 - Setup: `/setup` (GET/POST)
 - Project `NER_Data`: can be provisioned automatically by a one‑off Job (gated by Pulumi config `enableLsProvisionerJob`) with a full NER interface.
+- Provisioner auto-configures project S3 storage (import + export) using ESC-managed AWS credentials, presigned URLs, regex filters, and triggers an immediate sync, so no manual storage setup is required in the UI.
 - Labeling Interface mapping: the primary control is `<Labels name="label" toName="text" ...>`. An optional HTML Labels control (e.g., `name="label_html" toName="html"`) may exist for read‑only/auxiliary views—it's not required for CSV/XLSX flows.
 
 ## PDF Boxes (Hybrid)
