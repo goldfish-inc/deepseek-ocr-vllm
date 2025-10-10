@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -91,8 +92,12 @@ type Metrics struct {
 }
 
 func main() {
+	// Early debug markers to stderr for hang detection
+	fmt.Fprintln(os.Stderr, "DEBUG: main start")
+
 	// Load configuration
 	cfg := loadConfig()
+	fmt.Fprintln(os.Stderr, "DEBUG: config loaded")
 
 	// Initialize database
 	db, err := initDatabase(cfg.DatabaseURL)
@@ -100,6 +105,7 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
+	fmt.Fprintln(os.Stderr, "DEBUG: database initialized")
 
 	// Initialize S3 client (non-fatal - will be needed when webhooks arrive)
 	s3Client, err := initS3Client(cfg)
@@ -107,15 +113,18 @@ func main() {
 		log.Printf("Warning: Failed to initialize S3 client: %v (will retry on webhook)", err)
 		s3Client = nil // Will be lazy-initialized when needed
 	}
+	fmt.Fprintln(os.Stderr, "DEBUG: s3 init complete (may be nil)")
 
 	// Initialize metrics
 	metrics := initMetrics()
+	fmt.Fprintln(os.Stderr, "DEBUG: metrics initialized")
 
 	// Parse confidence configuration
 	var confidenceConfig map[string]FieldConfig
 	if err := json.Unmarshal([]byte(cfg.ConfidenceConfig), &confidenceConfig); err != nil {
 		log.Fatalf("Failed to parse confidence config: %v", err)
 	}
+	fmt.Fprintln(os.Stderr, "DEBUG: confidence config parsed")
 
 	// Create worker
 	worker := &Worker{
@@ -125,15 +134,28 @@ func main() {
 		metrics:          metrics,
 		confidenceConfig: confidenceConfig,
 	}
+	fmt.Fprintln(os.Stderr, "DEBUG: worker constructed")
 
-	// Load cleaning rules from database
-	if err := worker.loadCleaningRules(); err != nil {
-		log.Fatalf("Failed to load cleaning rules: %v", err)
+	// Load cleaning rules from database with timeout; do not hang indefinitely
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := worker.loadCleaningRulesContext(ctx); err != nil {
+			// Start without rules; readiness will report unhealthy until rules are loaded
+			log.Printf("Warning: failed to load cleaning rules at startup: %v", err)
+		} else {
+			fmt.Fprintln(os.Stderr, "DEBUG: cleaning rules loaded")
+		}
 	}
 
 	// Set up HTTP handlers
 	http.HandleFunc("/webhook", worker.handleWebhook)
 	http.HandleFunc("/health", worker.handleHealth)
+	// Liveness probe endpoint: process is up, not checking deps
+	http.HandleFunc("/live", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte("ok"))
+	})
 	http.Handle("/metrics", promhttp.Handler())
 
 	// Start HTTP server
@@ -201,7 +223,10 @@ func loadConfig() *Config {
 }
 
 func initDatabase(dbURL string) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dbURL)
+	// Ensure connection timeout present in DSN to avoid long hangs
+	dsn := withConnectTimeout(dbURL, 5)
+
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +244,14 @@ func initDatabase(dbURL string) (*sql.DB, error) {
 		return nil, fmt.Errorf("database ping failed: %w", err)
 	}
 
+	// Set a conservative statement timeout for this session where possible (best-effort)
+	_ = func() error {
+		cctx, ccancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer ccancel()
+		_, _ = db.ExecContext(cctx, "SET statement_timeout = 5000")
+		return nil
+	}()
+
 	// Ensure schema exists
 	if err := ensureSchema(db); err != nil {
 		return nil, fmt.Errorf("schema setup failed: %w", err)
@@ -228,7 +261,10 @@ func initDatabase(dbURL string) (*sql.DB, error) {
 }
 
 func initS3Client(cfg *Config) (*s3.Client, error) {
-	awsCfg, err := config.LoadDefaultConfig(context.Background(),
+	// Bound AWS config load to avoid long hangs (e.g., IMDS)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.S3Region),
 	)
 	if err != nil {
@@ -245,6 +281,23 @@ func initS3Client(cfg *Config) (*s3.Client, error) {
 	}
 
 	return s3.NewFromConfig(awsCfg, opts...), nil
+}
+
+// withConnectTimeout appends connect_timeout=N (seconds) to a PostgreSQL DSN if missing.
+func withConnectTimeout(dbURL string, seconds int) string {
+	// Accept both URL and DSN forms; only handle URL form here.
+	// On failure, return original string.
+	u, err := url.Parse(dbURL)
+	if err != nil || u.Scheme == "" {
+		return dbURL
+	}
+	q := u.Query()
+	if q.Get("connect_timeout") == "" {
+		q.Set("connect_timeout", fmt.Sprintf("%d", seconds))
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return dbURL
 }
 
 func initMetrics() *Metrics {

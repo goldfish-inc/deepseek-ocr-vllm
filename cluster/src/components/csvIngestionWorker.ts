@@ -144,13 +144,20 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
                                     cpu: "500m",
                                 },
                             },
+                            startupProbe: {
+                                httpGet: { path: "/live", port: "http" },
+                                initialDelaySeconds: 5,
+                                periodSeconds: 5,
+                                timeoutSeconds: 3,
+                                failureThreshold: 12,
+                            },
                             livenessProbe: {
                                 httpGet: {
-                                    path: "/health",
+                                    path: "/live",
                                     port: "http",
                                 },
-                                initialDelaySeconds: 10,
-                                periodSeconds: 30,
+                                initialDelaySeconds: 5,
+                                periodSeconds: 10,
                                 timeoutSeconds: 3,
                                 successThreshold: 1,
                                 failureThreshold: 3,

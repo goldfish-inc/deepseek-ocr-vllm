@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -14,17 +15,23 @@ import (
 
 // loadCleaningRules loads all active cleaning rules from the database
 func (w *Worker) loadCleaningRules() error {
-	query := `
-		SELECT
-			id, rule_name, rule_type, pattern, replacement,
-			priority, confidence, source_type, source_name,
-			column_name, is_active
-		FROM stage.cleaning_rules
-		WHERE is_active = true
-		ORDER BY priority ASC, id ASC
-	`
+	// Backward-compatible wrapper: no timeout
+	return w.loadCleaningRulesContext(context.Background())
+}
 
-	rows, err := w.db.Query(query)
+// loadCleaningRulesContext loads rules with a context (useful for timeouts)
+func (w *Worker) loadCleaningRulesContext(ctx context.Context) error {
+	query := `
+        SELECT
+            id, rule_name, rule_type, pattern, replacement,
+            priority, confidence, source_type, source_name,
+            column_name, is_active
+        FROM stage.cleaning_rules
+        WHERE is_active = true
+        ORDER BY priority ASC, id ASC
+    `
+
+	rows, err := w.db.QueryContext(ctx, query)
 	if err != nil {
 		w.metrics.databaseErrors.WithLabelValues("load_rules").Inc()
 		return fmt.Errorf("failed to query cleaning rules: %w", err)
@@ -70,6 +77,10 @@ func (w *Worker) loadCleaningRules() error {
 		if key != "GLOBAL:" {
 			w.cleaningRules[key] = append(w.cleaningRules[key], globalRules...)
 		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error reading cleaning rules: %w", err)
 	}
 
 	log.Printf("Loaded %d cleaning rule groups", len(w.cleaningRules))

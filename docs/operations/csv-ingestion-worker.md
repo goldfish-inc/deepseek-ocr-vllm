@@ -136,7 +136,8 @@ spec:
 
 ### Health Checks
 
-- **Readiness**: `/health` endpoint
+- **Liveness**: `/live` (process up)
+- **Readiness**: `/health` (DB reachable and rules loaded)
 - **Liveness**: `/health` endpoint
 - **Metrics**: `/metrics` endpoint (Prometheus format)
 
