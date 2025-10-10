@@ -19,8 +19,9 @@ export interface ProjectBootstrapperArgs {
   nerLabelsJson?: pulumi.Input<string>;
   // CORS allowed origins (Label Studio URL, docs site URL)
   allowedOrigins?: pulumi.Input<string[]>;
-  // Container image (default: latest main build)
+  // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
   image?: pulumi.Input<string>;
+  imageTag?: pulumi.Input<string>;
 }
 
 export class ProjectBootstrapper extends pulumi.ComponentResource {
@@ -43,10 +44,16 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
       sinkWebhookUrl,
       nerLabelsJson,
       allowedOrigins = ["https://label.boathou.se"],
-      image = "ghcr.io/goldfish-inc/oceanid/project-bootstrapper:main",
+      image,
+      imageTag,
     } = args;
 
     const labels = { app: serviceName };
+
+    // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
+    const bootstrapperImageTag = imageTag || "main";
+    const baseBootstrapperImage = "ghcr.io/goldfish-inc/oceanid/project-bootstrapper";
+    const bootstrapperImageRef = image || pulumi.interpolate`${baseBootstrapperImage}:${bootstrapperImageTag}`;
 
     const deploy = new k8s.apps.v1.Deployment(`${serviceName}-deploy`, {
       metadata: { name: serviceName, namespace },
@@ -60,7 +67,7 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
             containers: [
               {
                 name: serviceName,
-                image: image,
+                image: bootstrapperImageRef as any,
                 ports: [{ name: "http", containerPort: 8080 }],
                 env: [
                   { name: "LS_URL", value: labelStudioUrl as any },

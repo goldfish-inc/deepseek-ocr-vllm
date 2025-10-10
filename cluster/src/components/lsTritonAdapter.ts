@@ -9,6 +9,9 @@ export interface LsTritonAdapterArgs {
     tritonBaseUrl: pulumi.Input<string>; // e.g., https://gpu.boathou.se
     cfAccessClientId?: pulumi.Input<string>;
     cfAccessClientSecret?: pulumi.Input<string>;
+    // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
+    image?: pulumi.Input<string>;
+    imageTag?: pulumi.Input<string>;
 }
 
 export class LsTritonAdapter extends pulumi.ComponentResource {
@@ -18,7 +21,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
     constructor(name: string, args: LsTritonAdapterArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:ml:LsTritonAdapter", name, {}, opts);
 
-        const { k8sProvider, namespace = "apps", serviceName = "ls-triton-adapter", tritonBaseUrl, cfAccessClientId, cfAccessClientSecret } = args;
+        const { k8sProvider, namespace = "apps", serviceName = "ls-triton-adapter", tritonBaseUrl, cfAccessClientId, cfAccessClientSecret, image, imageTag } = args;
 
         // Use existing namespace rather than creating a new one
         // The 'apps' namespace is created by LabelStudio component
@@ -46,6 +49,12 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         }
 
         // Training configuration
+        // Prefer immutable training worker image from ESC config
+        const trainingWorkerImage = cfgPulumi.get("trainingWorkerImage");
+        const trainingWorkerImageTag = cfgPulumi.get("trainingWorkerImageTag") || "main";
+        const baseTrainingWorkerImage = "ghcr.io/goldfish-inc/oceanid/training-worker";
+        const trainingWorkerImageRef = trainingWorkerImage || pulumi.interpolate`${baseTrainingWorkerImage}:${trainingWorkerImageTag}`;
+
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
             DEFAULT_MODEL: "distilbert-base-uncased",
@@ -53,7 +62,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             // Training controls (can be overridden via Pulumi config)
             TRAIN_ASYNC: cfgPulumi.get("trainAsync") ?? "true",
             TRAIN_DRY_RUN: cfgPulumi.get("trainDryRun") ?? "false",
-            TRAINING_JOB_IMAGE: cfgPulumi.get("trainingJobImage") ?? "ghcr.io/goldfish-inc/oceanid/training-worker:main",
+            TRAINING_JOB_IMAGE: trainingWorkerImageRef as any,
             TRAINING_JOB_NAMESPACE: namespace,
             TRAINING_JOB_TTL_SECONDS: cfgPulumi.get("trainingJobTtlSeconds") ?? "3600",
             TRAIN_NODE_SELECTOR: cfgPulumi.get("trainingNodeSelector") ?? "kubernetes.io/hostname=calypso",
@@ -115,6 +124,12 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             subjects: [{ kind: "ServiceAccount", name: sa.metadata.name, namespace }],
         }, { provider: k8sProvider, parent: this });
 
+        // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
+        const adapterImage = cfgPulumi.get("adapterImage");
+        const adapterImageTag = cfgPulumi.get("adapterImageTag") || "main";
+        const baseAdapterImage = "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter";
+        const adapterImageRef = adapterImage || pulumi.interpolate`${baseAdapterImage}:${adapterImageTag}`;
+
         const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
             metadata: { name: serviceName, namespace },
             spec: {
@@ -127,7 +142,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
                         imagePullSecrets: [{ name: "ghcr-creds" }],
                         containers: [{
                             name: "adapter",
-                            image: cfgPulumi.get("adapterImage") || "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main",
+                            image: adapterImageRef as any,
                             env: envVars as any,
                             ports: [{ containerPort: 9090, name: "http" }],
                             readinessProbe: { httpGet: { path: "/health", port: 9090 }, initialDelaySeconds: 5, periodSeconds: 10 },

@@ -10,6 +10,9 @@ export interface AnnotationsSinkArgs {
   hfToken?: pulumi.Input<string>; // Pulumi secret from ESC (preferred)
   dbUrl?: pulumi.Input<string>;   // Optional: postgres connection string
   schemaVersion?: pulumi.Input<string>; // e.g., 1.0.0
+  // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
+  image?: pulumi.Input<string>;
+  imageTag?: pulumi.Input<string>;
 }
 
 export class AnnotationsSink extends pulumi.ComponentResource {
@@ -28,6 +31,8 @@ export class AnnotationsSink extends pulumi.ComponentResource {
       hfToken,
       dbUrl,
       schemaVersion = "1.0.0",
+      image,
+      imageTag,
     } = args;
 
     const cfgPulumi = new pulumi.Config();
@@ -50,6 +55,12 @@ export class AnnotationsSink extends pulumi.ComponentResource {
       env.push({ name: "DATABASE_URL", value: finalDbUrl });
     }
 
+    // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
+    const sinkImage = cfgPulumi.get("sinkImage");
+    const sinkImageTag = cfgPulumi.get("sinkImageTag") || "main";
+    const baseSinkImage = "ghcr.io/goldfish-inc/oceanid/annotations-sink";
+    const sinkImageRef = sinkImage || pulumi.interpolate`${baseSinkImage}:${sinkImageTag}`;
+
     const deploy = new k8s.apps.v1.Deployment(`${name}-deploy`, {
       metadata: { name: serviceName, namespace },
       spec: {
@@ -61,7 +72,7 @@ export class AnnotationsSink extends pulumi.ComponentResource {
             imagePullSecrets: [{ name: "ghcr-creds" }],
             containers: [{
               name: "sink",
-              image: cfgPulumi.get("sinkImage") || "ghcr.io/goldfish-inc/oceanid/annotations-sink:main",
+              image: sinkImageRef as any,
               env,
               ports: [{ containerPort: 8080, name: "http" }],
               readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },

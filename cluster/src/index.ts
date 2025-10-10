@@ -255,11 +255,15 @@ const tritonBaseUrl = pulumi.interpolate`https://${clusterConfig.nodeTunnel.host
 const cfAccessClientIdOut = cfg.getSecret("cfAccessClientId") as any;
 const cfAccessClientSecretOut = cfg.getSecret("cfAccessClientSecret") as any;
 
+const adapterImage = cfg.get("adapterImage");
+const adapterImageTag = cfg.get("adapterImageTag") || "main";
 const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
     k8sProvider,
     tritonBaseUrl,
     cfAccessClientId: (cfAccessClientIdOut as any) ?? undefined,
     cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
+    image: (adapterImage as any) || undefined,
+    imageTag: adapterImage ? undefined : adapterImageTag,
 });
 
 // Label Studio deployment moved to GitOps (Flux)
@@ -593,12 +597,16 @@ const hfToken = cfg.getSecret("hfAccessToken");
 // Use the same labelfish database as Label Studio (now retrieved directly from ESC)
 const annotationsSinkDbUrl = cfg.requireSecret("labelStudioDbUrl"); // Same database as Label Studio
 const schemaVersion = cfg.get("schemaVersion") || "1.0.0";
+const sinkImage = cfg.get("sinkImage");
+const sinkImageTag = cfg.get("sinkImageTag") || "main";
 const annotationsSink = new AnnotationsSink("annotations-sink", {
     k8sProvider,
     hfRepo,
     hfToken,
     dbUrl: annotationsSinkDbUrl,
     schemaVersion,
+    image: (sinkImage as any) || undefined,
+    imageTag: sinkImage ? undefined : sinkImageTag,
 });
 
 // Project Bootstrapper service: creates Label Studio projects via API with ML backend + webhooks
@@ -607,6 +615,8 @@ let projectBootstrapper: ProjectBootstrapper | undefined;
 if (enableProjectBootstrapperService) {
     const lsPat = cfg.getSecret("labelStudioPat");
     const nerLabelsJson = cfg.get("nerLabels");
+    const bootstrapperImage = cfg.get("bootstrapperImage");
+    const bootstrapperImageTag = cfg.get("bootstrapperImageTag") || "main";
 
     projectBootstrapper = new ProjectBootstrapper("project-bootstrapper", {
         k8sProvider,
@@ -618,6 +628,8 @@ if (enableProjectBootstrapperService) {
         sinkWebhookUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
         nerLabelsJson: nerLabelsJson as any,
         allowedOrigins: ["https://label.boathou.se"],
+        image: (bootstrapperImage as any) || undefined,
+        imageTag: bootstrapperImage ? undefined : bootstrapperImageTag,
     });
 }
 
