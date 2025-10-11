@@ -55,6 +55,9 @@ spec:
       resources: {}
       nodeSelector:
         kubernetes.io/hostname: srv712429  # Database only accessible from control plane
+      nginx:
+        extraEnvironmentVars:
+          APP_HOST: "127.0.0.1"  # Force IPv4 to avoid IPv6 connection failures
     postgresql:
       enabled: false
     redis:
