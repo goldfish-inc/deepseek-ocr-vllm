@@ -7,6 +7,8 @@
 	"tagOwners": {
 		// K8s cluster devices (managed by Tailscale Kubernetes Operator)
 		"tag:k8s": ["autogroup:admin"],
+		// Tailscale Kubernetes Operator itself
+		"tag:k8s-operator": ["autogroup:admin"],
 	},
 
 	// Access control grants (new format)
@@ -22,6 +24,14 @@
 		// (cluster pods need outbound access for database, S3, webhooks)
 		{
 			"src": ["tag:k8s"],
+			"dst": ["*"],
+			"ip":  ["*"],
+		},
+
+		// Allow K8s operator to access everything
+		// (operator needs to manage devices on the tailnet)
+		{
+			"src": ["tag:k8s-operator"],
 			"dst": ["*"],
 			"ip":  ["*"],
 		},
