@@ -19,6 +19,12 @@ export interface ProjectBootstrapperArgs {
   nerLabelsJson?: pulumi.Input<string>;
   // CORS allowed origins (Label Studio URL, docs site URL)
   allowedOrigins?: pulumi.Input<string[]>;
+  // S3 configuration for per-project storage
+  s3Bucket?: pulumi.Input<string>; // S3 bucket name
+  s3Region?: pulumi.Input<string>; // AWS region
+  s3Endpoint?: pulumi.Input<string>; // S3 endpoint URL (optional)
+  awsAccessKeyId?: pulumi.Input<string>; // AWS access key
+  awsSecretAccessKey?: pulumi.Input<string>; // AWS secret key
   // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
   image?: pulumi.Input<string>;
   imageTag?: pulumi.Input<string>;
@@ -44,6 +50,11 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
       sinkWebhookUrl,
       nerLabelsJson,
       allowedOrigins = ["https://label.boathou.se"],
+      s3Bucket,
+      s3Region = "us-east-1",
+      s3Endpoint,
+      awsAccessKeyId,
+      awsSecretAccessKey,
       image,
       imageTag,
     } = args;
@@ -78,6 +89,11 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
                   ...(sinkWebhookUrl ? [{ name: "SINK_WEBHOOK_URL", value: sinkWebhookUrl as any }] : []),
                   ...(nerLabelsJson ? [{ name: "NER_LABELS_JSON", value: nerLabelsJson as any }] : []),
                   { name: "ALLOWED_ORIGINS", value: pulumi.output(allowedOrigins).apply(a => JSON.stringify(a)) as any },
+                  ...(s3Bucket ? [{ name: "S3_BUCKET", value: s3Bucket as any }] : []),
+                  ...(s3Region ? [{ name: "AWS_REGION", value: s3Region as any }] : []),
+                  ...(s3Endpoint ? [{ name: "S3_ENDPOINT", value: s3Endpoint as any }] : []),
+                  ...(awsAccessKeyId ? [{ name: "AWS_ACCESS_KEY_ID", value: awsAccessKeyId as any }] : []),
+                  ...(awsSecretAccessKey ? [{ name: "AWS_SECRET_ACCESS_KEY", value: awsSecretAccessKey as any }] : []),
                   { name: "LISTEN_ADDR", value: ":8080" },
                 ],
                 resources: { requests: { cpu: "10m", memory: "16Mi" }, limits: { cpu: "100m", memory: "64Mi" } },

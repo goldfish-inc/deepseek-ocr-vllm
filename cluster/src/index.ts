@@ -823,9 +823,14 @@ if (enableProjectBootstrapperService) {
         sinkWebhookUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
         nerLabelsJson: nerLabelsJson as any,
         allowedOrigins: ["https://label.boathou.se"],
+        s3Bucket: awsBucketName,
+        s3Region: awsRegion,
+        s3Endpoint: awsS3Endpoint,
+        awsAccessKeyId: awsAccessKeyId as any,
+        awsSecretAccessKey: awsSecretAccessKey as any,
         image: (bootstrapperImage as any) || undefined,
         imageTag: bootstrapperImage ? undefined : bootstrapperImageTag,
-    });
+    }, { provider: k8sProvider });
 }
 
 // CSV Ingestion Worker: processes CSV files from Label Studio webhooks

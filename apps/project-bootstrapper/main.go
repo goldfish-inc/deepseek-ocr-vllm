@@ -141,10 +141,6 @@ func getAccessToken(cfg *Config) (string, error) {
 
 // ensureWebhooks creates webhooks if they don't exist
 func ensureWebhooks(cfg *Config, token string) error {
-	if cfg.SinkIngestURL == "" && cfg.SinkWebhookURL == "" {
-		return nil
-	}
-
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
 		"Content-Type":  "application/json",
@@ -168,6 +164,24 @@ func ensureWebhooks(cfg *Config, token string) error {
 		return false
 	}
 
+	// Register PROJECT_CREATED webhook for automatic S3 configuration
+	// Use cluster-internal service URL for webhook callback
+	bootstrapperURL := "http://project-bootstrapper.apps.svc.cluster.local:8080/webhook"
+	if !hasURL(bootstrapperURL) {
+		payload := map[string]interface{}{
+			"url":          bootstrapperURL,
+			"send_payload": true,
+			"events":       []string{"PROJECT_CREATED"},
+		}
+		body, _ := json.Marshal(payload)
+		status, respBody, err := httpClient("POST", url, headers, body)
+		if err == nil && (status == 200 || status == 201) {
+			log.Printf("✅ Registered PROJECT_CREATED webhook: %s", bootstrapperURL)
+		} else {
+			log.Printf("⚠️  Failed to register PROJECT_CREATED webhook: %d %s", status, string(respBody))
+		}
+	}
+
 	if cfg.SinkIngestURL != "" && !hasURL(cfg.SinkIngestURL) {
 		payload := map[string]interface{}{
 			"url":          cfg.SinkIngestURL,
@@ -189,6 +203,127 @@ func ensureWebhooks(cfg *Config, token string) error {
 	}
 
 	return nil
+}
+
+// slugify converts a string to a URL-safe slug
+func slugify(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, " ", "-")
+	// Remove non-alphanumeric characters except hyphens
+	var result strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+// configureS3Storage configures S3 storage for a project with per-project prefix
+func configureS3Storage(cfg *Config, token string, projectID int, projectTitle string) error {
+	slug := slugify(projectTitle)
+	prefix := fmt.Sprintf("projects/%s/", slug)
+
+	storagePayload := map[string]interface{}{
+		"type":           "s3",
+		"title":          "S3 Storage",
+		"description":    fmt.Sprintf("Per-project S3 storage (prefix: %s)", prefix),
+		"bucket":         os.Getenv("S3_BUCKET"),
+		"prefix":         prefix,
+		"region":         os.Getenv("AWS_REGION"),
+		"s3_endpoint":    os.Getenv("S3_ENDPOINT"),
+		"presign":        true,
+		"presign_ttl":    3600,
+		"recursive_scan": true,
+		"use_blob_urls":  true,
+	}
+
+	// Add AWS credentials if available
+	if accessKey := os.Getenv("AWS_ACCESS_KEY_ID"); accessKey != "" {
+		storagePayload["aws_access_key_id"] = accessKey
+	}
+	if secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY"); secretKey != "" {
+		storagePayload["aws_secret_access_key"] = secretKey
+	}
+
+	body, _ := json.Marshal(storagePayload)
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
+		"Content-Type":  "application/json",
+	}
+
+	url := fmt.Sprintf("%s/api/storages/s3?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
+	status, respBody, err := httpClient("POST", url, headers, body)
+	if err != nil || (status != 200 && status != 201) {
+		return fmt.Errorf("S3 storage config failed: %d %s", status, string(respBody))
+	}
+
+	log.Printf("✅ Configured S3 storage for project %d (%s) with prefix: %s", projectID, projectTitle, prefix)
+	return nil
+}
+
+// WebhookEvent represents a Label Studio webhook event
+type WebhookEvent struct {
+	Action  string                 `json:"action"`
+	Project map[string]interface{} `json:"project"`
+}
+
+// webhookHandler handles POST /webhook for Label Studio webhooks
+func webhookHandler(cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var event WebhookEvent
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Only handle PROJECT_CREATED events
+		if event.Action != "PROJECT_CREATED" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "ignored", "action": event.Action})
+			return
+		}
+
+		// Extract project ID and title
+		projectID, ok := event.Project["id"].(float64)
+		if !ok {
+			http.Error(w, "Missing project ID", http.StatusBadRequest)
+			return
+		}
+
+		projectTitle, ok := event.Project["title"].(string)
+		if !ok {
+			projectTitle = fmt.Sprintf("project-%d", int(projectID))
+		}
+
+		log.Printf("📦 Received PROJECT_CREATED webhook for project %d: %s", int(projectID), projectTitle)
+
+		// Get access token
+		token, err := getAccessToken(cfg)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Auth failed: %v", err), http.StatusBadGateway)
+			return
+		}
+
+		// Configure S3 storage with per-project prefix
+		if err := configureS3Storage(cfg, token, int(projectID), projectTitle); err != nil {
+			log.Printf("⚠️  Failed to configure S3 storage: %v", err)
+			http.Error(w, fmt.Sprintf("S3 config failed: %v", err), http.StatusBadGateway)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":     "success",
+			"project_id": int(projectID),
+			"title":      projectTitle,
+		})
+	}
 }
 
 // CreateProjectRequest is the POST /create request body
@@ -351,9 +486,23 @@ func contains(slice []string, item string) bool {
 func main() {
 	cfg := loadConfig()
 
+	// Register webhook on startup
+	go func() {
+		time.Sleep(5 * time.Second) // Wait for server to start
+		token, err := getAccessToken(cfg)
+		if err != nil {
+			log.Printf("⚠️  Failed to get access token for webhook registration: %v", err)
+			return
+		}
+		if err := ensureWebhooks(cfg, token); err != nil {
+			log.Printf("⚠️  Failed to register webhooks: %v", err)
+		}
+	}()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/create", createProjectHandler(cfg))
+	mux.HandleFunc("/webhook", webhookHandler(cfg))
 
 	handler := corsMiddleware(mux, cfg.AllowedOrigins)
 
