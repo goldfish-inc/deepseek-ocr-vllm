@@ -1,6 +1,7 @@
 // Tailscale ACL Policy for Oceanid
 // Managed via GitOps - changes pushed to main will auto-deploy
 // Docs: https://tailscale.com/kb/1018/acls
+// Updated: 2025-10-11 - Fixed TS_TAILNET format (goldfish-inc@github.com)
 
 {
 	// Define who owns which tags
