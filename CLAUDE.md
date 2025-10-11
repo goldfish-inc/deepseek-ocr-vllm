@@ -23,6 +23,45 @@ When configuring databases, storage, or any critical system:
 
 **Example of failure:** Label Studio was configured with `DATABASE_URL` environment variable pointing to Postgres, deployment succeeded, but application was silently using local SQLite instead because Label Studio requires `POSTGRE_*` variables. This was not discovered until user lost hours of work on pod restart.
 
+## CRITICAL: Helm Ownership Conflicts and Prevention
+
+**Problem**: Pulumi's `helm.sh/v3.Release` resource generates random release name suffixes (e.g., `tailscale-operator-helm-9ca693ca` → `tailscale-operator-helm-373fd0e1`). When Helm tries to manage cluster-scoped resources (CRDs, ClusterRoles, etc.) from a previous deployment with a different suffix, it fails with "invalid ownership metadata" errors.
+
+**Why Helm doesn't auto-clean these**:
+- Cluster-scoped resources affect the entire cluster, not just one namespace
+- Deleting CRDs also deletes ALL custom resources of that type (data loss risk)
+- Helm errs on the side of caution for safety
+
+**Prevention strategies (implemented)**:
+
+1. **Pre-flight script (`cluster/scripts/preflight-check.sh`)**: Automatically detects and removes stale Tailscale resources:
+   - CRDs: `*.tailscale.com` with old Helm release annotations
+   - ClusterRoles/ClusterRoleBindings: `tailscale-operator` with stale metadata
+   - IngressClass: `tailscale` with old ownership
+   - Runs before every cluster deployment
+
+2. **helm.sh/v4.Chart instead of v3.Release**: Better lifecycle management, fewer ownership conflicts
+
+3. **Explicit cleanup documentation**: Manual cleanup commands for emergencies
+
+**If you encounter "annotation validation error: key meta.helm.sh/release-name must equal X" errors**:
+
+```bash
+# Check for stale CRDs
+kubectl get crd -o json | jq '.items[] | select(.metadata.name | endswith(".tailscale.com")) | .metadata.name'
+
+# Check for stale RBAC
+kubectl get clusterrole,clusterrolebinding -o json | jq '.items[] | select(.metadata.name == "tailscale-operator") | "\(.kind)/\(.metadata.name)"'
+
+# Check for stale IngressClass
+kubectl get ingressclass tailscale
+
+# Run pre-flight script manually
+KUBECONFIG=~/.kube/k3s-warp.yaml cluster/scripts/preflight-check.sh
+```
+
+**Related GitHub issues**: #100 (Tailscale operator Helm ownership conflicts)
+
 ## CRITICAL: Do Not Apply Manually
 
 Never run Pulumi applies by hand (`pulumi up`, `pulumi destroy`, etc.). All infrastructure changes must go through automated deployments:

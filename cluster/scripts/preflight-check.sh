@@ -109,6 +109,75 @@ else
   echo "  flux-system namespace does not exist yet (first deployment)"
 fi
 
+# Check for stale Tailscale resources with Helm ownership conflicts
+echo "Checking for stale Tailscale Helm resources..."
+TAILSCALE_CRDS=$(kubectl get crd -o json 2>/dev/null | \
+  jq -r '.items[] | select(.metadata.name | endswith(".tailscale.com")) |
+  select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^tailscale-operator-helm-")) |
+  "\(.metadata.name) (release: \(.metadata.annotations["meta.helm.sh/release-name"]))"' || true)
+
+if [[ -n "$TAILSCALE_CRDS" ]]; then
+  echo "  Found Tailscale CRDs with stale Helm metadata:"
+  COUNT=0
+  while IFS= read -r resource; do
+    [[ -z "$resource" ]] && continue
+    echo "    $resource"
+    NAME=${resource%% (*}
+    if kubectl delete crd "$NAME" --ignore-not-found >/dev/null 2>&1; then
+      COUNT=$((COUNT + 1))
+    else
+      echo "    ⚠️  Failed to delete CRD $NAME"
+      ISSUES_FOUND=1
+    fi
+  done <<< "$TAILSCALE_CRDS"
+  if [[ $COUNT -gt 0 ]]; then
+    echo "  ✅ Cleaned up $COUNT Tailscale CRDs"
+  fi
+fi
+
+# Check for stale Tailscale cluster-scoped RBAC resources
+TAILSCALE_RBAC=$(kubectl get clusterrole,clusterrolebinding -o json 2>/dev/null | \
+  jq -r '.items[] | select(.metadata.name == "tailscale-operator") |
+  select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^tailscale-operator-helm-")) |
+  "\(.kind)/\(.metadata.name) (release: \(.metadata.annotations["meta.helm.sh/release-name"]))"' || true)
+
+if [[ -n "$TAILSCALE_RBAC" ]]; then
+  echo "  Found Tailscale RBAC resources with stale Helm metadata:"
+  COUNT=0
+  while IFS= read -r resource; do
+    [[ -z "$resource" ]] && continue
+    echo "    $resource"
+    KIND=$(echo "$resource" | cut -d'/' -f1 | tr '[:upper:]' '[:lower:]')
+    NAME_WITH_RELEASE=${resource#*/}
+    NAME=${NAME_WITH_RELEASE%% (*}
+    if kubectl delete "$KIND" "$NAME" --ignore-not-found >/dev/null 2>&1; then
+      COUNT=$((COUNT + 1))
+    else
+      echo "    ⚠️  Failed to delete $KIND/$NAME"
+      ISSUES_FOUND=1
+    fi
+  done <<< "$TAILSCALE_RBAC"
+  if [[ $COUNT -gt 0 ]]; then
+    echo "  ✅ Cleaned up $COUNT Tailscale RBAC resources"
+  fi
+fi
+
+# Check for stale Tailscale IngressClass
+TAILSCALE_INGRESS=$(kubectl get ingressclass tailscale -o json 2>/dev/null | \
+  jq -r 'select((.metadata.annotations["meta.helm.sh/release-name"] // "") | test("^tailscale-operator-helm-")) |
+  "IngressClass/\(.metadata.name) (release: \(.metadata.annotations["meta.helm.sh/release-name"]))"' || true)
+
+if [[ -n "$TAILSCALE_INGRESS" ]]; then
+  echo "  Found Tailscale IngressClass with stale Helm metadata:"
+  echo "    $TAILSCALE_INGRESS"
+  if kubectl delete ingressclass tailscale --ignore-not-found >/dev/null 2>&1; then
+    echo "  ✅ Cleaned up Tailscale IngressClass"
+  else
+    echo "    ⚠️  Failed to delete IngressClass"
+    ISSUES_FOUND=1
+  fi
+fi
+
 # Check for crashlooping pods that would block deployment
 echo "Checking for crashlooping pods..."
 CRASHLOOP_PODS=$(kubectl get pods -A -o json | \
