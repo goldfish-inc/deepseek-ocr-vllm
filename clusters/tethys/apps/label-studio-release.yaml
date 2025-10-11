@@ -36,6 +36,7 @@ spec:
         CSRF_TRUSTED_ORIGINS: "https://label.boathou.se"
         DJANGO_ALLOWED_HOSTS: "label.boathou.se"
         LABEL_STUDIO_HOST: "https://label.boathou.se"
+        APP_HOST: "127.0.0.1"  # Force nginx to use IPv4 upstream
       persistence:
         enabled: true
         type: s3
@@ -55,9 +56,6 @@ spec:
       resources: {}
       nodeSelector:
         kubernetes.io/hostname: srv712429  # Database only accessible from control plane
-      nginx:
-        env:
-          APP_HOST: "127.0.0.1"  # Force IPv4 to avoid IPv6 connection failures
     postgresql:
       enabled: false
     redis:
