@@ -486,16 +486,47 @@ func contains(slice []string, item string) bool {
 func main() {
 	cfg := loadConfig()
 
-	// Register webhook on startup
+	// Validate required configuration
+	if cfg.LabelStudioURL == "" {
+		log.Fatal("❌ FATAL: LS_URL environment variable is required")
+	}
+	if cfg.LabelStudioPAT == "" {
+		log.Fatal("❌ FATAL: LS_PAT environment variable is required")
+	}
+	// S3 credentials are optional for initial startup (may not be configured until Label Studio is set up)
+	log.Printf("✅ Configuration validated: LS_URL=%s", cfg.LabelStudioURL)
+
+	// Register webhook on startup with retry logic
 	go func() {
 		time.Sleep(5 * time.Second) // Wait for server to start
-		token, err := getAccessToken(cfg)
-		if err != nil {
-			log.Printf("⚠️  Failed to get access token for webhook registration: %v", err)
+
+		maxRetries := 10
+		retryDelay := 5 * time.Second
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			token, err := getAccessToken(cfg)
+			if err != nil {
+				log.Printf("⚠️  Attempt %d/%d: Failed to get access token: %v", attempt, maxRetries, err)
+				if attempt < maxRetries {
+					time.Sleep(retryDelay)
+					continue
+				}
+				log.Printf("❌ FATAL: Failed to authenticate with Label Studio after %d attempts", maxRetries)
+				return
+			}
+
+			if err := ensureWebhooks(cfg, token); err != nil {
+				log.Printf("⚠️  Attempt %d/%d: Failed to register webhooks: %v", attempt, maxRetries, err)
+				if attempt < maxRetries {
+					time.Sleep(retryDelay)
+					continue
+				}
+				log.Printf("❌ WARNING: Failed to register webhooks after %d attempts. Webhooks may need manual configuration.", maxRetries)
+				return
+			}
+
+			log.Printf("✅ Successfully registered webhooks on attempt %d", attempt)
 			return
-		}
-		if err := ensureWebhooks(cfg, token); err != nil {
-			log.Printf("⚠️  Failed to register webhooks: %v", err)
 		}
 	}()
 
