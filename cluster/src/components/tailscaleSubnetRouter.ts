@@ -13,6 +13,7 @@ export interface TailscaleSubnetRouterArgs {
 }
 
 export class TailscaleSubnetRouter extends pulumi.ComponentResource {
+  public readonly serviceAccount: kubernetes.core.v1.ServiceAccount;
   public readonly deployment: kubernetes.apps.v1.Deployment;
   public readonly service: kubernetes.core.v1.Service;
 
@@ -20,6 +21,15 @@ export class TailscaleSubnetRouter extends pulumi.ComponentResource {
     super("oceanid:tailscale:SubnetRouter", name, {}, opts);
 
     const labels = { app: "tailscale-subnet-router" };
+
+    // Create ServiceAccount for subnet router
+    this.serviceAccount = new kubernetes.core.v1.ServiceAccount(
+      `${name}-sa`,
+      {
+        metadata: { name: "tailscale", namespace: args.namespace },
+      },
+      { parent: this, provider: args.k8sProvider }
+    );
 
     // Deployment with exit node configuration
     this.deployment = new kubernetes.apps.v1.Deployment(
@@ -107,7 +117,7 @@ export class TailscaleSubnetRouter extends pulumi.ComponentResource {
           },
         },
       },
-      { parent: this, provider: args.k8sProvider }
+      { parent: this, provider: args.k8sProvider, dependsOn: [this.serviceAccount] }
     );
 
     // Service for health checks
