@@ -31,6 +31,43 @@ export class TailscaleSubnetRouter extends pulumi.ComponentResource {
       { parent: this, provider: args.k8sProvider }
     );
 
+    // Create Role for subnet router (secret management permissions)
+    const role = new kubernetes.rbac.v1.Role(
+      `${name}-role`,
+      {
+        metadata: { name: "tailscale-subnet-router", namespace: args.namespace },
+        rules: [
+          {
+            apiGroups: [""],
+            resources: ["secrets"],
+            verbs: ["get", "create", "update", "patch"],
+          },
+        ],
+      },
+      { parent: this, provider: args.k8sProvider }
+    );
+
+    // Bind Role to ServiceAccount
+    const roleBinding = new kubernetes.rbac.v1.RoleBinding(
+      `${name}-rolebinding`,
+      {
+        metadata: { name: "tailscale-subnet-router", namespace: args.namespace },
+        roleRef: {
+          apiGroup: "rbac.authorization.k8s.io",
+          kind: "Role",
+          name: "tailscale-subnet-router",
+        },
+        subjects: [
+          {
+            kind: "ServiceAccount",
+            name: "tailscale",
+            namespace: args.namespace,
+          },
+        ],
+      },
+      { parent: this, provider: args.k8sProvider, dependsOn: [role, this.serviceAccount] }
+    );
+
     // Deployment with exit node configuration
     this.deployment = new kubernetes.apps.v1.Deployment(
       `${name}-deployment`,
