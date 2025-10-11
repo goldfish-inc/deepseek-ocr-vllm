@@ -5,10 +5,11 @@ Database for storing ML-cleaned vessel registry data from RFMO sources with JSON
 ## Database Information
 
 - **Cluster**: Crunchy Bridge Ebisu (PostgreSQL 17.5)
-- **Database**: `labelfish`
+- **Database**: `cleandata`
 - **Schema**: `cleandata`
 - **Connection**: Stored in ESC as `oceanid-cluster:cleandataDbUrl`
-- **Owner**: `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
+- **Owner**: `cleandata_owner` (application role with full schema access)
+- **Superuser**: `postgres` (administrative access only)
 
 ## Schema Design
 
