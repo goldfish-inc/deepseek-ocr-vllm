@@ -886,8 +886,8 @@ if (enableTailscale) {
             routes: ["10.42.0.0/16", "10.43.0.0/16"], // K8s pod + service CIDRs
             advertiseExitNode: true,
             acceptDNS: true,
-            nodeSelectorKey: "oceanid.cluster/node",
-            nodeSelectorValue: "tethys", // Pin to tethys for 157.173.210.123 IP
+            nodeSelectorKey: "oceanid.node/name",
+            nodeSelectorValue: "tethys", // Pin to tethys (srv712429) for 157.173.210.123 IP
             k8sProvider,
         }, { dependsOn: [tailscaleOperator] });
     }
