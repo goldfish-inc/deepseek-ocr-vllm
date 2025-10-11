@@ -24,6 +24,8 @@ import { AnnotationsSink } from "./components/annotationsSink";
 import { DbBootstrap } from "./components/dbBootstrap";
 import { ProjectBootstrapper } from "./components/projectBootstrapper";
 import { CSVIngestionWorker } from "./components/csvIngestionWorker";
+import { TailscaleOperator } from "./components/tailscaleOperator";
+import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
 
 // =============================================================================
 // CLUSTER PROVISIONING
@@ -851,6 +853,44 @@ if (enableCsvIngestionWorker) {
         imageTag: csvWorkerImage ? undefined : csvWorkerImageTag,
         replicas: 2,
     }, { provider: k8sProvider });
+}
+
+// =============================================================================
+// TAILSCALE EXIT NODE (Unified Egress IP)
+// =============================================================================
+
+// Deploy Tailscale Operator for Kubernetes-native connectivity management
+const enableTailscale = cfg.getBoolean("enableTailscale") ?? false;
+let tailscaleOperator: TailscaleOperator | undefined;
+let subnetRouter: TailscaleSubnetRouter | undefined;
+
+if (enableTailscale) {
+    const tailscaleOAuthClientId = cfg.get("tailscaleOAuthClientId");
+    const tailscaleOAuthClientSecret = cfg.getSecret("tailscaleOAuthClientSecret");
+    const tailscaleAuthKey = cfg.getSecret("tailscaleAuthKey");
+
+    if (tailscaleOAuthClientId && tailscaleOAuthClientSecret && tailscaleAuthKey) {
+        // Deploy Tailscale Operator (manages authentication and device registration)
+        tailscaleOperator = new TailscaleOperator("tailscale-operator", {
+            namespace: "tailscale",
+            oauthClientId: tailscaleOAuthClientId,
+            oauthClientSecret: tailscaleOAuthClientSecret as any,
+            k8sProvider,
+        });
+
+        // Deploy Subnet Router (advertises K8s CIDRs and acts as exit node)
+        // Pinned to tethys node for stable egress IP (157.173.210.123)
+        subnetRouter = new TailscaleSubnetRouter("tailscale-subnet-router", {
+            namespace: "tailscale",
+            authKey: tailscaleAuthKey as any,
+            routes: ["10.42.0.0/16", "10.43.0.0/16"], // K8s pod + service CIDRs
+            advertiseExitNode: true,
+            acceptDNS: true,
+            nodeSelectorKey: "oceanid.cluster/node",
+            nodeSelectorValue: "tethys", // Pin to tethys for 157.173.210.123 IP
+            k8sProvider,
+        }, { dependsOn: [tailscaleOperator] });
+    }
 }
 
 // Optional: host-level Cloudflared connector on Calypso for GPU access
