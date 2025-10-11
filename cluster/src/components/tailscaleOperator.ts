@@ -43,8 +43,15 @@ export class TailscaleOperator extends pulumi.ComponentResource {
             hostname: "oceanid-operator",
           },
         },
+        timeout: 600, // 10 minutes for operator to authenticate and become ready
+        skipAwait: false, // Wait for pods to be ready
       },
-      { parent: this, provider: args.k8sProvider, dependsOn: [this.namespace] }
+      {
+        parent: this,
+        provider: args.k8sProvider,
+        dependsOn: [this.namespace],
+        replaceOnChanges: ["values.oauth.*"], // Force pod recreation when OAuth credentials change
+      }
     );
 
     this.registerOutputs({});
