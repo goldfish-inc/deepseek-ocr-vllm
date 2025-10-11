@@ -13,11 +13,11 @@ COPY *.go ./
 # Build static binary
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o bootstrapper .
 
-# Runtime stage - minimal scratch image
-FROM scratch
+# Runtime stage - alpine for DNS resolver support
+FROM alpine:latest
 
-# Copy CA certificates for HTTPS requests
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Install CA certificates
+RUN apk --no-cache add ca-certificates
 
 # Copy binary
 COPY --from=builder /build/bootstrapper /bootstrapper
