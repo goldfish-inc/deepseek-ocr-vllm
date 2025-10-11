@@ -11,6 +11,18 @@ metadata:
   namespace: apps
 spec:
   interval: 10m
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: label-studio-ls-app
+            patch: |-
+              - op: replace
+                path: /spec/template/spec/containers/1/env/0
+                value:
+                  name: APP_HOST
+                  value: "127.0.0.1"
   chart:
     spec:
       chart: label-studio
