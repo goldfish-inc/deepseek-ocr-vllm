@@ -865,16 +865,16 @@ let tailscaleOperator: TailscaleOperator | undefined;
 let subnetRouter: TailscaleSubnetRouter | undefined;
 
 if (enableTailscale) {
-    const tailscaleOAuthClientId = cfg.get("tailscaleOAuthClientId");
-    const tailscaleOAuthClientSecret = cfg.getSecret("tailscaleOAuthClientSecret");
+    const tailscaleOperatorOAuthClientId = cfg.getSecret("tailscaleOperatorOAuthClientId");
+    const tailscaleOperatorOAuthSecret = cfg.getSecret("tailscaleOperatorOAuthSecret");
     const tailscaleAuthKey = cfg.getSecret("tailscaleAuthKey");
 
-    if (tailscaleOAuthClientId && tailscaleOAuthClientSecret && tailscaleAuthKey) {
+    if (tailscaleOperatorOAuthClientId && tailscaleOperatorOAuthSecret && tailscaleAuthKey) {
         // Deploy Tailscale Operator (manages authentication and device registration)
         tailscaleOperator = new TailscaleOperator("tailscale-operator", {
             namespace: "tailscale",
-            oauthClientId: tailscaleOAuthClientId,
-            oauthClientSecret: tailscaleOAuthClientSecret as any,
+            oauthClientId: tailscaleOperatorOAuthClientId as any,
+            oauthClientSecret: tailscaleOperatorOAuthSecret as any,
             k8sProvider,
         });
 
