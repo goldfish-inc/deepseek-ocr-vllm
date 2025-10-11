@@ -120,11 +120,16 @@ jobs:
           refresh: true
           diff: true
 
-      - name: Post-deployment Health Check
+      - name: Post-deployment Health Check (Flux)
         if: always()
         run: |
           chmod +x cluster/scripts/flux-health-check.sh
-          # Give controllers time to stabilize after deployment
-          echo "Waiting 30 seconds for controllers to stabilize..."
-          sleep 30
           cluster/scripts/flux-health-check.sh
+
+      - name: Post-deployment Health Check (Applications)
+        if: always()
+        run: |
+          chmod +x cluster/scripts/deployment-health-check.sh
+          # Check all critical deployments in apps namespace
+          # Args: namespace, timeout_per_deployment, stabilization_delay
+          cluster/scripts/deployment-health-check.sh apps 300 30
