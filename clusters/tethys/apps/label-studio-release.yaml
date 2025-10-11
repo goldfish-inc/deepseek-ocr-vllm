@@ -49,13 +49,6 @@ spec:
         DJANGO_ALLOWED_HOSTS: "label.boathou.se"
         LABEL_STUDIO_HOST: "https://label.boathou.se"
         APP_HOST: "127.0.0.1"  # Force nginx to use IPv4 upstream
-      extraEnvironmentSecrets:
-        AWS_ACCESS_KEY_ID:
-          secretName: labelstudio-s3-credentials
-          key: AWS_ACCESS_KEY_ID
-        AWS_SECRET_ACCESS_KEY:
-          secretName: labelstudio-s3-credentials
-          key: AWS_SECRET_ACCESS_KEY
       persistence:
         enabled: true
         type: s3
@@ -68,6 +61,13 @@ spec:
             region: us-east-1
             bucket: labelstudio-goldfish-uploads
     app:
+      extraEnvironmentSecrets:
+        AWS_ACCESS_KEY_ID:
+          secretName: labelstudio-s3-credentials
+          key: AWS_ACCESS_KEY_ID
+        AWS_SECRET_ACCESS_KEY:
+          secretName: labelstudio-s3-credentials
+          key: AWS_SECRET_ACCESS_KEY
       service:
         type: ClusterIP
         port: 8080
