@@ -1,0 +1,47 @@
+// Tailscale ACL Policy for Oceanid
+// Managed via GitOps - changes pushed to main will auto-deploy
+// Docs: https://tailscale.com/kb/1018/acls
+
+{
+	// Define who owns which tags
+	"tagOwners": {
+		// K8s cluster devices (managed by Tailscale Kubernetes Operator)
+		"tag:k8s": ["autogroup:admin"],
+	},
+
+	// Access control lists
+	"acls": [
+		// Allow all members to access each other (existing behavior)
+		{
+			"action": "accept",
+			"src":    ["autogroup:member"],
+			"dst":    ["*:*"],
+		},
+
+		// Allow K8s-tagged devices to access everything
+		// (cluster pods need outbound access for database, S3, webhooks)
+		{
+			"action": "accept",
+			"src":    ["tag:k8s"],
+			"dst":    ["*:*"],
+		},
+
+		// Allow everything to access K8s services
+		// (enables accessing Label Studio UI, metrics endpoints from tailnet)
+		{
+			"action": "accept",
+			"src":    ["autogroup:member"],
+			"dst":    ["tag:k8s:*"],
+		},
+	],
+
+	// SSH rules (optional, for future use)
+	"ssh": [
+		{
+			"action": "accept",
+			"src":    ["autogroup:admin"],
+			"dst":    ["tag:k8s"],
+			"users":  ["autogroup:nonroot", "root"],
+		},
+	],
+}

@@ -1,0 +1,39 @@
+name: Sync Tailscale ACLs
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "policy.hujson"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "policy.hujson"
+
+jobs:
+  acls:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # for commenting on PRs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy ACL
+        if: github.event_name == 'push'
+        id: deploy-acl
+        uses: tailscale/gitops-acl-action@v1
+        with:
+          api-key: ${{ secrets.TS_API_KEY }}
+          tailnet: ${{ secrets.TS_TAILNET }}
+          action: apply
+
+      - name: Test ACL
+        if: github.event_name == 'pull_request'
+        id: test-acl
+        uses: tailscale/gitops-acl-action@v1
+        with:
+          api-key: ${{ secrets.TS_API_KEY }}
+          tailnet: ${{ secrets.TS_TAILNET }}
+          action: test
