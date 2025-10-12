@@ -612,49 +612,48 @@ kubectl -n apps run dbtest --rm -i --image=postgres:16-alpine \
 
 **Network**: `ebisu-network` (ID: `ooer7tenangenjelkxbkgz6sdi`)
 
-CrunchyBridge uses IP-based firewall allowlists to control database access. All cluster nodes that run pods connecting to the database must be in the allowlist.
+All database egress now transits the **Tailscale exit node** (`srv712429-oceanid`). Hosts `srv712695` and `calypso` automatically attach to the same tailnet and route traffic through the exit node, so **only a single IP** must remain in the CrunchyBridge allowlist.
 
-**Current Allowlist** (as of 2025-10-10):
-- `157.173.210.123/32` - srv712429 (tethys) - Boston K3s control plane + worker
-- `191.101.1.3/32` - srv712695 (styx) - Phoenix K3s worker node
+**Unified Allowlist** (2025-10-13):
+- `157.173.210.123/32` – `srv712429-oceanid` (Tailscale exit node & control plane)
 
-**Adding New Nodes**:
+➡️ Remove any legacy node entries (e.g., `191.101.1.3/32`) once verification succeeds. Keeping stale rules defeats the purpose of centralized egress.
+
+**Pulumi Automation Highlights**
+- `enableTailscale` + `enableHostTailscale` in `Pulumi.prod.yaml` turn on the operator, subnet router, and host automation.
+- `HostTailscale` component installs `tailscaled` on `srv712429`, `srv712695`, and `calypso`, advertising `10.42.0.0/16` and `10.43.0.0/16` plus exit-node routing.
+- `/tmp/tailscale-egress-ip.txt` on each host captures the observed egress IP after provisioning (should read `157.173.210.123` everywhere).
+
+**Verification Checklist**
+1. `pulumi up` completes without host-side failures (`tailscale-exit-node`, `tailscale-styx`, `tailscale-calypso` resources).
+2. On each node:
+   ```bash
+   sudo tailscale status --peers=false
+   cat /tmp/tailscale-egress-ip.txt
+   ```
+   Expect `Exit node: srv712429-oceanid` and the unified IP.
+3. From any pod:
+   ```bash
+   kubectl -n apps exec deploy/csv-ingestion-worker -it -- \
+     curl -s --max-time 5 https://ipinfo.io/ip
+   ```
+   → `157.173.210.123`
+4. Validate database reachability via exit node:
+   ```bash
+   kubectl -n apps run db-egress-check --rm -i --image=postgres:16-alpine \
+     --command -- sh -c 'nc -zvw5 18.116.211.217 5432'
+   ```
+
+**Managing the Firewall**
 ```bash
-# Authenticate with CrunchyBridge CLI (one-time)
-cb network list  # Will prompt browser login
-
-# List current firewall rules
+# Inspect current rules
 cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
 
-# Add new node IP (use /32 for single IP)
-cb network add-firewall-rule \
-  --network ooer7tenangenjelkxbkgz6sdi \
-  --rule <NODE_IP>/32 \
-  --description "<hostname> - K3s worker node"
-
-# Verify connectivity from node
-ssh <node> "nc -zv 18.116.211.217 5432"
-```
-
-**CIDR Notation**:
-- `/32` = Single IP address (use for individual nodes)
-- `/24` = 256 addresses (e.g., `192.168.1.0/24` = `192.168.1.0` - `192.168.1.255`)
-- Always use `/32` for K3s nodes unless using a subnet
-
-**Removing Decommissioned Nodes**:
-```bash
-# List rules to find the rule ID
-cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
-
-# Remove the rule
+# Remove stale node-specific entries
 cb network remove-firewall-rule --network ooer7tenangenjelkxbkgz6sdi --rule <RULE_ID>
 ```
 
-**Important Notes**:
-- Firewall changes take effect immediately (no restart required)
-- Pods on newly allowed nodes may need manual restart to clear CrashLoopBackOff state
-- Always test connectivity with `nc -zv` before restarting pods
-- Keep descriptions up-to-date for node identification
+Only update the allowlist if the exit-node public IP changes (e.g., new host, provider move). Do **not** add individual worker nodes anymore—ensure they join the tailnet instead.
 
 ## Security Considerations
 

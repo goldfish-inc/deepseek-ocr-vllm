@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -24,6 +25,32 @@ type Config struct {
 	NERLabelsJSON    string
 	AllowedOrigins   []string
 }
+
+var (
+	httpDialer = &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
+	httpTransport = &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           httpDialer.DialContext,
+		ForceAttemptHTTP2:     false,
+		MaxIdleConns:          10,
+		MaxConnsPerHost:       10,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+		DisableKeepAlives:     true,
+	}
+
+	httpClient = &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: httpTransport,
+	}
+)
 
 func loadConfig() *Config {
 	allowedOrigins := []string{"*"}
@@ -80,36 +107,67 @@ func buildLabelConfig(labels []string) string {
 </View>`, inner.String())
 }
 
-// httpClient makes HTTP requests with timeout
-func httpClient(method, url string, headers map[string]string, body []byte) (int, []byte, error) {
-	client := &http.Client{Timeout: 20 * time.Second}
+// doRequest performs HTTP calls with hardened networking configuration and retries
+func doRequest(method, url string, headers map[string]string, body []byte) (int, []byte, error) {
+	const maxAttempts = 3
 
-	var reqBody io.Reader
-	if body != nil {
-		reqBody = bytes.NewReader(body)
+	var lastStatus int
+	var lastBody []byte
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var reqBody io.Reader
+		if body != nil {
+			reqBody = bytes.NewReader(body)
+		}
+
+		req, err := http.NewRequest(method, url, reqBody)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			if attempt < maxAttempts {
+				delay := time.Duration(1<<uint(attempt-1)) * time.Second
+				log.Printf("⚠️  HTTP %s %s failed (attempt %d/%d): %v – retrying in %s", method, url, attempt, maxAttempts, err, delay)
+				time.Sleep(delay)
+				continue
+			}
+			return 0, nil, err
+		}
+
+		respBody, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		lastStatus = resp.StatusCode
+		lastBody = respBody
+
+		if readErr != nil {
+			lastErr = readErr
+		} else if resp.StatusCode < http.StatusInternalServerError {
+			return resp.StatusCode, respBody, nil
+		} else {
+			lastErr = fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(respBody))
+		}
+
+		if attempt < maxAttempts {
+			delay := time.Duration(1<<uint(attempt-1)) * time.Second
+			log.Printf("⚠️  HTTP %s %s attempt %d/%d failed: %v – retrying in %s", method, url, attempt, maxAttempts, lastErr, delay)
+			time.Sleep(delay)
+		}
 	}
 
-	req, err := http.NewRequest(method, url, reqBody)
-	if err != nil {
-		return 0, nil, err
+	if lastErr != nil {
+		return lastStatus, lastBody, lastErr
 	}
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, nil, err
-	}
-
-	return resp.StatusCode, respBody, nil
+	return lastStatus, lastBody, fmt.Errorf("request failed with status %d", lastStatus)
 }
 
 // getAccessToken exchanges PAT for access token
@@ -120,7 +178,7 @@ func getAccessToken(cfg *Config) (string, error) {
 	headers := map[string]string{"Content-Type": "application/json"}
 	url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/token/refresh"
 
-	status, respBody, err := httpClient("POST", url, headers, body)
+	status, respBody, err := doRequest("POST", url, headers, body)
 	if err != nil {
 		return "", err
 	}
@@ -147,7 +205,7 @@ func ensureWebhooks(cfg *Config, token string) error {
 	}
 
 	url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/webhooks"
-	status, respBody, err := httpClient("GET", url, headers, nil)
+	status, respBody, err := doRequest("GET", url, headers, nil)
 	if err != nil || status != 200 {
 		return err
 	}
@@ -174,7 +232,7 @@ func ensureWebhooks(cfg *Config, token string) error {
 			"events":       []string{"PROJECT_CREATED"},
 		}
 		body, _ := json.Marshal(payload)
-		status, respBody, err := httpClient("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", url, headers, body)
 		if err == nil && (status == 200 || status == 201) {
 			log.Printf("✅ Registered PROJECT_CREATED webhook: %s", bootstrapperURL)
 		} else {
@@ -189,7 +247,7 @@ func ensureWebhooks(cfg *Config, token string) error {
 			"events":       []string{"TASK_CREATED", "TASKS_BULK_CREATED"},
 		}
 		body, _ := json.Marshal(payload)
-		httpClient("POST", url, headers, body)
+		doRequest("POST", url, headers, body)
 	}
 
 	if cfg.SinkWebhookURL != "" && !hasURL(cfg.SinkWebhookURL) {
@@ -199,7 +257,7 @@ func ensureWebhooks(cfg *Config, token string) error {
 			"events":       []string{"ANNOTATION_CREATED", "ANNOTATION_UPDATED", "ANNOTATION_DELETED"},
 		}
 		body, _ := json.Marshal(payload)
-		httpClient("POST", url, headers, body)
+		doRequest("POST", url, headers, body)
 	}
 
 	return nil
@@ -253,7 +311,7 @@ func configureS3Storage(cfg *Config, token string, projectID int, projectTitle s
 	}
 
 	url := fmt.Sprintf("%s/api/storages/s3?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
-	status, respBody, err := httpClient("POST", url, headers, body)
+	status, respBody, err := doRequest("POST", url, headers, body)
 	if err != nil || (status != 200 && status != 201) {
 		return fmt.Errorf("S3 storage config failed: %d %s", status, string(respBody))
 	}
@@ -375,7 +433,7 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 		body, _ := json.Marshal(projectPayload)
 
 		url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/projects/"
-		status, respBody, err := httpClient("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", url, headers, body)
 		if err != nil || (status != 200 && status != 201) {
 			http.Error(w, fmt.Sprintf("Create project failed: %d %s", status, string(respBody)), http.StatusBadGateway)
 			return
@@ -396,7 +454,7 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 		body, _ = json.Marshal(configPayload)
 
 		url = fmt.Sprintf("%s/api/projects/%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
-		status, respBody, err = httpClient("PATCH", url, headers, body)
+		status, respBody, err = doRequest("PATCH", url, headers, body)
 		if err != nil || (status != 200 && status != 201) {
 			http.Error(w, fmt.Sprintf("Apply config failed: %d %s", status, string(respBody)), http.StatusBadGateway)
 			return
@@ -414,7 +472,7 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 			body, _ = json.Marshal(mlPayload)
 
 			url = strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/ml"
-			httpClient("POST", url, headers, body)
+			doRequest("POST", url, headers, body)
 		}
 
 		// Connect TaBERT backend (optional)
@@ -429,7 +487,7 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 			body, _ = json.Marshal(mlPayload)
 
 			url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/ml"
-			httpClient("POST", url, headers, body)
+			doRequest("POST", url, headers, body)
 		}
 
 		// Ensure webhooks

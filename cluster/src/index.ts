@@ -10,6 +10,7 @@ import { PulumiOperator } from "./components/pulumiOperator";
 import { configureGitOps } from "./gitops";
 // import { LabelStudio } from "./components/labelStudio"; // MOVED TO GITOPS
 import { HostCloudflared } from "./components/hostCloudflared";
+import { HostTailscale } from "./components/hostTailscale";
 import { HostDockerService } from "./components/hostDockerService";
 import { HostModelPuller } from "./components/hostModelPuller";
 import { LsTritonAdapter } from "./components/lsTritonAdapter";
@@ -861,13 +862,23 @@ if (enableCsvIngestionWorker) {
 
 // Deploy Tailscale Operator for Kubernetes-native connectivity management
 const enableTailscale = cfg.getBoolean("enableTailscale") ?? false;
+const enableHostTailscale = cfg.getBoolean("enableHostTailscale") ?? true;
 let tailscaleOperator: TailscaleOperator | undefined;
 let subnetRouter: TailscaleSubnetRouter | undefined;
+let tailscaleExitNode: HostTailscale | undefined;
+const tailscaleClients: HostTailscale[] = [];
 
 if (enableTailscale) {
     const tailscaleOperatorOAuthClientId = cfg.getSecret("tailscaleOperatorOAuthClientId");
     const tailscaleOperatorOAuthSecret = cfg.getSecret("tailscaleOperatorOAuthSecret");
     const tailscaleAuthKey = cfg.getSecret("tailscaleAuthKey");
+    const tailscaleAdvertisedRoutes = cfg.getObject<string[]>("tailscaleAdvertisedRoutes") ?? ["10.42.0.0/16", "10.43.0.0/16"];
+    const tailscaleAdvertiseTags = cfg.getObject<string[]>("tailscaleAdvertiseTags") ?? ["tag:k3s-node"];
+    const tailscaleExitNodeHostname = cfg.get("tailscaleExitNodeHostname") ?? "srv712429-oceanid";
+    const tailscaleClientNames = cfg.getObject<Record<string, string>>("tailscaleClientHosts") ?? {
+        styx: "srv712695-oceanid",
+        calypso: "calypso-oceanid",
+    };
 
     if (tailscaleOperatorOAuthClientId && tailscaleOperatorOAuthSecret && tailscaleAuthKey) {
         // Deploy Tailscale Operator (manages authentication and device registration)
@@ -890,6 +901,43 @@ if (enableTailscale) {
             nodeSelectorValue: "tethys", // Pin to tethys (srv712429) for 157.173.210.123 IP
             k8sProvider,
         }, { dependsOn: [tailscaleOperator] });
+
+        if (enableHostTailscale) {
+            // srv712429 acts as unified egress exit node
+            tailscaleExitNode = new HostTailscale("tailscale-exit-node", {
+                host: cfg.require("tethysIp"),
+                user: "root",
+                privateKey: privateKeys.tethys,
+                authKey: tailscaleAuthKey as any,
+                hostname: tailscaleExitNodeHostname,
+                advertiseRoutes: tailscaleAdvertisedRoutes,
+                advertiseExitNode: true,
+                acceptRoutes: true,
+                acceptDNS: true,
+                advertiseTags: tailscaleAdvertiseTags,
+            }, { dependsOn: [subnetRouter] });
+
+            const exitNodeIdentifier = cfg.get("tailscaleExitNodeName") ?? tailscaleExitNodeHostname;
+            const tailscaleClientSpecs: Array<{ key: keyof typeof privateKeys; ipConfig: string; hostname: string }> = [
+                { key: "styx", ipConfig: cfg.require("styxIp"), hostname: tailscaleClientNames.styx || "srv712695-oceanid" },
+                { key: "calypso", ipConfig: "192.168.2.80", hostname: tailscaleClientNames.calypso || "calypso-oceanid" },
+            ];
+
+            for (const clientConfig of tailscaleClientSpecs) {
+                tailscaleClients.push(new HostTailscale(`tailscale-${clientConfig.key}`, {
+                    host: clientConfig.ipConfig,
+                    user: "root",
+                    privateKey: privateKeys[clientConfig.key],
+                    authKey: tailscaleAuthKey as any,
+                    hostname: clientConfig.hostname,
+                    acceptRoutes: true,
+                    acceptDNS: true,
+                    exitNode: exitNodeIdentifier,
+                    exitNodeAllowLanAccess: true,
+                    advertiseTags: tailscaleAdvertiseTags,
+                }, { dependsOn: [tailscaleExitNode!] }));
+            }
+        }
     }
 }
 
