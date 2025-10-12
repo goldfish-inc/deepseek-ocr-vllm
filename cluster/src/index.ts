@@ -862,7 +862,7 @@ if (enableCsvIngestionWorker) {
 
 // Deploy Tailscale Operator for Kubernetes-native connectivity management
 const enableTailscale = cfg.getBoolean("enableTailscale") ?? false;
-const enableHostTailscale = cfg.getBoolean("enableHostTailscale") ?? true;
+const enableHostTailscale = cfg.getBoolean("enableHostTailscale") ?? false;
 let tailscaleOperator: TailscaleOperator | undefined;
 let subnetRouter: TailscaleSubnetRouter | undefined;
 let tailscaleExitNode: HostTailscale | undefined;

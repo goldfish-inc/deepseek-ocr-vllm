@@ -186,6 +186,20 @@ psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schem
   ```
   Both commands should print `157.173.210.123`. See `CLAUDE.md` “CrunchyBridge Firewall Management” for the full checklist.
 
+- **Manual Tailscale host setup?** → Until Pulumi host automation is re-enabled, SSH to each node and run:
+  ```bash
+  curl -fsSL https://tailscale.com/install.sh | sudo sh
+  sudo tailscale up \
+    --authkey=$TAILSCALE_AUTH_KEY \
+    --hostname=<HOSTNAME>-oceanid \
+    --advertise-routes=10.42.0.0/16,10.43.0.0/16 \
+    --advertise-exit-node \
+    --accept-routes \
+    --accept-dns \
+    --advertise-tags=tag:k3s-node
+  ```
+  For worker nodes, replace `--advertise-*` flags with `--exit-node=srv712429-oceanid --exit-node-allow-lan-access`. Confirm with `sudo tailscale status --peers=false`; expect `Exit node: srv712429-oceanid` and run `curl -s https://ipinfo.io/ip` to verify the shared IP.
+
 - **What's the difference between cleandata and the old postgres database?** → The `cleandata` database is the new dedicated database for our data pipeline (CSV ingestion, staging, curation). The old `postgres` database is being phased out. All new data pipeline components should use `cleandata`.
 
 - **Where is the ebisu backend database?** → Ebisu backend will read from the `cleandata` database's curated schemas. Label Studio (deployed in oceanid cluster) uses the separate `labelfish` database.

@@ -620,9 +620,10 @@ All database egress now transits the **Tailscale exit node** (`srv712429-oceanid
 ➡️ Remove any legacy node entries (e.g., `191.101.1.3/32`) once verification succeeds. Keeping stale rules defeats the purpose of centralized egress.
 
 **Pulumi Automation Highlights**
-- `enableTailscale` + `enableHostTailscale` in `Pulumi.prod.yaml` turn on the operator, subnet router, and host automation.
-- `HostTailscale` component installs `tailscaled` on `srv712429`, `srv712695`, and `calypso`, advertising `10.42.0.0/16` and `10.43.0.0/16` plus exit-node routing.
-- `/tmp/tailscale-egress-ip.txt` on each host captures the observed egress IP after provisioning (should read `157.173.210.123` everywhere).
+- `enableTailscale` turns on the operator + subnet router.
+- Optional: set `enableHostTailscale=true` **only when** the Pulumi runner can SSH to every node (including itself). The default remains `false` because the current self-hosted runner on tethys cannot loop back over SSH and cannot reach calypso’s private IP directly.
+- When enabled, `HostTailscale` installs `tailscaled` on `srv712429`, `srv712695`, and `calypso`, advertises `10.42.0.0/16`/`10.43.0.0/16`, and drops `/tmp/tailscale-egress-ip.txt` with the observed IP.
+- If automation is disabled, run the manual commands from `docs/operations/datastores.md#manual-tailscale-host-setup` on each node after the deploy.
 
 **Verification Checklist**
 1. `pulumi up` completes without host-side failures (`tailscale-exit-node`, `tailscale-styx`, `tailscale-calypso` resources).
