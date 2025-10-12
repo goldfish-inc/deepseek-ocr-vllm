@@ -64,10 +64,10 @@ spec:
       extraEnvironmentSecrets:
         AWS_ACCESS_KEY_ID:
           secretName: labelstudio-s3-credentials
-          key: AWS_ACCESS_KEY_ID
+          secretKey: AWS_ACCESS_KEY_ID
         AWS_SECRET_ACCESS_KEY:
           secretName: labelstudio-s3-credentials
-          key: AWS_SECRET_ACCESS_KEY
+          secretKey: AWS_SECRET_ACCESS_KEY
       service:
         type: ClusterIP
         port: 8080
