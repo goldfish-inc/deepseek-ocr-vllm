@@ -500,29 +500,33 @@ func main() {
 	go func() {
 		time.Sleep(5 * time.Second) // Wait for server to start
 
-		maxRetries := 10
 		retryDelay := 5 * time.Second
+		maxBackoff := 60 * time.Second
+		attempt := 0
 
-		for attempt := 1; attempt <= maxRetries; attempt++ {
+		for {
+			attempt++
 			token, err := getAccessToken(cfg)
 			if err != nil {
-				log.Printf("⚠️  Attempt %d/%d: Failed to get access token: %v", attempt, maxRetries, err)
-				if attempt < maxRetries {
-					time.Sleep(retryDelay)
-					continue
+				log.Printf("⚠️  Attempt %d: Failed to get access token: %v", attempt, err)
+				// Exponential backoff with max of 60s
+				backoff := time.Duration(attempt) * retryDelay
+				if backoff > maxBackoff {
+					backoff = maxBackoff
 				}
-				log.Printf("❌ FATAL: Failed to authenticate with Label Studio after %d attempts", maxRetries)
-				return
+				time.Sleep(backoff)
+				continue
 			}
 
 			if err := ensureWebhooks(cfg, token); err != nil {
-				log.Printf("⚠️  Attempt %d/%d: Failed to register webhooks: %v", attempt, maxRetries, err)
-				if attempt < maxRetries {
-					time.Sleep(retryDelay)
-					continue
+				log.Printf("⚠️  Attempt %d: Failed to register webhooks: %v", attempt, err)
+				// Exponential backoff with max of 60s
+				backoff := time.Duration(attempt) * retryDelay
+				if backoff > maxBackoff {
+					backoff = maxBackoff
 				}
-				log.Printf("❌ WARNING: Failed to register webhooks after %d attempts. Webhooks may need manual configuration.", maxRetries)
-				return
+				time.Sleep(backoff)
+				continue
 			}
 
 			log.Printf("✅ Successfully registered webhooks on attempt %d", attempt)
