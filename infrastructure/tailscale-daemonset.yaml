@@ -131,9 +131,8 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "tailscale status 2>&1 | grep -q 'Health check:'"
+                - tailscale
+                - status
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -141,9 +140,8 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "tailscale status --json | grep -q '\"BackendState\":\"Running\"'"
+                - tailscale
+                - status
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
@@ -264,9 +262,8 @@ spec:
           livenessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "tailscale status 2>&1 | grep -q 'Health check:'"
+                - tailscale
+                - status
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -274,9 +271,8 @@ spec:
           readinessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "tailscale status --json | grep -q '\"BackendState\":\"Running\"'"
+                - tailscale
+                - status
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
