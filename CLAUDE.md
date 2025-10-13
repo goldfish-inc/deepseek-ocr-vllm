@@ -2,6 +2,93 @@
 
 This file contains specific instructions for AI assistants working with the Oceanid infrastructure and deployment workflows.
 
+## CRITICAL: NEVER BREAK WORKING INFRASTRUCTURE
+
+**DANGEROUS BEHAVIOR THAT IS ABSOLUTELY PROHIBITED:**
+
+### 1. Modifying Working Systems Without Verification
+
+**BEFORE making ANY changes to infrastructure:**
+
+1. ✅ **VERIFY CURRENT STATE IS BROKEN**
+   ```bash
+   # Check cluster health
+   kubectl get nodes
+   kubectl get pods -A --field-selector=status.phase!=Running
+
+   # If everything is working: DO NOT CHANGE ANYTHING
+   ```
+
+2. ✅ **ASK THE USER FIRST** if you're unsure:
+   - "The [system] appears to be working. Do you want me to modify it?"
+   - "I see [configuration] that looks incomplete. Should I change it?"
+   - NEVER assume something needs fixing without confirming it's broken
+
+3. ✅ **VERIFY FUNCTIONALITY, NOT JUST CONFIGURATION**
+   - Test actual behavior (can services connect? are requests succeeding?)
+   - Don't assume "incomplete config" = "broken system"
+   - Check logs for errors before declaring something broken
+
+**INCIDENT EXAMPLE (2025-10-13):**
+- Tailscale DaemonSet was deployed and working for 15+ hours
+- AI saw workers didn't have `--exit-node` configured
+- AI assumed this was "incomplete" without verifying
+- Applied breaking changes that corrupted both worker nodes
+- **RESULT**: Cluster at 33% capacity, required manual console reboots
+
+**LESSON**: Working infrastructure that "looks incomplete" is NOT broken. Verify first, ask second, change last.
+
+### 2. Prohibited Infrastructure Changes Without Testing
+
+**NEVER do these without explicit user approval:**
+
+- ❌ Modify networking on all nodes simultaneously
+- ❌ Apply `hostNetwork: true` to DaemonSets (breaks cluster networking)
+- ❌ Change routing tables or iptables from Kubernetes
+- ❌ Deploy untested configurations cluster-wide
+- ❌ "Complete" configurations that appear incomplete without verifying they're broken
+
+**REQUIRED FOR RISKY CHANGES:**
+
+1. **Single-node testing FIRST**
+   ```bash
+   # Deploy to ONE node only
+   kubectl label node srv712695 test-changes=true
+
+   # Verify node stays Ready for 5 minutes
+   kubectl get nodes -w
+
+   # Test SSH still works
+   ssh srv712695 "uptime"
+
+   # Only then proceed to other nodes
+   ```
+
+2. **User approval for networking changes**
+   - "I'm about to change networking on [nodes]. This could break SSH access. Proceed?"
+   - Wait for explicit "yes" before applying
+
+3. **Rollback plan ready**
+   - Document how to undo changes before applying them
+   - Verify you can reach console/API if SSH breaks
+
+### 3. Verification Checklist Before Infrastructure Changes
+
+**MANDATORY checks before modifying ANY infrastructure:**
+
+- [ ] Is the system currently working? (check health, not config)
+- [ ] Have I verified this configuration is actually broken?
+- [ ] Have I asked the user if changes are needed?
+- [ ] Do I have a rollback plan?
+- [ ] Am I testing on one node first?
+- [ ] Will this preserve cluster networking (kubelet ↔ API server)?
+- [ ] Will this preserve SSH access?
+- [ ] Have I documented what I'm about to change?
+
+**IF ANY ANSWER IS "NO" OR "UNSURE": STOP AND ASK USER FIRST.**
+
+---
+
 ## CRITICAL: Verify Actual Functionality, Not Just Deployment
 
 **DO NOT DECLARE SUCCESS BASED ON DEPLOYMENT.**
@@ -75,6 +162,51 @@ Allowed local Pulumi commands (read/config only):
 - `pulumi stack output` – read‑only outputs
 
 ## SSH and Authentication
+
+### Hostinger VPS Access
+
+**VPS Servers (2 total)**:
+
+**VPS 1 - styx (srv712695)**:
+- IP: 191.101.1.3
+- Location: United States - Phoenix
+- OS: Ubuntu 25.04
+- Hostname: srv712695.hstgr.cloud
+- Account: ryan@ryantaylor.me
+- SSH: `sshpass -p '<password>' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no root@191.101.1.3`
+- 1Password: "Hostinger VPS - srv712695 (styx)"
+- API Token: Stored in 1Password and ESC as `hostingerStyxApiToken`
+
+**VPS 2 - tethys (srv712429)**:
+- IP: 157.173.210.123
+- Location: United States - Boston
+- OS: Ubuntu 25.04
+- Hostname: srv712429.hstgr.cloud
+- Account: ryan@consensas.com
+- SSH: `sshpass -p '<password>' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no root@157.173.210.123`
+- 1Password: "Hostinger VPS - srv712429 (tethys)"
+- API Token: Stored in 1Password and ESC as `hostingerTethysApiToken`
+
+**IMPORTANT**: Hostinger VPS servers require password authentication with sshpass. Do not use SSH keys.
+
+### Hostinger API
+
+**API Endpoints**:
+```bash
+# Get VPS status
+curl -X GET "https://api.hostinger.com/vps/v1/virtual-machines" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json"
+
+# Reboot VPS
+curl -X POST "https://api.hostinger.com/vps/v1/virtual-machines/{vm_id}/reboot" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json"
+```
+
+**Tokens stored in**:
+- 1Password: In each VPS entry under `api_token` field
+- ESC: `hostingerTethysApiToken` and `hostingerStyxApiToken`
 
 ### Git/GitHub Authentication
 
@@ -764,22 +896,71 @@ gh issue list --search "staging database"
 
 ## Key Reminders for AI Assistants
 
-1. **ALWAYS** use Cloudflare WARP for kubectl access (preferred method)
-2. **ALWAYS** use `KUBECONFIG=~/.kube/k3s-warp.yaml` (WARP kubeconfig)
-3. **ALWAYS** verify WARP is connected before kubectl commands: `warp-cli status`
-4. **NEVER** store secrets in git - use Pulumi ESC
-5. **ALWAYS** test connections before running complex operations
-6. **ALWAYS** use proper error handling for connection issues
-7. **ALWAYS** create GitHub issues before starting implementation work
-8. **ALWAYS** reference issue numbers in commits and PRs
-9. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
-10. **ALWAYS** run health checks after deployment changes
-11. **FALLBACK ONLY**: Use SSH tunnel (`~/.kube/k3s-config.yaml`) if WARP is unavailable
+### CRITICAL SAFETY RULES (Violations = Infrastructure Breakage)
+
+1. ✅ **VERIFY BEFORE CHANGING**: Check current state is actually broken before modifying
+2. ✅ **ASK FIRST**: If unsure whether changes are needed, ask user before applying
+3. ✅ **TEST ON ONE NODE**: Never deploy networking changes cluster-wide without single-node test
+4. ❌ **NEVER use hostNetwork: true** for networking workloads (corrupts host routing)
+5. ❌ **NEVER assume "incomplete config" = broken** (verify functionality, not appearance)
+6. ✅ **HAVE ROLLBACK PLAN**: Document how to undo before applying risky changes
+7. ✅ **PRESERVE CLUSTER NETWORKING**: Don't route kubelet ↔ API server traffic through gateways
+
+### Standard Operating Procedures
+
+8. **ALWAYS** use Cloudflare WARP for kubectl access (preferred method)
+9. **ALWAYS** use `KUBECONFIG=~/.kube/k3s-warp.yaml` (WARP kubeconfig)
+10. **ALWAYS** verify WARP is connected before kubectl commands: `warp-cli status`
+11. **NEVER** store secrets in git - use Pulumi ESC
+12. **ALWAYS** test connections before running complex operations
+13. **ALWAYS** use proper error handling for connection issues
+14. **ALWAYS** create GitHub issues before starting implementation work
+15. **ALWAYS** reference issue numbers in commits and PRs
+16. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
+17. **ALWAYS** run health checks after deployment changes
+18. **FALLBACK ONLY**: Use SSH tunnel (`~/.kube/k3s-config.yaml`) if WARP is unavailable
 
 This infrastructure follows Infrastructure as Code principles with GitOps deployment, automated dependency management, and comprehensive security controls.
 
+## Prohibited Patterns (Will Break Infrastructure)
+
+### NEVER Do These Without Explicit User Approval:
+
+1. **❌ hostNetwork: true in DaemonSets**
+   - Allows pods to corrupt host routing tables
+   - Breaks kubelet connectivity to API server
+   - Incidents: 2025-10-13 (broke 2 worker nodes)
+
+2. **❌ Modifying "incomplete-looking" configs without verification**
+   - Just because config looks incomplete doesn't mean it's broken
+   - Example: Tailscale workers without exit-node flag (intentionally safe)
+   - ALWAYS test functionality before assuming it needs changes
+
+3. **❌ Cluster-wide networking changes without single-node testing**
+   - One misconfiguration breaks all nodes simultaneously
+   - Always test on srv712695 (expendable VPS) first
+   - Verify node stays Ready + SSH accessible for 5+ minutes
+
+4. **❌ Routing cluster traffic through untested gateways**
+   - Kubelet ↔ API server must use direct CNI routing
+   - Don't route internal K8s traffic through external gateways
+   - Only route external egress (database, S3, internet)
+
+5. **❌ Deploying changes without rollback plan**
+   - Document undo steps before applying changes
+   - Ensure console/API access if SSH breaks
+   - Keep credentials accessible for emergency recovery
+
+### When In Doubt:
+
+**ASK THE USER FIRST.** Better to ask an unnecessary question than break production infrastructure.
+
 ## Documentation References
 
+- **Incident Reports**:
+  - `TAILSCALE_DAEMONSET_INCIDENT_2025-10-13.md` - hostNetwork DaemonSet broke worker nodes
+  - `RECOVERY_PLAN_2025-10-13.md` - Manual recovery procedures
+  - `FUTURE_NETWORKING_ARCHITECTURE.md` - Safe pod-based egress design
 - **Cloudflare WARP Setup**: `docs/cloudflare-warp-setup.md` - Architecture and setup guide for WARP-based cluster access
 - **WARP Quick Start**: `docs/warp-next-action.md` - Quick reference for WARP configuration
 - **Resource Ownership**: `docs/RESOURCE_OWNERSHIP.md` - Defines Pulumi vs Flux ownership boundaries
