@@ -2,7 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 
 import { SSHKeyManager } from "./sshKeyManager";
-import { K3sTokenRotator } from "./k3sTokenRotator";
+// import { K3sTokenRotator } from "./k3sTokenRotator"; // MOVED TO CLOUD STACK
 import { SecurityHardening } from "./securityHardening";
 import { CredentialSynchronizer } from "./credentialSynchronizer";
 export interface MigrationOrchestratorArgs {
@@ -59,7 +59,7 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
         // =================================================================
 
         let sshKeyManager: SSHKeyManager | undefined;
-        let k3sTokenRotator: K3sTokenRotator | undefined;
+        // let k3sTokenRotator: K3sTokenRotator | undefined; // K3s token rotation now managed by cloud stack
         let securityHardening: SecurityHardening | undefined;
         let credentialSynchronizer: CredentialSynchronizer | undefined;
 
@@ -90,37 +90,13 @@ export class MigrationOrchestrator extends pulumi.ComponentResource {
                 componentHealth["ssh-key-manager"] = sshKeyManager.outputs.allKeysReady;
             }
 
+            // NOTE: K3s token rotation is now managed by the cloud stack (where K3s is provisioned)
+            // The cloud stack handles K3s token rotation via K3sTokenRotator component
+            // This migration orchestrator focuses on cluster-level resources only
             if (enableK3sRotation) {
-                activeComponents.push("K3s Token Rotator");
-
-                const masterNode = Object.entries(nodes).find(([_, config]) =>
-                    config.hostname.includes("tethys") || config.hostname.includes("srv712429")
-                );
-                const workerNodes = Object.entries(nodes).filter(([_, config]) =>
-                    !config.hostname.includes("tethys") && !config.hostname.includes("srv712429")
-                );
-
-                if (masterNode) {
-                    k3sTokenRotator = new K3sTokenRotator(`${name}-k3s`, {
-                        masterNode: {
-                            ip: masterNode[1].ip,
-                            hostname: masterNode[1].hostname,
-                            user: masterNode[1].user,
-                            privateKey: masterNode[1].privateKey,
-                        },
-                        workerNodes: workerNodes.map(([_, config]) => ({
-                            ip: config.ip,
-                            hostname: config.hostname,
-                            user: config.user,
-                            privateKey: config.privateKey,
-                        })),
-                        escEnvironment,
-                        rotationIntervalDays: 90,
-                        enableAutoRotation: migrationPhase === "parallel-validation",
-                    }, { parent: this });
-
-                    componentHealth["k3s-token-rotator"] = k3sTokenRotator.outputs.allNodesReady;
-                }
+                activeComponents.push("K3s Token Rotator (managed by cloud stack)");
+                // K3s token rotation is handled by oceanid-cloud stack
+                componentHealth["k3s-token-rotator"] = pulumi.output(true); // Managed externally
             }
 
             if (enableSecurityHardening) {

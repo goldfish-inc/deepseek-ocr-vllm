@@ -16,7 +16,6 @@ import { HostModelPuller } from "./components/hostModelPuller";
 import { LsTritonAdapter } from "./components/lsTritonAdapter";
 import { LabelStudioSecrets } from "./components/labelStudioSecrets";
 import { getSentrySettings, toEnvVars } from "./sentry-config";
-import { K3sCluster, NodeConfig } from "./components/k3sCluster";
 import { ControlPlaneLoadBalancer } from "./components/controlPlaneLoadBalancer";
 import { MigrationOrchestrator } from "./components/migrationOrchestrator";
 import { NodeTunnels } from "./components/nodeTunnels";
@@ -29,84 +28,27 @@ import { TailscaleOperator } from "./components/tailscaleOperator";
 import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
 
 // =============================================================================
-// CLUSTER PROVISIONING
+// CLUSTER RESOURCES
 // =============================================================================
+// NOTE: K3s cluster provisioning moved to oceanid-cloud stack
 // NOTE: CI guard is in providers.ts to catch GitHub Actions before kubeconfig loading
+// This stack assumes K3s is already provisioned and only manages in-cluster resources
 
 const cfg = new pulumi.Config();
 const namespaceName = "apps";
 
-// Node configuration - Multi-control-plane for high availability
-const nodes: Record<string, NodeConfig> = {
-    tethys: {
-        hostname: "srv712429",
-        ip: cfg.require("tethysIp"),
-        role: "master",
-        labels: {
-            "node-role.kubernetes.io/control-plane": "true",
-            "oceanid.cluster/node": "tethys",
-            "oceanid.cluster/provider": "hostinger",
-            "oceanid.cluster/control-plane": "primary"
-        }
-    },
-    styx: {
-        hostname: "srv712695",
-        ip: cfg.require("styxIp"),
-        role: "master", // Convert to second control plane node
-        labels: {
-            "node-role.kubernetes.io/control-plane": "true",
-            "oceanid.cluster/node": "styx",
-            "oceanid.cluster/provider": "hostinger",
-            "oceanid.cluster/control-plane": "secondary"
-        }
-    },
-    calypso: {
-        hostname: "calypso",
-        ip: "192.168.2.80",
-        role: "worker",
-        gpu: "rtx4090",
-        labels: {
-            "node-role.kubernetes.io/worker": "true",
-            "node.kubernetes.io/instance-type": "gpu",
-            "oceanid.cluster/tunnel-enabled": "true",
-            "oceanid.cluster/node": "calypso",
-            "oceanid.cluster/gpu": "rtx4090",
-            "oceanid.cluster/provider": "local"
-        }
-    }
-};
-
-// SSH keys for node access
+// SSH keys for host-level components (Calypso connectors, Tailscale)
 const privateKeys = {
     tethys: cfg.requireSecret("tethys_ssh_key"),
     styx: cfg.requireSecret("styx_ssh_key"),
     calypso: cfg.requireSecret("calypso_ssh_key"),
 };
 
-// Feature flags to avoid long SSH operations during troubleshooting
-const enableNodeProvisioning = cfg.getBoolean("enableNodeProvisioning") ?? true;
+// Feature flags
 const enableMigration = cfg.getBoolean("enableMigration") ?? true;
 
-// Create the K3s cluster with idempotent node provisioning (optional)
-let cluster: K3sCluster | undefined;
-if (enableNodeProvisioning) {
-    cluster = new K3sCluster("oceanid", {
-        nodes,
-        k3sToken: cfg.requireSecret("k3s_token"),
-        k3sVersion: cfg.get("k3s_version") || "v1.33.4+k3s1",
-        privateKeys,
-        enableEtcdBackups: true,
-        backupS3Bucket: cfg.get("etcd_backup_s3_bucket"),
-        s3Credentials: {
-            accessKey: cfg.requireSecret("s3_access_key"),
-            secretKey: cfg.requireSecret("s3_secret_key"),
-            region: cfg.get("s3_region") || "us-east-1",
-            endpoint: cfg.get("s3_endpoint"), // Optional for S3-compatible storage
-        },
-    });
-}
-
 // Create load balancer for multi-control-plane high availability
+// NOTE: Assumes K3s cluster is already provisioned by cloud stack
 const enableControlPlaneLB = cfg.getBoolean("enableControlPlaneLB") ?? true;
 const controlPlaneLB = enableControlPlaneLB
     ? new ControlPlaneLoadBalancer("control-plane-lb", {
@@ -116,7 +58,7 @@ const controlPlaneLB = enableControlPlaneLB
         ],
         k8sProvider,
         enableHealthChecks: true,
-    }, { dependsOn: cluster ? [cluster] : [] })
+    })
     : undefined;
 
 // =============================================================================
@@ -1115,10 +1057,8 @@ const migration = enableMigration
     : undefined;
 
 export const outputs = {
-    // Cluster provisioning
-    clusterReady: cluster ? cluster.outputs.clusterReady : pulumi.output(false),
-    masterEndpoint: cluster ? cluster.outputs.masterEndpoint : pulumi.output(""),
-    nodeProvisioningStatus: cluster ? cluster.outputs.provisioningStatus : pulumi.output({}),
+    // Cluster provisioning (managed by oceanid-cloud stack)
+    clusterProvisioningNote: pulumi.output("K3s cluster provisioning is managed by the oceanid-cloud stack"),
 
     // High availability
     controlPlaneLB: controlPlaneLB ? controlPlaneLB.outputs.loadBalancerIP : pulumi.output(""),

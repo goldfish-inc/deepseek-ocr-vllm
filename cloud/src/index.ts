@@ -2,6 +2,8 @@ import * as pulumi from "@pulumi/pulumi";
 import * as crunchybridge from "@pulumi/crunchybridge";
 import * as cloudflare from "@pulumi/cloudflare";
 import { PostgresDatabase } from "./components/postgresDatabase";
+import { K3sCluster, NodeConfig } from "./components/k3sCluster";
+import { GitHubRunner } from "./components/githubRunner";
 
 // =============================================================================
 // OCEANID CLOUD INFRASTRUCTURE
@@ -106,6 +108,95 @@ if (enableCleandataDb) {
 
 export const cleandataDbUrl: pulumi.Output<string> | undefined = cleandataDb?.outputs.connectionUrl;
 export const cleandataDbReady: pulumi.Output<boolean> | undefined = cleandataDb?.outputs.ready;
+
+// =============================================================================
+// K3S CLUSTER PROVISIONING
+// =============================================================================
+// Provisions K3s on all nodes via SSH. This must run BEFORE cluster stack.
+// Cluster stack only manages resources inside the cluster (Flux, PKO, etc.)
+
+const enableK3sProvisioning = cfg.getBoolean("enableK3sProvisioning") ?? false;
+let k3sCluster: K3sCluster | undefined;
+
+if (enableK3sProvisioning) {
+    // Node configuration
+    const nodes: Record<string, NodeConfig> = {
+        "tethys": {
+            hostname: "srv712429",
+            ip: cfg.require("tethysIp"),
+            role: "master",
+            labels: {
+                "oceanid.node/name": "tethys",
+                "oceanid.cluster/control-plane": "primary",
+            },
+        },
+        "styx": {
+            hostname: "srv712695",
+            ip: cfg.require("styxIp"),
+            role: "worker",
+            labels: {
+                "oceanid.node/name": "styx",
+            },
+        },
+        "calypso": {
+            hostname: "calypso",
+            ip: cfg.require("calypsoIp"),
+            role: "worker",
+            gpu: "nvidia-rtx-4090",
+            labels: {
+                "oceanid.node/name": "calypso",
+                "oceanid.node/gpu": "nvidia-rtx-4090",
+            },
+        },
+    };
+
+    // SSH private keys (stored in ESC)
+    const privateKeys = {
+        "tethys": cfg.requireSecret("tethysSshKey"),
+        "styx": cfg.requireSecret("styxSshKey"),
+        "calypso": cfg.requireSecret("calypsoSshKey"),
+    };
+
+    k3sCluster = new K3sCluster("oceanid", {
+        nodes,
+        k3sToken: cfg.requireSecret("k3sToken"),
+        k3sVersion: cfg.get("k3sVersion") || "v1.33.4+k3s1",
+        privateKeys,
+        enableEtcdBackups: true,
+        backupS3Bucket: cfg.get("etcdBackupS3Bucket"),
+        s3Credentials: {
+            accessKey: cfg.requireSecret("s3AccessKey"),
+            secretKey: cfg.requireSecret("s3SecretKey"),
+            region: cfg.get("s3Region") || "us-east-1",
+            endpoint: cfg.get("s3Endpoint"),
+        },
+    });
+}
+
+export const k3sClusterReady: pulumi.Output<boolean> | undefined = k3sCluster?.outputs.clusterReady;
+export const k3sMasterEndpoint: pulumi.Output<string> | undefined = k3sCluster?.outputs.masterEndpoint;
+
+// =============================================================================
+// GITHUB ACTIONS RUNNER
+// =============================================================================
+// Self-hosted runner on tethys for cluster deployments
+// Must run AFTER K3s cluster is provisioned
+
+const enableGitHubRunner = cfg.getBoolean("enableGitHubRunner") ?? false;
+let githubRunner: GitHubRunner | undefined;
+
+if (enableGitHubRunner) {
+    githubRunner = new GitHubRunner("tethys-runner", {
+        host: cfg.require("tethysIp"),
+        privateKey: cfg.requireSecret("tethysSshKey"),
+        githubToken: cfg.requireSecret("githubToken"),
+        repository: "goldfish-inc/oceanid",
+        runnerName: "tethys",
+        labels: ["k8s", "self-hosted-tethys"],
+    }, { dependsOn: k3sCluster ? [k3sCluster] : [] });
+}
+
+export const githubRunnerReady: pulumi.Output<boolean> | undefined = githubRunner?.runnerReady;
 
 // =============================================================================
 // CLOUDFLARE DNS

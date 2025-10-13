@@ -32,6 +32,9 @@ importers:
       '@pulumi/pulumi':
         specifier: ^3.197.0
         version: 3.201.0(ts-node@10.9.2(@types/node@22.18.8)(typescript@5.9.3))(typescript@5.9.3)
+      '@pulumi/random':
+        specifier: ^4.18.3
+        version: 4.18.3(ts-node@10.9.2(@types/node@22.18.8)(typescript@5.9.3))(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -2132,6 +2135,15 @@ snapshots:
     transitivePeerDependencies:
       - bluebird
       - supports-color
+
+  '@pulumi/random@4.18.3(ts-node@10.9.2(@types/node@22.18.8)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@pulumi/pulumi': 3.201.0(ts-node@10.9.2(@types/node@22.18.8)(typescript@5.9.3))(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+      - ts-node
+      - typescript
 
   '@pulumi/random@4.18.3(ts-node@10.9.2(@types/node@24.7.0)(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
