@@ -42,6 +42,28 @@ config:
   # K3s Configuration
   oceanid-cloud:k3sVersion: "v1.33.4+k3s1"
 
+  # SSH Keys (from ESC)
+  oceanid-cloud:tethysSshKey:
+    fn::secret:
+      fn::fromBase64: ${ssh.tethys_private_key_base64}
+  oceanid-cloud:styxSshKey:
+    fn::secret:
+      fn::fromBase64: ${ssh.styx_private_key_base64}
+  oceanid-cloud:calypsoSshKey:
+    fn::secret:
+      fn::fromBase64: ${ssh.calypso_private_key_base64}
+
+  # K3s Token (from ESC)
+  oceanid-cloud:k3sToken:
+    fn::secret: ${k3s.token}
+
+  # S3 Credentials for etcd backups (from ESC)
+  oceanid-cloud:s3AccessKey:
+    fn::secret: ${s3.access_key}
+  oceanid-cloud:s3SecretKey:
+    fn::secret: ${s3.secret_key}
+  oceanid-cloud:s3Region: "us-east-1"
+
   # Feature Flags - K3s Provisioning
   # NOTE: Enabled for architecture testing (#111)
   oceanid-cloud:enableK3sProvisioning: "true"
