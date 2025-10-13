@@ -49,10 +49,21 @@ export class AnnotationsSink extends pulumi.ComponentResource {
       env.push({ name: "HF_TOKEN", value: finalHfToken });
     }
 
-    // Add database URL from args or config
+    // Add database URL from args or config, rewritten to route via in-cluster DB proxy
     const finalDbUrl = dbUrl || cfgPulumi.getSecret("postgresUrl");
     if (finalDbUrl) {
-      env.push({ name: "DATABASE_URL", value: finalDbUrl });
+      const gatewayHost = "egress-db-proxy.apps.svc.cluster.local";
+      const rewritten = (finalDbUrl as any).apply((url: string) => {
+        try {
+          const u = new URL(url);
+          u.hostname = gatewayHost;
+          u.port = "5432";
+          return u.toString();
+        } catch {
+          return url; // fallback
+        }
+      });
+      env.push({ name: "DATABASE_URL", value: rewritten });
     }
 
     // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
@@ -65,15 +76,21 @@ export class AnnotationsSink extends pulumi.ComponentResource {
       metadata: { name: serviceName, namespace },
       spec: {
         replicas,
-        selector: { matchLabels: { app: serviceName } },
+        selector: { matchLabels: { app: serviceName, egress: "external" } },
         template: {
-          metadata: { labels: { app: serviceName } },
+          metadata: { labels: { app: serviceName, egress: "external" } },
           spec: {
             imagePullSecrets: [{ name: "ghcr-creds" }],
             containers: [{
               name: "sink",
               image: sinkImageRef as any,
-              env,
+              env: [
+                // Route external HTTP(S) via egress gateway proxy; keep in-cluster direct
+                { name: "HTTP_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                { name: "HTTPS_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                { name: "NO_PROXY", value: ".svc,.svc.cluster.local,10.42.0.0/16,10.43.0.0/16" },
+                ...env,
+              ],
               ports: [{ containerPort: 8080, name: "http" }],
               readinessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 5, periodSeconds: 10 },
               livenessProbe: { httpGet: { path: "/health", port: 8080 }, initialDelaySeconds: 10, periodSeconds: 20 },
@@ -87,7 +104,7 @@ export class AnnotationsSink extends pulumi.ComponentResource {
     const svc = new k8s.core.v1.Service(`${name}-svc`, {
       metadata: { name: serviceName, namespace },
       spec: {
-        selector: { app: serviceName },
+        selector: { app: serviceName, egress: "external" },
         ports: [{ port: 8080, targetPort: "http", name: "http" }],
       },
     }, { provider: k8sProvider, parent: this });

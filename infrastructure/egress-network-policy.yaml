@@ -1,0 +1,40 @@
+---
+# Allow selected application pods to route external HTTP(S) via egress gateway.
+# Note: NetworkPolicy enforcement depends on the cluster CNI. With Flannel, this
+# may not be enforced; using HTTP(S)_PROXY envs in apps remains the primary path.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-egress-via-gateway
+  namespace: apps
+spec:
+  podSelector:
+    matchLabels:
+      egress: external
+  policyTypes:
+    - Egress
+  egress:
+    # DNS to CoreDNS (kube-system)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # In-cluster traffic (pods and services)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+    # HTTP proxy to egress gateway
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: egress-system
+          podSelector:
+            matchLabels:
+              app: egress-gateway
+      ports:
+        - protocol: TCP
+          port: 3128

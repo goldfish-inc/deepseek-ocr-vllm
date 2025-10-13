@@ -59,7 +59,7 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
       imageTag,
     } = args;
 
-    const labels = { app: serviceName };
+    const labels = { app: serviceName, egress: "external" };
 
     // Prefer a full immutable image ref (e.g., ghcr.io/...:${GIT_SHA})
     const bootstrapperImageTag = imageTag || "main";
@@ -89,6 +89,10 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
                   ...(sinkWebhookUrl ? [{ name: "SINK_WEBHOOK_URL", value: sinkWebhookUrl as any }] : []),
                   ...(nerLabelsJson ? [{ name: "NER_LABELS_JSON", value: nerLabelsJson as any }] : []),
                   { name: "ALLOWED_ORIGINS", value: pulumi.output(allowedOrigins).apply(a => JSON.stringify(a)) as any },
+                  // Route external HTTP(S) via egress gateway proxy; keep in-cluster direct
+                  { name: "HTTP_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                  { name: "HTTPS_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                  { name: "NO_PROXY", value: ".svc,.svc.cluster.local,10.42.0.0/16,10.43.0.0/16" },
                   ...(s3Bucket ? [{ name: "S3_BUCKET", value: s3Bucket as any }] : []),
                   ...(s3Region ? [{ name: "AWS_REGION", value: s3Region as any }] : []),
                   ...(s3Endpoint ? [{ name: "S3_ENDPOINT", value: s3Endpoint as any }] : []),

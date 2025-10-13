@@ -799,6 +799,64 @@ if (enableCsvIngestionWorker) {
 }
 
 // =============================================================================
+// EGRESS DB PROXY (TCP forwarder for Postgres via unified egress on tethys)
+// =============================================================================
+// Provide a stable in-cluster hostname for Postgres connections that egress from
+// tethys, ensuring CrunchyBridge sees a single public IP.
+
+(() => {
+    const egressDbProxyEnabled = true; // always-on for prod stack
+    if (!egressDbProxyEnabled) return;
+
+    // Extract upstream host/port from cleandataDbUrl (falls back to 5432)
+    const upstreamHost = (cleandataDbUrl as any).apply((url: string) => {
+        try { const u = new URL(url); return u.hostname; } catch { return ""; }
+    });
+    const upstreamPort = (cleandataDbUrl as any).apply((url: string) => {
+        try { const u = new URL(url); return u.port && u.port.length > 0 ? u.port : "5432"; } catch { return "5432"; }
+    });
+
+    const labels = { app: "egress-db-proxy" } as any;
+
+    const dep = new k8s.apps.v1.Deployment("egress-db-proxy", {
+        metadata: { name: "egress-db-proxy", namespace: namespaceName, labels },
+        spec: {
+            replicas: 1,
+            selector: { matchLabels: labels },
+            template: {
+                metadata: { labels },
+                spec: {
+                    // Pin to tethys so outbound IP is unified
+                    nodeSelector: { "oceanid.node/name": "tethys" },
+                    containers: [{
+                        name: "db-proxy",
+                        image: "alpine:3.19",
+                        ports: [{ containerPort: 5432, name: "pg" }],
+                        command: ["/bin/sh","-c"],
+                        args: [
+                            pulumi.interpolate`set -euo pipefail
+apk add --no-cache socat >/dev/null
+echo "Forwarding :5432 -> ${upstreamHost}:${upstreamPort}"
+exec socat -d -d TCP-LISTEN:5432,fork,reuseaddr TCP:${upstreamHost}:${upstreamPort}` as any,
+                        ],
+                        resources: { requests: { cpu: "10m", memory: "16Mi" }, limits: { cpu: "100m", memory: "64Mi" } },
+                    }],
+                },
+            },
+        },
+    }, { provider: k8sProvider });
+
+    new k8s.core.v1.Service("egress-db-proxy", {
+        metadata: { name: "egress-db-proxy", namespace: namespaceName },
+        spec: {
+            selector: labels,
+            ports: [{ name: "pg", port: 5432, targetPort: "pg" as any }],
+            type: "ClusterIP",
+        },
+    }, { provider: k8sProvider, dependsOn: [dep] });
+})();
+
+// =============================================================================
 // TAILSCALE EXIT NODE (Unified Egress IP)
 // =============================================================================
 

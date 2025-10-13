@@ -23,7 +23,7 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
     constructor(name: string, args: CSVIngestionWorkerArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:apps:CSVIngestionWorker", name, {}, opts);
 
-        const labels = { app: "csv-ingestion-worker", component: "data-pipeline" };
+        const labels = { app: "csv-ingestion-worker", component: "data-pipeline", egress: "external" };
         const imageTag = args.imageTag || "main";
         const baseImage = "ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker";
         const imageRef = args.image || pulumi.interpolate`${baseImage}:${imageTag}`;
@@ -96,9 +96,22 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
                                 protocol: "TCP",
                             }],
                             env: [
+                                // Route external HTTP(S) via egress gateway proxy; keep in-cluster direct
+                                { name: "HTTP_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                                { name: "HTTPS_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                                { name: "NO_PROXY", value: ".svc,.svc.cluster.local,10.42.0.0/16,10.43.0.0/16" },
                                 {
                                     name: "DATABASE_URL",
-                                    value: args.dbUrl,
+                                    value: (args.dbUrl as any).apply((url: string) => {
+                                        try {
+                                            const u = new URL(url);
+                                            u.hostname = "egress-db-proxy.apps.svc.cluster.local";
+                                            u.port = "5432";
+                                            return u.toString();
+                                        } catch {
+                                            return url;
+                                        }
+                                    }),
                                 },
                                 {
                                     name: "S3_BUCKET",

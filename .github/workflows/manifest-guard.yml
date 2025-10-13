@@ -1,0 +1,45 @@
+name: Manifest Guard
+
+'on':
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on new hostNetwork DaemonSets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ALLOWLIST=(
+            "infrastructure/cloudflare-private-network.yaml"
+            # Legacy disabled manifest; retained for reference, not applied
+            "infrastructure/tailscale-daemonset.yaml"
+          )
+          # Find files declaring hostNetwork: true
+          mapfile -t HOSTNET_FILES < <(grep -RIl "hostNetwork:\s*true" --include='*.yaml' infrastructure clusters || true)
+          fail=0
+          for f in "${HOSTNET_FILES[@]:-}"; do
+            # Skip disabled manifests
+            if [[ "$f" == *.disabled.yaml ]]; then
+              continue
+            fi
+            # Skip allowlisted files
+            for a in "${ALLOWLIST[@]}"; do
+              if [[ "$f" == "$a" ]]; then
+                continue 2
+              fi
+            done
+            if grep -q "kind:\s*DaemonSet" "$f"; then
+              echo "Error: hostNetwork: true DaemonSet found in $f"
+              fail=1
+            fi
+          done
+          if [[ $fail -ne 0 ]]; then
+            echo "❌ Blocked: hostNetwork DaemonSets are prohibited. Use pod-networked patterns."
+            exit 1
+          fi
+          echo "✅ No prohibited hostNetwork DaemonSets detected."

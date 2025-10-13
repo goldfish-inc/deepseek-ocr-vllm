@@ -3,5 +3,9 @@ kind: Kustomization
 resources:
   - nvidia-device-plugin.yaml
   - storage-classes.yaml
-  - tailscale-daemonset.yaml
+  # Temporarily disable Tailscale DaemonSets to prevent host networking corruption
+  # See TAILSCALE_DAEMONSET_INCIDENT_2025-10-13.md and RECOVERY_PLAN_2025-10-13.md
+  # - tailscale-daemonset.yaml
+  - egress-gateway.yaml
+  - egress-network-policy.yaml
 # PKO is managed by Pulumi components, not Flux

@@ -1,0 +1,118 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: egress-system
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: egress-gateway
+  namespace: egress-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: egress-gateway
+  namespace: egress-system
+  labels:
+    app: egress-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: egress-gateway
+  template:
+    metadata:
+      labels:
+        app: egress-gateway
+    spec:
+      serviceAccountName: egress-gateway
+      # Pin to control-plane host providing public egress (tethys)
+      nodeSelector:
+        oceanid.node/name: tethys
+      # IMPORTANT: Stay in pod networking to avoid host routing changes
+      hostNetwork: false
+      containers:
+        # L3 SNAT to present gateway pod IP; node will further NAT to host public IP
+        - name: gateway
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apk add --no-cache iptables socat curl
+              # Enable pod-level IP forwarding
+              echo 1 > /proc/sys/net/ipv4/ip_forward
+              # SNAT egress to pod IP (masquerade)
+              iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+              # Keep container alive
+              trap 'exit 0' TERM
+              tail -f /dev/null & wait
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "ip route show | grep default"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+        # HTTP/HTTPS proxy for app-level routing via env (HTTP_PROXY/HTTPS_PROXY)
+        - name: squid
+          image: sameersbn/squid:3.5.27-2
+          ports:
+            - containerPort: 3128
+              name: proxy
+          volumeMounts:
+            - name: squid-config
+              mountPath: /etc/squid
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: squid-config
+          configMap:
+            name: egress-gateway-squid
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: egress-gateway-squid
+  namespace: egress-system
+data:
+  squid.conf: |
+    http_port 3128
+    acl all src 0.0.0.0/0
+    http_access allow all
+    # Don’t cache
+    cache deny all
+    # Prefer direct only for in-cluster destinations excluded by NO_PROXY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-gateway
+  namespace: egress-system
+spec:
+  selector:
+    app: egress-gateway
+  ports:
+    - name: proxy
+      port: 3128
+      targetPort: 3128
+      protocol: TCP
