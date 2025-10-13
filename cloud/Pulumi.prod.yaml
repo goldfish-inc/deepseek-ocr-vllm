@@ -18,7 +18,11 @@ config:
   oceanid-cloud:cfAccessServiceTokenId: fa362617-bc0c-490a-a064-51ca12134a60
 
   # Database Provisioning
-  oceanid-cloud:enableLabelStudioDb: "true"
+  # NOTE: Disabled to unblock K3s provisioning testing (#112)
+  # GitHub Actions runners cannot reach CrunchyBridge from public internet
+  # Re-enable when database provisioning moves to self-hosted runner workflow
+  oceanid-cloud:enableLabelStudioDb: "false"
+  oceanid-cloud:enableCleandataDb: "false"
   oceanid-cloud:labelStudioOwnerPassword:
     secure: AAABAH/LQciJmQfHSP4jLNUHcIbck9QzDWFkP2WRwHb8OXiQJEpllMSxK4grjYhr4pvqEfpILf2Qr0DgewbaNnFsJayaCTlfa/dY0Q==
   oceanid-cloud:cleandataOwnerPassword:
