@@ -56,8 +56,9 @@ config:
   oceanid-cloud:s3Region: "us-east-1"
 
   # Feature Flags - K3s Provisioning
-  # NOTE: Enabled for architecture testing (#111)
-  oceanid-cloud:enableK3sProvisioning: "true"
+  # NOTE: CANNOT run from GitHub Actions - requires SSH access to nodes
+  # K3s must be provisioned manually or via self-hosted runner
+  oceanid-cloud:enableK3sProvisioning: "false"
 
   # Feature Flags - GitHub Runner
   # NOTE: Set to false by default to prevent runner conflicts
