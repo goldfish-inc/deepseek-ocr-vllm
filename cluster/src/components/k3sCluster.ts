@@ -65,27 +65,82 @@ export class K3sNode extends pulumi.ComponentResource {
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
+                # Detect OS type
+                if [ -f /etc/alpine-release ]; then
+                    OS_TYPE="alpine"
+                    PKG_MANAGER="apk"
+                elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
+                    OS_TYPE="debian"
+                    PKG_MANAGER="apt"
+                else
+                    echo "Unsupported OS"
+                    exit 1
+                fi
+
+                echo "Detected OS: $OS_TYPE"
+
                 # Update system packages
-                apt-get update && apt-get upgrade -y
-
-                # Configure locale
-                locale-gen en_US.UTF-8
-                update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-
-                # Install essential packages
-                apt-get install -y curl wget git htop iotop nfs-common snapd
+                if [ "$OS_TYPE" = "alpine" ]; then
+                    apk update && apk upgrade
+                    # Install essential packages
+                    apk add curl wget git htop iotop nfs-utils iptables ip6tables
+                else
+                    apt-get update && apt-get upgrade -y
+                    # Configure locale (Ubuntu only)
+                    locale-gen en_US.UTF-8
+                    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+                    # Install essential packages
+                    apt-get install -y curl wget git htop iotop nfs-common
+                fi
 
                 # Configure firewall for k3s
-                ufw allow 22/tcp
-                ufw allow 6443/tcp
-                ufw allow 10250/tcp
-                ufw allow 2379:2380/tcp
-                ufw allow 30000:32767/tcp
-                ufw allow 51820:51821/udp  # Flannel VXLAN/Wireguard
-                ufw --force enable
+                if [ "$OS_TYPE" = "alpine" ]; then
+                    # Alpine: Use iptables directly (no ufw)
+                    # Save rules to /etc/iptables/rules-save for persistence
+                    mkdir -p /etc/iptables
+
+                    # Allow established connections
+                    iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+                    ip6tables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+                    # Allow loopback
+                    iptables -A INPUT -i lo -j ACCEPT
+                    ip6tables -A INPUT -i lo -j ACCEPT
+
+                    # Allow K3s ports
+                    iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+                    iptables -A INPUT -p tcp --dport 6443 -j ACCEPT
+                    iptables -A INPUT -p tcp --dport 10250 -j ACCEPT
+                    iptables -A INPUT -p tcp --dport 2379:2380 -j ACCEPT
+                    iptables -A INPUT -p tcp --dport 30000:32767 -j ACCEPT
+                    iptables -A INPUT -p udp --dport 51820:51821 -j ACCEPT
+                    ip6tables -A INPUT -p tcp --dport 22 -j ACCEPT
+                    ip6tables -A INPUT -p tcp --dport 6443 -j ACCEPT
+
+                    # Drop other incoming by default (but allow outgoing)
+                    iptables -A INPUT -j DROP
+                    ip6tables -A INPUT -j DROP
+
+                    # Save rules
+                    iptables-save > /etc/iptables/rules-save
+                    ip6tables-save > /etc/iptables/rules6-save
+
+                    # Enable iptables service to load rules on boot
+                    rc-update add iptables default
+                    rc-update add ip6tables default
+                else
+                    # Ubuntu: Use ufw
+                    ufw allow 22/tcp
+                    ufw allow 6443/tcp
+                    ufw allow 10250/tcp
+                    ufw allow 2379:2380/tcp
+                    ufw allow 30000:32767/tcp
+                    ufw allow 51820:51821/udp
+                    ufw --force enable
+                fi
 
                 # Kernel parameter optimization for k3s
-                cat >> /etc/sysctl.conf << EOF
+                cat >> /etc/sysctl.conf << 'EOF'
 net.ipv4.ip_forward=1
 net.bridge.bridge-nf-call-iptables=1
 net.bridge.bridge-nf-call-ip6tables=1
@@ -95,7 +150,7 @@ EOF
                 # Create k3s directories
                 mkdir -p /etc/rancher/k3s /var/lib/rancher/k3s/server/tls
 
-                echo "System preparation completed"
+                echo "System preparation completed for $OS_TYPE"
             `,
         }, { parent: this, customTimeouts: { create: "30m", update: "30m" } });
 
@@ -129,8 +184,17 @@ EOF
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
+                # Detect OS for service checks
+                if [ -f /etc/alpine-release ]; then
+                    K3S_CHECK="rc-service k3s status 2>/dev/null | grep -q started || rc-service k3s-agent status 2>/dev/null | grep -q started"
+                    K3S_AGENT_CHECK="rc-service k3s-agent status | grep -q started"
+                else
+                    K3S_CHECK="systemctl is-active --quiet k3s || systemctl is-active --quiet k3s-agent"
+                    K3S_AGENT_CHECK="systemctl is-active --quiet k3s-agent"
+                fi
+
                 # Check if k3s is already installed and running
-                if systemctl is-active --quiet k3s || systemctl is-active --quiet k3s-agent; then
+                if eval "$K3S_CHECK"; then
                     echo "k3s already installed and running"
                     exit 0
                 fi
@@ -159,7 +223,7 @@ EOF
                 if [ "${nodeConfig.role}" = "master" ]; then
                     /usr/local/bin/k3s kubectl get nodes --no-headers | grep -q Ready
                 else
-                    systemctl is-active --quiet k3s-agent
+                    eval "$K3S_AGENT_CHECK"
                 fi
 
                 echo "k3s installation completed successfully"
@@ -176,14 +240,27 @@ EOF
             create: pulumi.interpolate`
                 # GPU node specific configuration
                 if [ "${nodeConfig.gpu || ""}" != "" ]; then
+                    # Detect OS for GPU setup
+                    if [ -f /etc/alpine-release ]; then
+                        OS_TYPE="alpine"
+                    else
+                        OS_TYPE="debian"
+                    fi
+
                     # Install nvidia container runtime if not present
                     if ! command -v nvidia-container-runtime >/dev/null 2>&1; then
-                        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-                        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
-                        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
-                        apt-get update && apt-get install -y nvidia-container-runtime
+                        if [ "$OS_TYPE" = "alpine" ]; then
+                            # Alpine: Install from community repo
+                            apk add nvidia-container-toolkit
+                        else
+                            # Ubuntu/Debian: Use nvidia-docker repo
+                            distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+                            curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+                            curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
+                            apt-get update && apt-get install -y nvidia-container-runtime
+                        fi
 
-                        # Configure containerd for GPU
+                        # Configure containerd for GPU (same for both OSes)
                         mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/
                         cat > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl << EOF
 [plugins.opt]
@@ -200,11 +277,23 @@ EOF
 [plugins.cri.containerd.runtimes.nvidia.options]
   BinaryName = "/usr/bin/nvidia-container-runtime"
 EOF
-                        systemctl restart k3s-agent || systemctl restart k3s
+                        # Restart k3s service (OS-specific)
+                        if [ "$OS_TYPE" = "alpine" ]; then
+                            rc-service k3s-agent restart || rc-service k3s restart
+                        else
+                            systemctl restart k3s-agent || systemctl restart k3s
+                        fi
                     fi
                 fi
 
                 # Configure log rotation
+                # Detect OS for service reload command
+                if [ -f /etc/alpine-release ]; then
+                    SERVICE_RELOAD="rc-service k3s reload 2>/dev/null || rc-service k3s-agent reload 2>/dev/null || true"
+                else
+                    SERVICE_RELOAD="systemctl reload k3s 2>/dev/null || systemctl reload k3s-agent 2>/dev/null || true"
+                fi
+
                 cat > /etc/logrotate.d/k3s << EOF
 /var/log/k3s.log {
     daily
@@ -214,8 +303,7 @@ EOF
     notifempty
     create 0644 root root
     postrotate
-        systemctl reload k3s 2>/dev/null || true
-        systemctl reload k3s-agent 2>/dev/null || true
+        $SERVICE_RELOAD
     endscript
 }
 EOF
@@ -232,6 +320,15 @@ EOF
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
+                # Detect OS for service checks
+                if [ -f /etc/alpine-release ]; then
+                    SERVICE_CHECK="rc-service k3s-agent status | grep -q started"
+                    SERVICE_ACTIVE_CHECK="rc-service k3s-agent status | grep -q started"
+                else
+                    SERVICE_CHECK="systemctl is-active --quiet k3s-agent"
+                    SERVICE_ACTIVE_CHECK="systemctl is-active k3s-agent"
+                fi
+
                 # Wait for node to be ready
                 for i in {1..30}; do
                     if [ "${nodeConfig.role}" = "master" ]; then
@@ -240,7 +337,7 @@ EOF
                             break
                         fi
                     else
-                        if systemctl is-active --quiet k3s-agent; then
+                        if eval "$SERVICE_CHECK"; then
                             echo "Worker node is ready"
                             break
                         fi
@@ -253,13 +350,13 @@ EOF
                 if [ "${nodeConfig.role}" = "master" ]; then
                     /usr/local/bin/k3s kubectl get nodes ${nodeConfig.hostname} --no-headers | grep Ready
                 else
-                    systemctl is-active k3s-agent
+                    eval "$SERVICE_ACTIVE_CHECK"
                 fi
             `,
         }, { parent: this, dependsOn: [nodeSpecificConfig], customTimeouts: { create: "15m", update: "15m" } });
 
         this.nodeReady = healthCheck.stdout.apply(output =>
-            output.includes("Ready") || output.includes("active")
+            output.includes("Ready") || output.includes("active") || output.includes("started")
         );
         this.nodeHostname = pulumi.output(nodeConfig.hostname);
 
