@@ -77,7 +77,7 @@ graph LR
         INET[Public Internet]
     end
 
-    subgraph "Hetzner Cloud"
+    subgraph "Hostinger VPS"
         TETHYS[srv712429 - tethys<br/>Control Plane<br/>157.173.210.123<br/>Ubuntu 25.04]
         STYX[srv712695 - styx<br/>Worker<br/>191.101.1.3<br/>Ubuntu 25.04<br/>Status: DOWN]
     end
@@ -96,12 +96,12 @@ graph LR
 |------|----------|------|------------|-----------|--------|-----|
 | srv712429 | tethys | Control Plane + Master | 157.173.210.123 | 157.173.210.123 | ✅ Ready | No |
 | srv712695 | styx | Worker | 191.101.1.3 | 191.101.1.3 | ❌ NotReady | No |
-| calypso | calypso | GPU Worker | 192.168.2.80 | None (private) | ✅ Ready | NVIDIA T600 |
+| calypso | calypso | GPU Worker | 192.168.2.80 | None (private) | ✅ Ready | NVIDIA RTX 4090 |
 
 ### Network Characteristics
 
-- **Tethys**: Hetzner Cloud VPS, full internet connectivity
-- **Styx**: Hetzner Cloud VPS, full internet connectivity (currently DOWN)
+- **Tethys**: Hostinger VPS, full internet connectivity
+- **Styx**: Hostinger VPS, full internet connectivity (currently DOWN)
 - **Calypso**: Private network, no direct internet access (uses NAT/proxy)
 
 ---
@@ -249,9 +249,10 @@ sequenceDiagram
 - ✅ **Encrypted Transit**: WireGuard encryption for inter-node traffic
 
 **Status**:
-- ⚠️ Exit node routing **NOT YET ENABLED** (pending Tailscale admin approval)
-- Workers authenticated but not configured to use exit node yet
-- See [TAILSCALE_DAEMONSET_SUCCESS.md](../../TAILSCALE_DAEMONSET_SUCCESS.md) for activation steps
+- ✅ **Exit node ACTIVE AND VERIFIED** (as of 2025-10-13)
+- Workers authenticated and routing through exit node
+- Unified egress IP confirmed: 157.173.210.123
+- See [TAILSCALE_DAEMONSET_SUCCESS.md](../../TAILSCALE_DAEMONSET_SUCCESS.md) for implementation details
 
 ### Tailscale ACL Policy
 
@@ -352,7 +353,7 @@ curl http://label-studio-ls-app.apps.svc.cluster.local:8080/health
 ```mermaid
 sequenceDiagram
     participant User as Public User
-    participant CFEdge as Cloudflare Edge<br/>labelstudio.oceanid.io
+    participant CFEdge as Cloudflare Edge<br/>label.boathou.se
     participant CFDaemon as cloudflared<br/>(in cluster)
     participant LSSVC as Label Studio Service<br/>10.43.71.170:8080
 
@@ -365,7 +366,7 @@ sequenceDiagram
 ```
 
 **Configuration**:
-- Public hostname: `labelstudio.oceanid.io` (example)
+- Public hostname: `label.boathou.se`
 - Tunnel token: Stored in Pulumi ESC secret `cloudflareTunnelToken`
 - Backend: `http://label-studio-ls-app.apps.svc.cluster.local:8080`
 
@@ -401,9 +402,9 @@ graph LR
     TSEXIT -->|Source: 157.173.210.123| HF
 ```
 
-**Status**: ⚠️ **Exit node routing NOT YET ACTIVE** (see audit report)
+**Status**: ✅ **Exit node routing ACTIVE AND VERIFIED** (as of 2025-10-13)
 
-**When enabled**:
+**How it works**:
 - All pods route external traffic via Tailscale exit node on tethys
 - External services see source IP: `157.173.210.123`
 - CrunchyBridge firewall needs only one allowlist entry
@@ -799,7 +800,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant User as Public User<br/>Browser
-    participant CFEdge as Cloudflare Edge<br/>labelstudio.oceanid.io
+    participant CFEdge as Cloudflare Edge<br/>label.boathou.se
     participant CFTun as cloudflared Pod<br/>10.42.x.x
     participant LSSVC as Label Studio Service<br/>10.43.71.170:8080
     participant LSPod as Label Studio Pod<br/>10.42.0.226

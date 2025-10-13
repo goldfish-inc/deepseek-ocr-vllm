@@ -47,7 +47,7 @@ graph TB
 
     subgraph "Worker Nodes"
         STYX[srv712695 - styx<br/>Worker<br/>4 CPU / 8GB RAM<br/>Ubuntu 25.04<br/>❌ DOWN]
-        CALYPSO[calypso<br/>GPU Worker<br/>6 CPU / 16GB RAM<br/>NVIDIA T600<br/>Ubuntu 24.04]
+        CALYPSO[calypso<br/>GPU Worker<br/>6 CPU / 16GB RAM<br/>NVIDIA RTX 4090<br/>Ubuntu 24.04]
     end
 
     TETHYS -.Control Plane API.-> STYX

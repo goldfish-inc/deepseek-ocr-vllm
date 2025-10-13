@@ -27,8 +27,9 @@ type Config struct {
 }
 
 var (
+	// Increased timeouts for reliable cluster networking
 	httpDialer = &net.Dialer{
-		Timeout:   5 * time.Second,
+		Timeout:   30 * time.Second, // Increased from 5s for cluster DNS resolution
 		KeepAlive: 30 * time.Second,
 	}
 
@@ -36,18 +37,18 @@ var (
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           httpDialer.DialContext,
 		ForceAttemptHTTP2:     false,
-		MaxIdleConns:          10,
-		MaxConnsPerHost:       10,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   5 * time.Second,
+		MaxIdleConns:          100,              // Increased for better connection pooling
+		MaxConnsPerHost:       20,               // Increased from 10
+		MaxIdleConnsPerHost:   20,               // Increased from 10
+		IdleConnTimeout:       90 * time.Second, // Increased from 30s
+		TLSHandshakeTimeout:   10 * time.Second, // Increased from 5s
 		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: 5 * time.Second,
-		DisableKeepAlives:     true,
+		ResponseHeaderTimeout: 30 * time.Second, // Increased from 5s
+		DisableKeepAlives:     false,            // CRITICAL: Enable connection reuse
 	}
 
 	httpClient = &http.Client{
-		Timeout:   15 * time.Second,
+		Timeout:   60 * time.Second, // Increased from 15s for reliable operation
 		Transport: httpTransport,
 	}
 )
