@@ -43,9 +43,8 @@ config:
   oceanid-cloud:k3sVersion: "v1.33.4+k3s1"
 
   # Feature Flags - K3s Provisioning
-  # NOTE: Set to false by default to prevent accidental provisioning
-  # Enable only when intentionally provisioning/updating K3s cluster
-  oceanid-cloud:enableK3sProvisioning: "false"
+  # NOTE: Enabled for architecture testing (#111)
+  oceanid-cloud:enableK3sProvisioning: "true"
 
   # Feature Flags - GitHub Runner
   # NOTE: Set to false by default to prevent runner conflicts
