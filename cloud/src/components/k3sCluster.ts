@@ -331,8 +331,9 @@ EOF
                 fi
 
                 # Wait for node to be ready (POSIX-compliant loop)
+                # Increased from 30 to 60 attempts (10 minutes) due to slow VPS startup times
                 i=1
-                while [ $i -le 30 ]; do
+                while [ $i -le 60 ]; do
                     if [ "${nodeConfig.role}" = "master" ]; then
                         if /usr/local/bin/k3s kubectl get nodes ${nodeConfig.hostname} --no-headers 2>/dev/null | grep -q Ready; then
                             echo "Master node is ready"
@@ -344,7 +345,7 @@ EOF
                             break
                         fi
                     fi
-                    echo "Waiting for node to be ready... (attempt $i/30)"
+                    echo "Waiting for node to be ready... (attempt $i/60)"
                     sleep 10
                     i=$((i + 1))
                 done
@@ -356,7 +357,7 @@ EOF
                     eval "$SERVICE_ACTIVE_CHECK"
                 fi
             `,
-        }, { parent: this, dependsOn: [nodeSpecificConfig], customTimeouts: { create: "15m", update: "15m" } });
+        }, { parent: this, dependsOn: [nodeSpecificConfig], customTimeouts: { create: "30m", update: "30m" } });
 
         this.nodeReady = healthCheck.stdout.apply(output =>
             output.includes("Ready") || output.includes("active") || output.includes("started")

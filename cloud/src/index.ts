@@ -120,6 +120,9 @@ let k3sCluster: K3sCluster | undefined;
 
 if (enableK3sProvisioning) {
     // Node configuration
+    // NOTE: Calypso (192.168.2.80) is on a private local network and cannot be
+    // reached from GitHub Actions public runners. It will be provisioned manually
+    // after the tethys/styx cluster is operational. See docs/operations/manual-calypso-join.md
     const nodes: Record<string, NodeConfig> = {
         "tethys": {
             hostname: "srv712429",
@@ -138,16 +141,16 @@ if (enableK3sProvisioning) {
                 "oceanid.node/name": "styx",
             },
         },
-        "calypso": {
-            hostname: "calypso",
-            ip: cfg.require("calypsoIp"),
-            role: "worker",
-            gpu: "nvidia-rtx-4090",
-            labels: {
-                "oceanid.node/name": "calypso",
-                "oceanid.node/gpu": "nvidia-rtx-4090",
-            },
-        },
+        // "calypso": {  // EXCLUDED: Cannot reach from GitHub Actions (local network)
+        //     hostname: "calypso",
+        //     ip: cfg.require("calypsoIp"),
+        //     role: "worker",
+        //     gpu: "nvidia-rtx-4090",
+        //     labels: {
+        //         "oceanid.node/name": "calypso",
+        //         "oceanid.node/gpu": "nvidia-rtx-4090",
+        //     },
+        // },
     };
 
     // SSH private keys (stored in ESC under oceanid-cluster namespace)
@@ -155,7 +158,7 @@ if (enableK3sProvisioning) {
     const privateKeys = {
         "tethys": clusterCfg.requireSecret("tethys_ssh_key"),
         "styx": clusterCfg.requireSecret("styx_ssh_key"),
-        "calypso": clusterCfg.requireSecret("calypso_ssh_key"),
+        // "calypso": clusterCfg.requireSecret("calypso_ssh_key"),  // Not needed in cloud stack
     };
 
     // Load K3s and S3 values directly from ESC environment
