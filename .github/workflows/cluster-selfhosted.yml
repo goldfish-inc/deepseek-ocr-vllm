@@ -70,8 +70,16 @@ jobs:
             exit 1
           fi
 
-          # Verify connectivity
+          # Verify connectivity and endpoint
+          echo "Verifying cluster connectivity..."
           kubectl cluster-info --request-timeout=10s
+
+          ENDPOINT=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+          echo "✅ Connected to: $ENDPOINT"
+
+          if [[ "$ENDPOINT" != "https://157.173.210.123:6443" ]]; then
+            echo "⚠️  WARNING: Expected public endpoint https://157.173.210.123:6443, got $ENDPOINT"
+          fi
 
       - name: Pre-flight Checks
         run: |

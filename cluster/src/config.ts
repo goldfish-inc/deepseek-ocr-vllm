@@ -68,13 +68,14 @@ export interface ClusterConfig {
 const cfg = new Config();
 const stack = getStack();
 
-// Source kubeconfig from environment first (explicit override), then Pulumi config.
-// Do not default to a repo-local file; CI/workflow must provide it.
+// Source kubeconfig from environment. No fallback to stack config for portability.
+// Self-hosted runner must set KUBECONFIG env var.
 // If KUBECONFIG contains multiple paths, use the first.
 const envKubeconfig = process.env.KUBECONFIG?.trim();
-const kubeconfigPath: string = envKubeconfig && envKubeconfig.length > 0
-    ? envKubeconfig.split(path.delimiter)[0]!
-    : cfg.require("kubeconfigPath");
+if (!envKubeconfig || envKubeconfig.length === 0) {
+    throw new Error("KUBECONFIG environment variable must be set. Self-hosted runner or local development must export KUBECONFIG.");
+}
+const kubeconfigPath: string = envKubeconfig.split(path.delimiter)[0]!;
 const clusterName = cfg.get("clusterName") ?? `oceanid-${stack}`;
 
 const tunnelId = cfg.get("cloudflare_tunnel_id") ?? cfg.require("cloudflareTunnelId");
