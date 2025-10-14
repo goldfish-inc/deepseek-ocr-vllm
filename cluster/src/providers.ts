@@ -20,14 +20,14 @@ if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" && proces
 
 const rawKubeconfigPath = clusterConfig.kubeconfigPath;
 if (!rawKubeconfigPath) {
-    throw new pulumi.RunError("Kubeconfig path not provided. Set Pulumi config key 'kubeconfigPath' or export KUBECONFIG in the workflow environment.");
+    throw new pulumi.RunError("KUBECONFIG must be set to a kubeconfig file path in the workflow environment.");
 }
 
 export const kubeconfigPath = path.resolve(rawKubeconfigPath);
 
 // Validate kubeconfig is an existing file
 if (!fs.existsSync(kubeconfigPath) || !fs.statSync(kubeconfigPath).isFile()) {
-    throw new pulumi.RunError(`Kubeconfig not found or not a file at ${kubeconfigPath}. Ensure your workflow sets KUBECONFIG or provides 'kubeconfigPath'.`);
+    throw new pulumi.RunError(`Kubeconfig not found or not a file at ${kubeconfigPath}. Ensure your workflow sets KUBECONFIG to a valid file path.`);
 }
 
 const kubeconfig = fs.readFileSync(kubeconfigPath, "utf8");

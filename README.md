@@ -94,13 +94,15 @@ running `pulumi up`:
 | `tunnelHostname` | FQDN routed through the tunnel (e.g. `tethys.boathou.se`). |
 | `tunnelServiceUrl` | Internal endpoint reached behind the tunnel (e.g. `https://10.0.0.10:6443`). |
 | `cloudflareTunnelResources` | (Optional) JSON blob overriding tunnel container requests/limits; defaults to 200m/256Mi requests and 500m/512Mi limits. |
-| `kubeconfigPath` | (Optional) override path to local kubeconfig; defaults to `./kubeconfig.yaml`. |
 | `gitRepositoryUrl` | Git repository watched by Flux (default: this repo). |
 | `gitRepositoryBranch` | Branch Flux reconciles (default: `main`). |
 | `gitRepositoryPath` | Path within the repo containing the kustomizations (default: `clusters/tethys`). |
 
-Kubeconfig location and GitOps settings can also be supplied through conventional Pulumi config
-(`pulumi config set oceanid-cluster:kubeconfigPath ...`).
+Kubeconfig for the cluster stack:
+
+- The cluster project requires `KUBECONFIG` to be set by the self‑hosted runner (or your local shell) to a kubeconfig file path.
+- There is no fallback to Pulumi config or repo files.
+- If `KUBECONFIG` contains multiple paths, only the first is used.
 
 Example resource override (set via `pulumi config set --path` or ESC JSON):
 

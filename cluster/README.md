@@ -30,42 +30,24 @@ Install a GitHub Actions runner on tethys and register it to this repository or 
 Monitoring:
 - GitHub Actions → Deploy Cluster (self‑hosted)
 
-### Kubeconfig Provisioning (CI Service)
+### Kubeconfig Provisioning (Required)
 
-- The self‑hosted workflow sets `KUBECONFIG` for the Pulumi program. There is no default path in code; CI must provide it.
-- Preferred: store a path in ESC and have the runner read the file directly.
-- Optional: store base64 content in ESC; the workflow will decode to a temp file.
-- Alternative: pre‑configure the runner environment to export `KUBECONFIG` to an existing kubeconfig file path.
+- The self‑hosted workflow must set `KUBECONFIG` to a kubeconfig file path. There is no fallback to Pulumi config or repo files.
+- If `KUBECONFIG` is unset, the program fails fast with a clear error.
+- If `KUBECONFIG` contains multiple paths, only the first is used.
 
-ESC keys supported by the workflow:
-
-- `pulumiConfig.oceanid-cluster:kubeconfigPath` (plaintext path)
-- `pulumiConfig.oceanid-cluster:kubeconfigB64` (single‑line base64)
-
-Examples:
+Example (runner setup):
 
 ```bash
-# 1) Store path (recommended)
-esc env set default/oceanid-cluster \
-  pulumiConfig.oceanid-cluster:kubeconfigPath \
-  "/home/ubuntu/.kube/k3s-config.yaml" \
-  --plaintext
+echo "KUBECONFIG=$HOME/.kube/k3s-tethys-public.yaml" >> "$GITHUB_ENV"
+# For immediate use in the same step:
+export KUBECONFIG="$HOME/.kube/k3s-tethys-public.yaml"
 
-# 2) Store base64 (ensure single line)
-# macOS: base64 | tr -d '\n'    Linux: base64 -w 0
-KUBECONFIG_B64=$(base64 ~/.kube/k3s-config.yaml | tr -d '\n')
-esc env set default/oceanid-cluster \
-  pulumiConfig.oceanid-cluster:kubeconfigB64 \
-  "$KUBECONFIG_B64" \
-  --secret
+# Validate and confirm endpoint
+kubectl cluster-info --request-timeout=10s
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+# Expected: https://157.173.210.123:6443
 ```
-
-Pulumi config/env requirements:
-
-- `oceanid-cluster:kubeconfigPath` Pulumi config key, or
-- `KUBECONFIG` environment variable set by the CI job.
-
-If neither is provided, the program fails fast with a clear error.
 
 ### Manual Fallback (Discouraged)
 
@@ -108,15 +90,9 @@ pulumi config set --secret postgres_url <url>
 
 ## CI Guard
 
-This stack includes a runtime guard to prevent accidental execution in GitHub Actions:
+This stack includes a runtime guard to prevent accidental execution in GitHub‑hosted runners. It requires a self‑hosted runner and sets `SELF_HOSTED=true`.
 
-```typescript
-if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true") {
-    throw new Error("CLUSTER STACK CANNOT RUN IN GITHUB ACTIONS");
-}
-```
-
-If you see this error in CI, you likely meant to modify the `cloud/` stack instead.
+If you see an error about GitHub‑hosted runners, run this stack only from your self‑hosted runner or locally.
 
 ## Architecture
 

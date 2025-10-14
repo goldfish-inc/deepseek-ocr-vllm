@@ -64,6 +64,7 @@ jobs:
           # Self-hosted runner: kubeconfig exists on host
           if [ -f ~/.kube/k3s-tethys-public.yaml ]; then
             echo "KUBECONFIG=$HOME/.kube/k3s-tethys-public.yaml" >> "$GITHUB_ENV"
+            export KUBECONFIG="$HOME/.kube/k3s-tethys-public.yaml"
             echo "✅ Using kubeconfig: ~/.kube/k3s-tethys-public.yaml"
           else
             echo "❌ ERROR: Kubeconfig not found"
