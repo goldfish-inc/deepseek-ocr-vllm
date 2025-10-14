@@ -7,16 +7,9 @@ import * as cloudflare from "@pulumi/cloudflare";
 
 import { clusterConfig } from "./config";
 
-// Guard against running cluster stack in GitHub Actions
-// This stack must run on a machine that has kubeconfig access, typically via
-// Pulumi Deployments with a self-hosted agent. Do not run from GitHub runners.
-if (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" && process.env.SELF_HOSTED !== "true") {
-    throw new Error(
-        "❌ Cluster stack cannot run in GitHub-hosted runners.\n\n" +
-        "Use a GitHub self-hosted runner on a host with kubeconfig access,\n" +
-        "or run locally for break-glass only. Cloud resources live in the 'cloud/' stack."
-    );
-}
+// Cluster stack can now run in GitHub-hosted runners.
+// Kubeconfig is sourced from KUBECONFIG environment variable, which is decoded from ESC in CI.
+// For local development, ensure KUBECONFIG points to a valid kubeconfig file.
 
 const rawKubeconfigPath = clusterConfig.kubeconfigPath;
 if (!rawKubeconfigPath) {

@@ -24,12 +24,11 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
-      SELF_HOSTED: 'true'
       PULUMI_VERSION: '3.197.0'
       NODE_VERSION: '22.x'
     steps:
@@ -61,15 +60,20 @@ jobs:
       - name: Setup kubeconfig
         run: |
           set -euo pipefail
-          # Self-hosted runner: kubeconfig exists on host
-          if [ -f ~/.kube/k3s-tethys-public.yaml ]; then
-            echo "KUBECONFIG=$HOME/.kube/k3s-tethys-public.yaml" >> "$GITHUB_ENV"
-            export KUBECONFIG="$HOME/.kube/k3s-tethys-public.yaml"
-            echo "✅ Using kubeconfig: ~/.kube/k3s-tethys-public.yaml"
-          else
-            echo "❌ ERROR: Kubeconfig not found"
-            exit 1
-          fi
+
+          # Decode kubeconfig from ESC
+          echo "Fetching kubeconfig from Pulumi ESC..."
+          KUBECONFIG_B64=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigB64 --value string)
+
+          # Create kubeconfig directory and file
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/k3s-config.yaml
+          chmod 600 ~/.kube/k3s-config.yaml
+
+          # Export for use
+          echo "KUBECONFIG=$HOME/.kube/k3s-config.yaml" >> "$GITHUB_ENV"
+          export KUBECONFIG="$HOME/.kube/k3s-config.yaml"
+          echo "✅ Kubeconfig decoded from ESC"
 
           # Verify connectivity and endpoint
           echo "Verifying cluster connectivity..."
