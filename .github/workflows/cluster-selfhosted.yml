@@ -57,6 +57,13 @@ jobs:
           curl -fsSL https://get.pulumi.com/esc/install.sh | sh
           echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
 
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
+
       - name: Setup kubeconfig
         run: |
           set -euo pipefail
@@ -90,13 +97,6 @@ jobs:
         run: |
           chmod +x cluster/scripts/preflight-check.sh
           cluster/scripts/preflight-check.sh
-
-      - name: Authenticate to Pulumi Cloud (OIDC)
-        uses: pulumi/auth-actions@v1
-        with:
-          organization: ryan-taylor
-          requested-token-type: urn:pulumi:token-type:access_token:personal
-          scope: user:ryan-taylor
 
       - name: Pulumi Up (cluster)
         uses: pulumi/actions@v5
