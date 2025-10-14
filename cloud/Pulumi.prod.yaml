@@ -51,6 +51,8 @@ config:
   # NOTE: Set to false by default to prevent runner conflicts
   # Enable only after K3s cluster is successfully provisioned
   oceanid-cloud:enableGitHubRunner: "false"
+  oceanid-cloud:k3sToken:
+    secure: AAABAI5gtCygDEnOS1GIGxZuc2IdGVv/T/j2nxefiy6ptGI3FY/cXHf+VGpAhQHBeu8I08IO/hi8fVT7/QiVBzV6jmzmEcQ2EuQ/6UKklhlyKkMFDuK7y5npDDuIbXEPncoiuSDv0ArQztV3Zhq/islQUf874a21FAOfBNYlGlo0dE1PqhAtT/sMTc8=
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
