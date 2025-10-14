@@ -79,13 +79,13 @@ export class K3sNode extends pulumi.ComponentResource {
 
                 echo "Detected OS: $OS_TYPE"
 
-                # Update system packages
+                # Update package lists only (do NOT upgrade to avoid breaking SSH)
                 if [ "$OS_TYPE" = "alpine" ]; then
-                    apk update && apk upgrade
+                    apk update
                     # Install essential packages (including fuse-overlayfs for K3s containerd)
                     apk add curl wget git htop iotop nfs-utils iptables ip6tables fuse-overlayfs
                 else
-                    apt-get update && apt-get upgrade -y
+                    apt-get update
                     # Configure locale (Ubuntu only)
                     locale-gen en_US.UTF-8
                     update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
@@ -129,14 +129,8 @@ export class K3sNode extends pulumi.ComponentResource {
                     rc-update add iptables default
                     rc-update add ip6tables default
                 else
-                    # Ubuntu: Use ufw
-                    ufw allow 22/tcp
-                    ufw allow 6443/tcp
-                    ufw allow 10250/tcp
-                    ufw allow 2379:2380/tcp
-                    ufw allow 30000:32767/tcp
-                    ufw allow 51820:51821/udp
-                    ufw --force enable
+                    # Ubuntu: Disable UFW (incompatible with K8s CNI - see docs/operations/networking.md)
+                    ufw --force disable || true
                 fi
 
                 # Kernel parameter optimization for k3s
