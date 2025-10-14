@@ -65,73 +65,18 @@ export class K3sNode extends pulumi.ComponentResource {
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
-                # Detect OS type
-                if [ -f /etc/alpine-release ]; then
-                    OS_TYPE="alpine"
-                    PKG_MANAGER="apk"
-                elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
-                    OS_TYPE="debian"
-                    PKG_MANAGER="apt"
-                else
-                    echo "Unsupported OS"
-                    exit 1
-                fi
-
-                echo "Detected OS: $OS_TYPE"
-
                 # Update package lists only (do NOT upgrade to avoid breaking SSH)
-                if [ "$OS_TYPE" = "alpine" ]; then
-                    apk update
-                    # Install essential packages (including fuse-overlayfs for K3s containerd)
-                    apk add curl wget git htop iotop nfs-utils iptables ip6tables fuse-overlayfs
-                else
-                    apt-get update
-                    # Configure locale (Ubuntu only)
-                    locale-gen en_US.UTF-8
-                    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-                    # Install essential packages
-                    apt-get install -y curl wget git htop iotop nfs-common
-                fi
+                apt-get update
 
-                # Configure firewall for k3s
-                if [ "$OS_TYPE" = "alpine" ]; then
-                    # Alpine: Use iptables directly (no ufw)
-                    # Save rules to /etc/iptables/rules-save for persistence
-                    mkdir -p /etc/iptables
+                # Configure locale
+                locale-gen en_US.UTF-8
+                update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
-                    # Allow established connections
-                    iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-                    ip6tables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+                # Install essential packages
+                apt-get install -y curl wget git htop iotop nfs-common
 
-                    # Allow loopback
-                    iptables -A INPUT -i lo -j ACCEPT
-                    ip6tables -A INPUT -i lo -j ACCEPT
-
-                    # Allow K3s ports
-                    iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-                    iptables -A INPUT -p tcp --dport 6443 -j ACCEPT
-                    iptables -A INPUT -p tcp --dport 10250 -j ACCEPT
-                    iptables -A INPUT -p tcp --dport 2379:2380 -j ACCEPT
-                    iptables -A INPUT -p tcp --dport 30000:32767 -j ACCEPT
-                    iptables -A INPUT -p udp --dport 51820:51821 -j ACCEPT
-                    ip6tables -A INPUT -p tcp --dport 22 -j ACCEPT
-                    ip6tables -A INPUT -p tcp --dport 6443 -j ACCEPT
-
-                    # Drop other incoming by default (but allow outgoing)
-                    iptables -A INPUT -j DROP
-                    ip6tables -A INPUT -j DROP
-
-                    # Save rules
-                    iptables-save > /etc/iptables/rules-save
-                    ip6tables-save > /etc/iptables/rules6-save
-
-                    # Enable iptables service to load rules on boot
-                    rc-update add iptables default
-                    rc-update add ip6tables default
-                else
-                    # Ubuntu: Disable UFW (incompatible with K8s CNI - see docs/operations/networking.md)
-                    ufw --force disable || true
-                fi
+                # Disable UFW (incompatible with K8s CNI - see docs/operations/networking.md)
+                ufw --force disable || true
 
                 # Kernel parameter optimization for k3s
                 cat >> /etc/sysctl.conf << 'EOF'
@@ -144,7 +89,7 @@ EOF
                 # Create k3s directories
                 mkdir -p /etc/rancher/k3s /var/lib/rancher/k3s/server/tls
 
-                echo "System preparation completed for $OS_TYPE"
+                echo "System preparation completed"
             `,
         }, { parent: this, customTimeouts: { create: "30m", update: "30m" } });
 
@@ -179,17 +124,8 @@ EOF
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
-                # Detect OS for service checks
-                if [ -f /etc/alpine-release ]; then
-                    K3S_CHECK="rc-service k3s status 2>/dev/null | grep -q started || rc-service k3s-agent status 2>/dev/null | grep -q started"
-                    K3S_AGENT_CHECK="rc-service k3s-agent status | grep -q started"
-                else
-                    K3S_CHECK="systemctl is-active --quiet k3s || systemctl is-active --quiet k3s-agent"
-                    K3S_AGENT_CHECK="systemctl is-active --quiet k3s-agent"
-                fi
-
                 # Check if k3s is already installed and running
-                if eval "$K3S_CHECK"; then
+                if systemctl is-active --quiet k3s || systemctl is-active --quiet k3s-agent; then
                     echo "k3s already installed and running"
                     exit 0
                 fi
@@ -218,7 +154,7 @@ EOF
                 if [ "${nodeConfig.role}" = "master" ]; then
                     /usr/local/bin/k3s kubectl get nodes --no-headers | grep -q Ready
                 else
-                    eval "$K3S_AGENT_CHECK"
+                    systemctl is-active --quiet k3s-agent
                 fi
 
                 echo "k3s installation completed successfully"
@@ -235,27 +171,15 @@ EOF
             create: pulumi.interpolate`
                 # GPU node specific configuration
                 if [ "${nodeConfig.gpu || ""}" != "" ]; then
-                    # Detect OS for GPU setup
-                    if [ -f /etc/alpine-release ]; then
-                        OS_TYPE="alpine"
-                    else
-                        OS_TYPE="debian"
-                    fi
-
                     # Install nvidia container runtime if not present
                     if ! command -v nvidia-container-runtime >/dev/null 2>&1; then
-                        if [ "$OS_TYPE" = "alpine" ]; then
-                            # Alpine: Install from community repo
-                            apk add nvidia-container-toolkit
-                        else
-                            # Ubuntu/Debian: Use nvidia-docker repo
-                            distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-                            curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
-                            curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
-                            apt-get update && apt-get install -y nvidia-container-runtime
-                        fi
+                        # Use nvidia-docker repo
+                        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+                        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+                        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
+                        apt-get update && apt-get install -y nvidia-container-runtime
 
-                        # Configure containerd for GPU (same for both OSes)
+                        # Configure containerd for GPU
                         mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/
                         cat > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl << EOF
 [plugins.opt]
@@ -272,23 +196,12 @@ EOF
 [plugins.cri.containerd.runtimes.nvidia.options]
   BinaryName = "/usr/bin/nvidia-container-runtime"
 EOF
-                        # Restart k3s service (OS-specific)
-                        if [ "$OS_TYPE" = "alpine" ]; then
-                            rc-service k3s-agent restart || rc-service k3s restart
-                        else
-                            systemctl restart k3s-agent || systemctl restart k3s
-                        fi
+                        # Restart k3s service
+                        systemctl restart k3s-agent || systemctl restart k3s
                     fi
                 fi
 
                 # Configure log rotation
-                # Detect OS for service reload command
-                if [ -f /etc/alpine-release ]; then
-                    SERVICE_RELOAD="rc-service k3s reload 2>/dev/null || rc-service k3s-agent reload 2>/dev/null || true"
-                else
-                    SERVICE_RELOAD="systemctl reload k3s 2>/dev/null || systemctl reload k3s-agent 2>/dev/null || true"
-                fi
-
                 cat > /etc/logrotate.d/k3s << EOF
 /var/log/k3s.log {
     daily
@@ -298,7 +211,7 @@ EOF
     notifempty
     create 0644 root root
     postrotate
-        $SERVICE_RELOAD
+        systemctl reload k3s 2>/dev/null || systemctl reload k3s-agent 2>/dev/null || true
     endscript
 }
 EOF
@@ -315,15 +228,6 @@ EOF
                 privateKey: privateKey,
             },
             create: pulumi.interpolate`
-                # Detect OS for service checks
-                if [ -f /etc/alpine-release ]; then
-                    SERVICE_CHECK="rc-service k3s-agent status | grep -q started"
-                    SERVICE_ACTIVE_CHECK="rc-service k3s-agent status | grep -q started"
-                else
-                    SERVICE_CHECK="systemctl is-active --quiet k3s-agent"
-                    SERVICE_ACTIVE_CHECK="systemctl is-active k3s-agent"
-                fi
-
                 # Wait for node to be ready (POSIX-compliant loop)
                 # Increased from 30 to 60 attempts (10 minutes) due to slow VPS startup times
                 i=1
@@ -334,7 +238,7 @@ EOF
                             break
                         fi
                     else
-                        if eval "$SERVICE_CHECK"; then
+                        if systemctl is-active --quiet k3s-agent; then
                             echo "Worker node is ready"
                             break
                         fi
@@ -348,7 +252,7 @@ EOF
                 if [ "${nodeConfig.role}" = "master" ]; then
                     /usr/local/bin/k3s kubectl get nodes ${nodeConfig.hostname} --no-headers | grep Ready
                 else
-                    eval "$SERVICE_ACTIVE_CHECK"
+                    systemctl is-active k3s-agent
                 fi
             `,
         }, { parent: this, dependsOn: [nodeSpecificConfig], customTimeouts: { create: "30m", update: "30m" } });
