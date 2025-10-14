@@ -52,11 +52,6 @@ jobs:
       - name: Build cluster program
         run: pnpm --filter @oceanid/cluster build
 
-      - name: Install ESC CLI
-        run: |
-          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
-          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
-
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1
         with:
@@ -68,19 +63,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Decode kubeconfig from ESC
-          echo "Fetching kubeconfig from Pulumi ESC..."
-          KUBECONFIG_B64=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:kubeconfigB64 --value string)
-
-          # Create kubeconfig directory and file
+          # Decode kubeconfig from GitHub Secret
+          echo "Decoding kubeconfig from GitHub Secrets..."
           mkdir -p ~/.kube
-          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/k3s-config.yaml
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/k3s-config.yaml
           chmod 600 ~/.kube/k3s-config.yaml
 
           # Export for use
           echo "KUBECONFIG=$HOME/.kube/k3s-config.yaml" >> "$GITHUB_ENV"
           export KUBECONFIG="$HOME/.kube/k3s-config.yaml"
-          echo "✅ Kubeconfig decoded from ESC"
+          echo "✅ Kubeconfig decoded from GitHub Secrets"
 
           # Verify connectivity and endpoint
           echo "Verifying cluster connectivity..."
