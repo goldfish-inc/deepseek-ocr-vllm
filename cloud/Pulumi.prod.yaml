@@ -44,9 +44,9 @@ config:
   # K3s Token and S3 Credentials - loaded from ESC pulumiConfig.oceanid-cloud namespace
   # (values set directly in ESC, no config override needed)
   # Feature Flags - K3s Provisioning
-  # NOTE: CANNOT run from GitHub Actions - requires SSH access to nodes
-  # K3s must be provisioned manually or via self-hosted runner
-  oceanid-cloud:enableK3sProvisioning: "true"
+  # NOTE: K3s already provisioned and running - no need to re-provision on every deploy
+  # Only enable this for initial cluster setup or major K3s version upgrades
+  oceanid-cloud:enableK3sProvisioning: "false"
   # Feature Flags - GitHub Runner
   # NOTE: Set to false by default to prevent runner conflicts
   # Enable only after K3s cluster is successfully provisioned

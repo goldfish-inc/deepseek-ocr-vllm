@@ -1,4 +1,4 @@
-name: Deploy Cluster (Self-Hosted)
+name: Deploy Cluster
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
       - '!cluster/bin/**'
 
 concurrency:
-  group: cluster-selfhosted-${{ github.ref }}
+  group: cluster-deploy-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -24,12 +24,11 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
-      SELF_HOSTED: 'true'
       PULUMI_VERSION: '3.197.0'
       NODE_VERSION: '22.x'
     steps:
