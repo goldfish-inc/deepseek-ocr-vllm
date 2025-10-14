@@ -1,4 +1,5 @@
 import { Config, Output, getStack } from "@pulumi/pulumi";
+import path from "node:path";
 
 export interface ContainerResourceValues extends Record<string, string> {
     cpu: string;
@@ -67,9 +68,13 @@ export interface ClusterConfig {
 const cfg = new Config();
 const stack = getStack();
 
-// Source kubeconfig exclusively from Pulumi config or environment. Do not
-// default to a repo-local file; CI/workflow must provide it.
-const kubeconfigPath = cfg.get("kubeconfigPath") ?? (process.env.KUBECONFIG || "");
+// Source kubeconfig from environment first (explicit override), then Pulumi config.
+// Do not default to a repo-local file; CI/workflow must provide it.
+// If KUBECONFIG contains multiple paths, use the first.
+const envKubeconfig = process.env.KUBECONFIG?.trim();
+const kubeconfigPath: string = envKubeconfig && envKubeconfig.length > 0
+    ? envKubeconfig.split(path.delimiter)[0]!
+    : cfg.require("kubeconfigPath");
 const clusterName = cfg.get("clusterName") ?? `oceanid-${stack}`;
 
 const tunnelId = cfg.get("cloudflare_tunnel_id") ?? cfg.require("cloudflareTunnelId");

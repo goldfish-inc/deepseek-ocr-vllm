@@ -156,6 +156,171 @@ psql "$DATABASE_URL" -f sql/migrations/V3__staging_tables_complete.sql
 psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schema_versions ORDER BY activated_at;"
 ```
 
+## CrunchyBridge Firewall Management
+
+### Overview
+
+All cluster database egress routes through the **egress gateway pod** (SNAT + proxy) on `srv712429`. This unified egress point means the CrunchyBridge firewall **only needs one IP**: the control plane's public address.
+
+**Network**: `ebisu-network` (ID: `ooer7tenangenjelkxbkgz6sdi`)
+**Required IP**: `157.173.210.123/32` (srv712429 public IP)
+
+### Prerequisites
+
+Install the CrunchyBridge CLI:
+```bash
+brew install crunchy-bridge/brew/cb
+
+# Authenticate (uses 1Password token)
+export BRIDGE_TOKEN=$(op read "op://Private/CrunchyBridge API Token/credential")
+cb login --token "$BRIDGE_TOKEN"
+
+# Verify access
+cb cluster list
+```
+
+### List Current Firewall Rules
+
+```bash
+cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
+```
+
+Expected output shows rule ID, CIDR, and description for each allowed IP.
+
+### Remove Stale Worker IPs
+
+After migrating to unified egress, remove any legacy node-specific rules:
+
+```bash
+# List rules and identify stale IPs (e.g., 191.101.1.3/32 for srv712695, calypso's IP)
+cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
+
+# Remove by rule ID
+cb network remove-firewall-rule --network ooer7tenangenjelkxbkgz6sdi --rule <RULE_ID>
+```
+
+**Important**: Keep only `157.173.210.123/32` (srv712429 egress gateway). Stale rules defeat the purpose of centralized egress.
+
+### Add New IP (Emergency Only)
+
+If the egress gateway moves to a different host:
+
+```bash
+cb network add-firewall-rule \
+  --network ooer7tenangenjelkxbkgz6sdi \
+  --rule <NEW_IP>/32 \
+  --description "srv712429-oceanid egress gateway"
+```
+
+### Verify Egress Routing
+
+After firewall changes, confirm all cluster traffic routes through the gateway:
+
+```bash
+# 1. Check egress gateway is running
+kubectl -n egress-system get pod -l app=egress-gateway
+kubectl -n egress-system logs deploy/egress-gateway -c squid --tail=20
+
+# 2. Verify apps have proxy env vars
+kubectl -n apps exec deploy/csv-ingestion-worker -- env | grep -i proxy
+
+# 3. Test HTTP egress from worker pod
+kubectl -n apps exec deploy/csv-ingestion-worker -it -- \
+  curl -s --max-time 5 https://ipinfo.io/ip
+
+# Expected: 157.173.210.123
+
+# 4. Test database connectivity from worker pod
+kubectl -n apps exec deploy/csv-ingestion-worker -it -- \
+  nc -zvw5 egress-db-proxy.apps.svc.cluster.local 5432
+
+# Expected: Connection to egress-db-proxy.apps.svc.cluster.local (10.43.x.x) 5432 port [tcp/postgresql] succeeded
+
+# 5. Check database connection from app
+kubectl -n apps logs deploy/csv-ingestion-worker --tail=50 | grep -i "database\|postgres"
+
+# Expected: Successful connection messages, no timeout errors
+```
+
+### Quick Smoke Test
+
+Run the automated smoke test script:
+
+```bash
+./scripts/egress-smoke.sh
+```
+
+This validates:
+- HTTP egress IP matches gateway (157.173.210.123)
+- Proxy environment variables are set on apps
+- Database proxy is reachable from apps
+- Gateway logs show recent traffic
+
+### Troubleshooting
+
+**Symptom**: Pods timeout connecting to database (15s timeout)
+
+**Diagnosis**:
+```bash
+# Check if worker IP is bypassing gateway
+kubectl -n apps exec deploy/csv-ingestion-worker -- curl -s https://ipinfo.io/ip
+
+# If output is NOT 157.173.210.123, egress routing is broken
+```
+
+**Fix**:
+1. Verify NetworkPolicy allows egress-system traffic:
+   ```bash
+   kubectl get networkpolicy -n apps
+   ```
+2. Check proxy env vars are injected:
+   ```bash
+   kubectl -n apps get deploy csv-ingestion-worker -o yaml | grep -A5 "env:"
+   ```
+3. Restart affected pods:
+   ```bash
+   kubectl -n apps delete pod -l app=csv-ingestion-worker
+   ```
+
+**Symptom**: "Connection refused" to egress-db-proxy
+
+**Diagnosis**:
+```bash
+# Check if service exists
+kubectl -n apps get svc egress-db-proxy
+
+# Check if tethys tunnel is healthy
+kubectl -n apps logs deploy/egress-db-proxy --tail=30
+```
+
+**Fix**:
+1. Ensure tethys SSH credentials are in cluster
+2. Redeploy egress-db-proxy pod
+3. Verify tethys node is reachable from within cluster
+
+### API Reference
+
+CrunchyBridge REST API endpoints (alternative to CLI):
+
+```bash
+# List firewall rules
+curl -X GET "https://api.crunchybridge.com/network/${NETWORK_ID}/firewall" \
+  -H "Authorization: Bearer $BRIDGE_TOKEN"
+
+# Add firewall rule
+curl -X POST "https://api.crunchybridge.com/network/${NETWORK_ID}/firewall" \
+  -H "Authorization: Bearer $BRIDGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cidr": "157.173.210.123/32",
+    "description": "srv712429-oceanid egress gateway"
+  }'
+
+# Remove firewall rule
+curl -X DELETE "https://api.crunchybridge.com/network/${NETWORK_ID}/firewall/${RULE_ID}" \
+  -H "Authorization: Bearer $BRIDGE_TOKEN"
+```
+
 ## Backups & Access
 
 - CrunchyBridge: enable automated backups; create a read‑only user for BI
@@ -174,32 +339,15 @@ psql "$DATABASE_URL" -c "SELECT domain, version, activated_at FROM control.schem
 
 - **Why do database migrations fail in GitHub Actions?** → The CrunchyBridge database has firewall rules that only allow specific IPs. GitHub Actions runners use dynamic IPs from large CIDR ranges. For security, we don't whitelist all GitHub IPs. Run migrations manually from an allowed IP or use workflow_dispatch with a self-hosted runner that has database access.
 
-- **How is the CrunchyBridge firewall managed now?** → All cluster egress flows through the Tailscale exit node on `srv712429`. Keep only `157.173.210.123/32` in the allowlist and remove legacy worker IPs:
-  ```bash
-  cb network list-firewall-rules --network ooer7tenangenjelkxbkgz6sdi
-  cb network remove-firewall-rule --network ooer7tenangenjelkxbkgz6sdi --rule <RULE_ID>
-  ```
-  Verify routing with:
-  ```bash
-  ssh srv712695 "cat /tmp/tailscale-egress-ip.txt"
-  kubectl -n apps exec deploy/csv-ingestion-worker -it -- curl -s https://ipinfo.io/ip
-  ```
-  Both commands should print `157.173.210.123`. See `CLAUDE.md` “CrunchyBridge Firewall Management” for the full checklist.
-
-- **Manual Tailscale host setup?** → Until Pulumi host automation is re-enabled, SSH to each node and run:
-  ```bash
-  curl -fsSL https://tailscale.com/install.sh | sudo sh
-  sudo tailscale up \
-    --authkey=$TAILSCALE_AUTH_KEY \
-    --hostname=<HOSTNAME>-oceanid \
-    --advertise-routes=10.42.0.0/16,10.43.0.0/16 \
-    --advertise-exit-node \
-    --accept-routes \
-    --accept-dns \
-    --advertise-tags=tag:k3s-node
-  ```
-  For worker nodes, replace `--advertise-*` flags with `--exit-node=srv712429-oceanid --exit-node-allow-lan-access`. Confirm with `sudo tailscale status --peers=false`; expect `Exit node: srv712429-oceanid` and run `curl -s https://ipinfo.io/ip` to verify the shared IP.
+- **How is the CrunchyBridge firewall managed now?** → All cluster egress flows through the **egress gateway pod** on `srv712429`. Keep only `157.173.210.123/32` in the allowlist and remove legacy worker IPs. See the **"CrunchyBridge Firewall Management"** section above for detailed CLI commands, verification steps, and troubleshooting.
 
 - **What's the difference between cleandata and the old postgres database?** → The `cleandata` database is the new dedicated database for our data pipeline (CSV ingestion, staging, curation). The old `postgres` database is being phased out. All new data pipeline components should use `cleandata`.
 
 - **Where is the ebisu backend database?** → Ebisu backend will read from the `cleandata` database's curated schemas. Label Studio (deployed in oceanid cluster) uses the separate `labelfish` database.
+
+## Related Documentation
+
+- [Cluster Networking Architecture](./networking.md) - Network topology, security model, DNS, troubleshooting
+- [Operations Overview](./overview.md) - Day-to-day operations and runbooks
+- [Self-Hosted Runner](./self-hosted-runner.md) - GitHub Actions runner setup
+- [CSV Ingestion Worker](./csv-ingestion-worker.md) - Data pipeline worker configuration
