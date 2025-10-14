@@ -403,6 +403,8 @@ cluster/
 
 ### Current Secrets:
 - `github.token`: Fine-grained GitHub token for Flux automation
+- `kubeconfigB64`: Base64-encoded kubeconfig for GitHub Actions cluster access
+- `tethys_ssh_key`, `styx_ssh_key`, `calypso_ssh_key`: Node SSH keys (emergency K3s provisioning only)
 - Additional secrets managed via ESC environment
 
 ### Adding New Secrets:
@@ -456,15 +458,17 @@ All deployments use GitHub Actions with automated checks and validations.
 
 **Cluster Infrastructure** (`cluster-selfhosted.yml`)
 - **Trigger**: Push to `main` touching `cluster/` directory or workflow file, or `workflow_dispatch`
-- **Runs on**: Self-hosted runner (tethys with kubeconfig access)
+- **Runs on**: GitHub-hosted runner (`ubuntu-latest`)
 - **Authentication**: OIDC to Pulumi Cloud
+- **Kubeconfig**: Loaded from Pulumi ESC (`kubeconfigB64` secret, base64-encoded)
 - **Pre-flight checks**: Validates cluster state before deployment
   - Detects Flux Helm ownership conflicts
   - Identifies CRD annotation mismatches
   - Reports namespace resource conflicts
   - Warns about crashlooping pods
-- **Deploys**: K3s cluster resources, Flux CD, applications
+- **Deploys**: Flux CD, applications, cluster resources
 - **Script**: `cluster/scripts/preflight-check.sh` runs before `pulumi up`
+- **Note**: K3s provisioning is disabled - cluster nodes are managed separately
 
 **Database Migrations** (`database-migrations.yml`)
 - **Trigger**: Push to `main` touching `sql/` directory, or `workflow_dispatch`
@@ -514,12 +518,12 @@ Use a single push‑to‑deploy flow:
 
 1. **Commit and push** changes to `main`
    - Cloud resources: Applied by `cloud-infrastructure.yml` (GitHub-hosted)
-   - Cluster resources: Applied by `cluster-selfhosted.yml` (self-hosted)
+   - Cluster resources: Applied by `cluster-selfhosted.yml` (GitHub-hosted)
    - Database changes: Applied by `database-migrations.yml` (self-hosted)
 
 2. **Monitor deployments**
    - GitHub Actions UI shows real-time progress
-   - Self-hosted runner logs available on tethys
+   - All workflows visible in Actions tab
 
 3. **Pre-flight validation** (cluster deployments only)
    - Automatic validation before `pulumi up`
@@ -530,6 +534,30 @@ Use a single push‑to‑deploy flow:
    - Do not apply via CLI
 
 **Manual applies are prohibited.** If break-glass access is needed, coordinate with ops.
+
+### K3s Node Provisioning
+
+**IMPORTANT**: K3s cluster provisioning is a **one-time setup**, not part of regular CI/CD:
+
+- **Current Status**: K3s v1.33.4+k3s1 installed and running on all nodes
+- **Provisioning Disabled**: `enableK3sProvisioning: "false"` in `cloud/Pulumi.prod.yaml`
+- **When to Enable**: Only for initial cluster setup or major K3s version upgrades
+- **Why Disabled**: Avoids SSH complexity and accidental node re-provisioning
+
+To provision K3s nodes manually (emergency only):
+```bash
+# Set provisioning flag in cloud stack config
+cd cloud && pulumi config set oceanid-cloud:enableK3sProvisioning true
+
+# Run cloud stack deployment (requires SSH keys in ESC)
+# This will provision/update K3s on all nodes via SSH
+pulumi up
+
+# Disable provisioning after completion
+pulumi config set oceanid-cloud:enableK3sProvisioning false
+```
+
+**Normal cluster management** (apps, Flux, configs) uses the cluster stack with GitHub-hosted runners and kubeconfig from ESC.
 
 ### Pre-flight Validation
 
