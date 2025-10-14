@@ -150,23 +150,29 @@ if (enableK3sProvisioning) {
         },
     };
 
-    // SSH private keys (stored in ESC)
+    // SSH private keys (stored in ESC under oceanid-cluster namespace)
+    const clusterCfg = new pulumi.Config("oceanid-cluster");
     const privateKeys = {
-        "tethys": cfg.requireSecret("tethysSshKey"),
-        "styx": cfg.requireSecret("styxSshKey"),
-        "calypso": cfg.requireSecret("calypsoSshKey"),
+        "tethys": clusterCfg.requireSecret("tethys_ssh_key"),
+        "styx": clusterCfg.requireSecret("styx_ssh_key"),
+        "calypso": clusterCfg.requireSecret("calypso_ssh_key"),
     };
+
+    // Load K3s and S3 values directly from ESC environment
+    const k3sToken = pulumi.output(process.env.K3S_TOKEN || cfg.requireSecret("k3sToken"));
+    const s3AccessKey = pulumi.output(process.env.S3_ACCESS_KEY || cfg.requireSecret("s3AccessKey"));
+    const s3SecretKey = pulumi.output(process.env.S3_SECRET_KEY || cfg.requireSecret("s3SecretKey"));
 
     k3sCluster = new K3sCluster("oceanid", {
         nodes,
-        k3sToken: cfg.requireSecret("k3sToken"),
+        k3sToken,
         k3sVersion: cfg.get("k3sVersion") || "v1.33.4+k3s1",
         privateKeys,
         enableEtcdBackups: true,
-        backupS3Bucket: cfg.get("etcdBackupS3Bucket"),
+        backupS3Bucket: cfg.get("etcdBackupS3Bucket") || "oceanid-cluster-etcd-backups",
         s3Credentials: {
-            accessKey: cfg.requireSecret("s3AccessKey"),
-            secretKey: cfg.requireSecret("s3SecretKey"),
+            accessKey: s3AccessKey,
+            secretKey: s3SecretKey,
             region: cfg.get("s3Region") || "us-east-1",
             endpoint: cfg.get("s3Endpoint"),
         },

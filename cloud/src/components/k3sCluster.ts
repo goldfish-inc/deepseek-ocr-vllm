@@ -82,8 +82,8 @@ export class K3sNode extends pulumi.ComponentResource {
                 # Update system packages
                 if [ "$OS_TYPE" = "alpine" ]; then
                     apk update && apk upgrade
-                    # Install essential packages
-                    apk add curl wget git htop iotop nfs-utils iptables ip6tables
+                    # Install essential packages (including fuse-overlayfs for K3s containerd)
+                    apk add curl wget git htop iotop nfs-utils iptables ip6tables fuse-overlayfs
                 else
                     apt-get update && apt-get upgrade -y
                     # Configure locale (Ubuntu only)
@@ -170,6 +170,7 @@ EOF
             ? Object.entries(nodeConfig.labels).map(([k, v]) => `--node-label ${k}=${v}`).join(" ")
             : "";
 
+
         // Configure etcd backups for all master nodes
         const etcdBackupConfig = args.enableEtcdBackups && nodeConfig.role === "master" && args.backupS3Bucket
             ? args.s3Credentials
@@ -204,7 +205,7 @@ EOF
                 export K3S_TOKEN=${k3sToken}
 
                 # Set S3 credentials if provided
-                ${args.s3Credentials ? pulumi.interpolate`
+                ${args.s3Credentials ? `
                 export AWS_ACCESS_KEY_ID="${args.s3Credentials.accessKey}"
                 export AWS_SECRET_ACCESS_KEY="${args.s3Credentials.secretKey}"
                 ` : ""}
@@ -329,8 +330,9 @@ EOF
                     SERVICE_ACTIVE_CHECK="systemctl is-active k3s-agent"
                 fi
 
-                # Wait for node to be ready
-                for i in {1..30}; do
+                # Wait for node to be ready (POSIX-compliant loop)
+                i=1
+                while [ $i -le 30 ]; do
                     if [ "${nodeConfig.role}" = "master" ]; then
                         if /usr/local/bin/k3s kubectl get nodes ${nodeConfig.hostname} --no-headers 2>/dev/null | grep -q Ready; then
                             echo "Master node is ready"
@@ -344,6 +346,7 @@ EOF
                     fi
                     echo "Waiting for node to be ready... (attempt $i/30)"
                     sleep 10
+                    i=$((i + 1))
                 done
 
                 # Final health check

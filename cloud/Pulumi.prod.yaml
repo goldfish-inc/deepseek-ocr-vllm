@@ -11,12 +11,10 @@ config:
   oceanid-cloud:enableCrunchyBridgeProvisioning: "true"
   crunchybridge:applicationSecret:
     secure: AAABAGkwKvRyUT1RH9guDIW1gHRSKAgqz5Te55cQluTsjYFNSM756AnCeSvOd/xJacDLlOJTZIklZGGlGvJQn1PzVVNdEj6tY+vx8mHJY/CVVqJP
-
   # Cloudflare
   cloudflare:apiToken:
     secure: AAABANgcDiwPBzKZluACnptCMq4aTgj3mH9qM6BiS/u87+lBQ8Zg/SL7QRFA7hwVHjVLqzlJmQ8nbpkQUc3T4pSSeiqzdX59
   oceanid-cloud:cfAccessServiceTokenId: fa362617-bc0c-490a-a064-51ca12134a60
-
   # Database Provisioning
   # NOTE: Disabled to unblock K3s provisioning testing (#112)
   # GitHub Actions runners cannot reach CrunchyBridge from public internet
@@ -29,7 +27,6 @@ config:
     secure: AAABALae8fd1qRTfy/2GTuQir6TWxSb4mUCWtfh3wrosGwPKPIF0tXmc4iLzPBu6R4fKTIxjVofIwbJIZCod0RMshbvJWLHQw3ddbA==
   oceanid-cloud:crunchyAdminUrl:
     secure: AAABAH2qRWfN4sr36P7qJKXuEBNlQ8yX3HS90V40e3lNzkie2OjY7xAfbbvlBhqzf1EHlXoDp/gUyS0d2WoIKHjvy75tEjNgPG+fi3Pu2OigPLB/NgLocHqGTZucrlbcsq54jLgT/eZMkBVz1cVo+atp+FRlD6CterqHsTJlyoOpQYtZ3QFjQ4RFHg46x7Ufw+4GWDcb90x0sQiSiFL1OEZ7QW6BDOd/tItqL95/SYwRjl2Z1HguiN4/LRuiqXYC729zrKKzTZjb
-
   # =============================================================================
   # K3S CLUSTER PROVISIONING (New - moved from oceanid-cluster stack)
   # =============================================================================
@@ -38,33 +35,22 @@ config:
   oceanid-cloud:tethysIp: "157.173.210.123"
   oceanid-cloud:styxIp: "191.101.1.3"
   oceanid-cloud:calypsoIp: "192.168.2.80"
-
   # K3s Configuration
   oceanid-cloud:k3sVersion: "v1.33.4+k3s1"
-
-  # SSH Keys (from ESC - reference cluster stack keys)
+  # SSH Keys - loaded from ESC pulumiConfig.oceanid-cluster namespace
   oceanid-cloud:tethysSshKey: ${pulumiConfig.oceanid-cluster:tethys_ssh_key}
   oceanid-cloud:styxSshKey: ${pulumiConfig.oceanid-cluster:styx_ssh_key}
   oceanid-cloud:calypsoSshKey: ${pulumiConfig.oceanid-cluster:calypso_ssh_key}
-
-  # K3s Token (from ESC)
-  oceanid-cloud:k3sToken: ${k3s.token}
-
-  # S3 Credentials for etcd backups (from ESC)
-  oceanid-cloud:s3AccessKey: ${s3.access_key}
-  oceanid-cloud:s3SecretKey: ${s3.secret_key}
-  oceanid-cloud:s3Region: "us-east-1"
-
+  # K3s Token and S3 Credentials - loaded from ESC pulumiConfig.oceanid-cloud namespace
+  # (values set directly in ESC, no config override needed)
   # Feature Flags - K3s Provisioning
   # NOTE: CANNOT run from GitHub Actions - requires SSH access to nodes
   # K3s must be provisioned manually or via self-hosted runner
-  oceanid-cloud:enableK3sProvisioning: "false"
-
+  oceanid-cloud:enableK3sProvisioning: "true"
   # Feature Flags - GitHub Runner
   # NOTE: Set to false by default to prevent runner conflicts
   # Enable only after K3s cluster is successfully provisioned
   oceanid-cloud:enableGitHubRunner: "false"
-
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
