@@ -146,10 +146,11 @@ graph LR
 
 ### Node IP Addresses
 
-| Node | Role | IP Address | Hostname |
-|------|------|------------|----------|
-| srv712429 | Control Plane | 157.173.210.123 | tethys |
-| srv712695 | Worker | 191.101.1.3 | styx |
+| Node | Role | Public IP | Tailscale IP | Hostname | Status |
+|------|------|-----------|--------------|----------|--------|
+| srv712429 | Control Plane | 157.173.210.123 | 100.95.51.125 | tethys | ✅ Ready |
+| srv712695 | Worker | 191.101.1.3 | (offline) | styx | ❌ NotReady |
+| calypso | GPU Worker + K3s Agent | None (LAN: 192.168.2.110) | 100.83.53.38 | calypso | ✅ Ready |
 
 ### Critical Services
 

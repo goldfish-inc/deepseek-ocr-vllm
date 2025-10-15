@@ -1,7 +1,7 @@
 # Oceanid Network Architecture
 
-**Last Updated**: 2025-10-13
-**Status**: Production Deployed
+**Last Updated**: 2025-10-15
+**Status**: Production Deployed (3 nodes: tethys + calypso active, styx down)
 **K3s Version**: v1.33.4+k3s1
 
 ---
@@ -72,31 +72,39 @@ graph TB
 ### Node Inventory
 
 ```mermaid
-graph LR
+graph TB
     subgraph "Internet"
         INET[Public Internet]
     end
 
-    subgraph "Hostinger VPS"
-        TETHYS[srv712429 - tethys<br/>Control Plane<br/>157.173.210.123<br/>Ubuntu 25.04]
-        STYX[srv712695 - styx<br/>Worker<br/>191.101.1.3<br/>Ubuntu 25.04<br/>Status: DOWN]
+    subgraph "K3s Cluster - Connected via Tailscale Mesh"
+        subgraph "Hostinger VPS (Public IPs)"
+            TETHYS[srv712429 - tethys<br/>Control Plane<br/>Public: 157.173.210.123<br/>Tailscale: 100.95.51.125<br/>Ubuntu 25.04<br/>✅ Ready]
+            STYX[srv712695 - styx<br/>Worker<br/>Public: 191.101.1.3<br/>Ubuntu 25.04<br/>❌ DOWN]
+        end
+
+        subgraph "Private Network (Home)"
+            CALYPSO[calypso<br/>GPU Worker + K3s Agent<br/>LAN: 192.168.2.110<br/>Tailscale: 100.83.53.38<br/>Ubuntu 24.04<br/>NVIDIA RTX 4090<br/>✅ Ready]
+        end
     end
 
-    subgraph "Private Network"
-        CALYPSO[calypso<br/>GPU Worker<br/>192.168.2.80<br/>Ubuntu 24.04<br/>NVIDIA GPU]
+    subgraph "Tailscale Mesh Network"
+        TS[Tailscale Control Plane<br/>WireGuard Encrypted]
     end
 
     INET --> TETHYS
     INET --> STYX
-    TETHYS -.Private.-> CALYPSO
-    STYX -.Private.-> CALYPSO
+    TETHYS <-->|Tailscale Mesh<br/>100.x.x.x| TS
+    CALYPSO <-->|Tailscale Mesh<br/>100.x.x.x| TS
+    TS <-->|K3s API: 6443<br/>Kubelet: 10250| TETHYS
+    TS <-->|K3s Agent| CALYPSO
 ```
 
-| Node | Hostname | Role | IP Address | Public IP | Status | GPU |
-|------|----------|------|------------|-----------|--------|-----|
-| srv712429 | tethys | Control Plane + Master | 157.173.210.123 | 157.173.210.123 | ✅ Ready | No |
-| srv712695 | styx | Worker | 191.101.1.3 | 191.101.1.3 | ❌ NotReady | No |
-| calypso | calypso | GPU Worker | 192.168.2.80 | None (private) | ✅ Ready | NVIDIA RTX 4090 |
+| Node | Hostname | Role | IP Address | Tailscale IP | Public IP | Status | GPU |
+|------|----------|------|------------|--------------|-----------|--------|-----|
+| srv712429 | tethys | Control Plane + Master | 157.173.210.123 | 100.95.51.125 | 157.173.210.123 | ✅ Ready | No |
+| srv712695 | styx | Worker | 191.101.1.3 | (offline) | 191.101.1.3 | ❌ NotReady | No |
+| calypso | calypso | GPU Worker + K3s Agent | 192.168.2.110 | 100.83.53.38 | None (private network) | ✅ Ready | NVIDIA RTX 4090 |
 
 ### Network Characteristics
 
@@ -114,14 +122,14 @@ K3s uses **Flannel** as the default CNI plugin in **VXLAN mode**.
 
 ```mermaid
 graph TB
-    subgraph "Node: tethys (157.173.210.123)"
+    subgraph "Node: tethys (Public: 157.173.210.123, TS: 100.95.51.125)"
         TPOD1[Pod 10.42.0.x]
         TPOD2[Pod 10.42.0.y]
         TFLANNEL[flannel.1<br/>10.42.0.0/24]
     end
 
-    subgraph "Node: calypso (192.168.2.80)"
-        CPOD1[Pod 10.42.2.x]
+    subgraph "Node: calypso (LAN: 192.168.2.110, TS: 100.83.53.38)"
+        CPOD1[Pod 10.42.2.x<br/>GPU workloads]
         CPOD2[Pod 10.42.2.y]
         CFLANNEL[flannel.1<br/>10.42.2.0/24]
     end
@@ -131,7 +139,7 @@ graph TB
     CPOD1 --> CFLANNEL
     CPOD2 --> CFLANNEL
 
-    TFLANNEL <-->|VXLAN Tunnel<br/>UDP 8472| CFLANNEL
+    TFLANNEL <-->|VXLAN Tunnel<br/>via Tailscale<br/>UDP 8472| CFLANNEL
 ```
 
 ### IP Address Ranges
@@ -146,8 +154,9 @@ graph TB
 | `10.43.0.1` | Kubernetes API | kube-apiserver |
 | `10.43.0.10` | CoreDNS | DNS resolution |
 | `100.64.0.0/10` | **Tailscale CGNAT** | Tailscale mesh IPs |
-| `100.121.150.65` | Tailscale (tethys) | Exit node |
-| `100.118.9.56` | Tailscale (calypso) | Worker node |
+| `100.95.51.125` | Tailscale (tethys) | Control plane (K3s API via Tailscale) |
+| `100.83.53.38` | Tailscale (calypso) | GPU worker node |
+| `192.168.2.0/24` | **Home Network** | Calypso LAN segment |
 
 ### Service Network Details
 
@@ -216,11 +225,17 @@ graph TB
 
 ### Tailscale Network Topology
 
-| Node | Tailscale Hostname | Tailscale IP | Exit Node | Routes Advertised |
-|------|--------------------|--------------|-----------|-------------------|
-| tethys | srv712429 | 100.121.150.65 | **Yes** (self) | 10.42.0.0/16, 10.43.0.0/16 |
-| calypso | calypso | 100.118.9.56 | No (pending) | None |
-| styx | srv712695-styx | (offline) | No | None |
+| Node | Tailscale Hostname | Tailscale IP | K3s Role | Installation Method |
+|------|--------------------|--------------|----------|---------------------|
+| tethys | srv712429-oceanid | 100.95.51.125 | Control Plane | Host-level (systemd) |
+| calypso | calypso | 100.83.53.38 | GPU Worker + K3s Agent | Host-level (systemd) |
+| styx | srv712695-styx | (offline) | Worker (down) | Not installed |
+
+**Key Architecture Notes**:
+- Tailscale installed as **host-level services** (not DaemonSets) for reliable K3s agent communication
+- Calypso joined cluster via `k3s-agent` connecting to tethys at Tailscale IP `100.95.51.125:6443`
+- All nodes authenticate to same Tailnet: `goldfish-inc.ts.net`
+- No exit node routing active (each node uses direct egress)
 
 ### Exit Node Architecture (Unified Egress)
 
@@ -272,6 +287,143 @@ Managed in `policy.hujson` and synced via GitHub Actions:
   ]
 }
 ```
+
+---
+
+## Triton Inference Server Integration
+
+### Architecture: Host-Level GPU Service
+
+Triton Inference Server runs as a **systemd service** on calypso's host OS, providing GPU-accelerated model inference.
+
+```mermaid
+graph TB
+    subgraph "Calypso Node (192.168.2.110 / 100.83.53.38)"
+        subgraph "Host Services"
+            TRITON[Triton Inference Server<br/>systemd service<br/>NVIDIA GPU Access]
+            TRITON_HTTP[Port 8000: HTTP API]
+            TRITON_GRPC[Port 8001: gRPC API]
+            TRITON_METRICS[Port 8002: Metrics]
+        end
+
+        subgraph "K3s Pod Network (10.42.2.0/24)"
+            POD1[App Pod with nodeSelector<br/>kubernetes.io/hostname=calypso]
+            POD2[ML Workload Pod]
+        end
+
+        TRITON --> TRITON_HTTP
+        TRITON --> TRITON_GRPC
+        TRITON --> TRITON_METRICS
+        POD1 -->|localhost:8000<br/>hostNetwork=true| TRITON_HTTP
+        POD2 -->|Node IP:8000<br/>via Service| TRITON_HTTP
+    end
+
+    subgraph "Other Cluster Nodes"
+        REMOTE_POD[Pod on tethys/styx]
+    end
+
+    REMOTE_POD -->|100.83.53.38:8000<br/>via Tailscale| TRITON_HTTP
+```
+
+### Service Details
+
+**Triton Server Configuration**:
+- **Host**: calypso (192.168.2.110 LAN, 100.83.53.38 Tailscale)
+- **Ports**:
+  - `8000/tcp` - HTTP inference API
+  - `8001/tcp` - gRPC inference API
+  - `8002/tcp` - Prometheus metrics endpoint
+- **Models**:
+  - `distilbert` - Text classification/embeddings
+  - `granite-docling` - Document layout extraction
+- **GPU**: NVIDIA RTX 4090
+- **Management**: systemd service (`triton-inference-server.service`)
+
+### Access Patterns
+
+**Pattern 1: Local Pod Access (Recommended for GPU workloads)**
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ml-worker
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: calypso  # Schedule on calypso
+  hostNetwork: true  # Access Triton via localhost
+  containers:
+  - name: worker
+    image: ml-worker:latest
+    env:
+    - name: TRITON_URL
+      value: "http://localhost:8000"
+```
+
+**Pattern 2: Remote Pod Access (via Tailscale)**
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inference-client
+spec:
+  containers:
+  - name: client
+    image: inference-client:latest
+    env:
+    - name: TRITON_URL
+      value: "http://100.83.53.38:8000"  # Calypso Tailscale IP
+```
+
+**Pattern 3: ClusterIP Service (optional, for DNS-based routing)**
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-inference
+  namespace: apps
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  - name: grpc
+    port: 8001
+    targetPort: 8001
+  - name: metrics
+    port: 8002
+    targetPort: 8002
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: triton-inference
+  namespace: apps
+subsets:
+- addresses:
+  - ip: 100.83.53.38  # Calypso Tailscale IP
+  ports:
+  - name: http
+    port: 8000
+  - name: grpc
+    port: 8001
+  - name: metrics
+    port: 8002
+```
+
+### Why Host-Level Deployment?
+
+**Advantages**:
+- ✅ Direct GPU access (no container runtime overhead)
+- ✅ Simpler CUDA/driver management (no container complexity)
+- ✅ Persistent model cache across pod restarts
+- ✅ Independent of K8s lifecycle (survives cluster issues)
+
+**Trade-offs**:
+- ⚠️ Manual systemd management (not GitOps-managed)
+- ⚠️ Requires node-specific pod scheduling (`nodeSelector`)
+- ⚠️ Port conflicts if multiple Triton instances needed
 
 ---
 

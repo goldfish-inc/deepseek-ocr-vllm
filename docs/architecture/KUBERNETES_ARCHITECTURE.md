@@ -1,8 +1,8 @@
 # Oceanid Kubernetes Architecture
 
-**Last Updated**: 2025-10-13
+**Last Updated**: 2025-10-15
 **K3s Version**: v1.33.4+k3s1
-**Status**: Production Deployed
+**Status**: Production Deployed (3 nodes: tethys + calypso active, styx down)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## Overview
 
-Oceanid runs on **K3s** (lightweight Kubernetes) with a **single control plane** and **two worker nodes** (one GPU-enabled).
+Oceanid runs on **K3s** (lightweight Kubernetes) with a **single control plane** and **two worker nodes** (one GPU-enabled, one down). Total: 3 nodes with 2 currently active (tethys control plane + calypso GPU worker).
 
 ### Key Characteristics
 
@@ -42,17 +42,17 @@ Oceanid runs on **K3s** (lightweight Kubernetes) with a **single control plane**
 ```mermaid
 graph TB
     subgraph "Control Plane"
-        TETHYS[srv712429 - tethys<br/>Control Plane + Master<br/>4 CPU / 8GB RAM<br/>Ubuntu 25.04]
+        TETHYS[srv712429 - tethys<br/>Control Plane + Master<br/>4 CPU / 8GB RAM<br/>Public: 157.173.210.123<br/>Tailscale: 100.95.51.125<br/>Ubuntu 25.04<br/>✅ Ready]
     end
 
     subgraph "Worker Nodes"
-        STYX[srv712695 - styx<br/>Worker<br/>4 CPU / 8GB RAM<br/>Ubuntu 25.04<br/>❌ DOWN]
-        CALYPSO[calypso<br/>GPU Worker<br/>6 CPU / 16GB RAM<br/>NVIDIA RTX 4090<br/>Ubuntu 24.04]
+        STYX[srv712695 - styx<br/>Worker<br/>4 CPU / 8GB RAM<br/>Public: 191.101.1.3<br/>Ubuntu 25.04<br/>❌ DOWN]
+        CALYPSO[calypso<br/>GPU Worker + K3s Agent<br/>12 CPU / 32GB RAM<br/>LAN: 192.168.2.110<br/>Tailscale: 100.83.53.38<br/>NVIDIA RTX 4090<br/>Ubuntu 24.04<br/>✅ Ready]
     end
 
-    TETHYS -.Control Plane API.-> STYX
-    TETHYS -.Control Plane API.-> CALYPSO
-    STYX -.Flannel VXLAN.-> CALYPSO
+    TETHYS -->|K3s API: 6443<br/>via Tailscale| CALYPSO
+    TETHYS -.Offline.-> STYX
+    CALYPSO -.Flannel VXLAN<br/>via Tailscale.-> TETHYS
 ```
 
 ### Node Roles & Taints
@@ -185,8 +185,8 @@ graph TB
             PB[project-bootstrapper<br/>Deployment: 1 replica<br/>Auto-setup service]
         end
 
-        subgraph "ML Inference (Future)"
-            TRITON[Triton Inference Server<br/>GPU pod on calypso<br/>Status: Planned]
+        subgraph "ML Inference (calypso host)"
+            TRITON[Triton Inference Server<br/>Host-level systemd service<br/>Models: distilbert, granite-docling<br/>Status: ✅ Running]
         end
     end
 
@@ -195,7 +195,7 @@ graph TB
     LS --> LSS3
     CSV --> LSDB
     PB --> LS
-    TRITON -.Future.-> LS
+    TRITON -->|HTTP/gRPC<br/>:8000/:8001| LS
 ```
 
 ### Pod Distribution by Node
@@ -203,28 +203,34 @@ graph TB
 ```mermaid
 graph LR
     subgraph "tethys (Control Plane)"
-        T1[kube-system pods<br/>CoreDNS, metrics]
+        T1[kube-system pods<br/>CoreDNS, metrics, Flannel]
         T2[flux-system pods<br/>6 controllers]
         T3[label-studio<br/>1 pod]
         T4[project-bootstrapper<br/>1 pod]
-        T5[tailscale-exit-node<br/>DaemonSet pod]
+        T5[pulumi-operator<br/>1 pod]
+        T6[cloudflared tunnel<br/>1 pod]
     end
 
     subgraph "styx (Worker) - DOWN"
-        S1[No pods running<br/>Node NotReady]
+        S1[No pods running<br/>Node NotReady<br/>Offline >48h]
     end
 
-    subgraph "calypso (GPU Worker)"
+    subgraph "calypso (GPU Worker + K3s Agent)"
         C1[csv-ingestion-worker<br/>1 pod]
-        C2[tailscale-worker<br/>DaemonSet pod]
-        C3[Future GPU workloads<br/>Triton, model serving]
+        C2[nvidia-device-plugin<br/>DaemonSet pod<br/>GPU support]
+        C3[Host Services<br/>Tailscale systemd<br/>Triton systemd<br/>k3s-agent]
     end
 ```
 
 **Current Pod Distribution**:
-- **tethys**: ~30 pods (control plane + apps)
-- **styx**: 0 pods (node down, pods stuck Terminating)
-- **calypso**: ~10 pods (CSV worker + DaemonSets)
+- **tethys**: ~30 pods (control plane + system + apps)
+- **styx**: 0 pods (node down, not reached in >48h)
+- **calypso**: ~5 pods (CSV worker + GPU device plugin)
+
+**Host Services** (not K8s pods):
+- **tethys**: Tailscale daemon, k3s control plane
+- **calypso**: Tailscale daemon, k3s-agent, Triton Inference Server
+- **styx**: None (offline)
 
 ---
 
