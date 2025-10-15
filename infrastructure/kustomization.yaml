@@ -8,5 +8,4 @@ resources:
   # - tailscale-daemonset.yaml
   - egress-gateway.yaml
   - egress-network-policy.yaml
-  - triton-inference-service.yaml
 # PKO is managed by Pulumi components, not Flux
