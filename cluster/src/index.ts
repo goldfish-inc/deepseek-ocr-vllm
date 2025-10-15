@@ -746,6 +746,8 @@ const smeReadiness = new SMEReadiness("sme-ready", {
 
 // Annotations sink: receives LS webhooks, appends JSONL to HF dataset and upserts into Postgres
 const hfRepo = cfg.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
+const hfRepoNER = cfg.get("hfDatasetRepoNER") || "goldfish-inc/oceanid-annotations-ner";
+const hfRepoDocling = cfg.get("hfDatasetRepoDocling") || "goldfish-inc/oceanid-annotations-docling";
 const hfToken = cfg.getSecret("hfAccessToken");
 // Use the same labelfish database as Label Studio (now retrieved directly from ESC)
 const annotationsSinkDbUrl = cleandataDbUrl; // Use cleandata database for pipeline outputs
@@ -755,6 +757,8 @@ const sinkImageTag = cfg.get("sinkImageTag") || "main";
 const annotationsSink = new AnnotationsSink("annotations-sink", {
     k8sProvider,
     hfRepo,
+    hfRepoNER,
+    hfRepoDocling,
     hfToken,
     dbUrl: annotationsSinkDbUrl,
     schemaVersion,

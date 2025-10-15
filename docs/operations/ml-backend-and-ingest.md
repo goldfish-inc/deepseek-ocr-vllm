@@ -48,14 +48,17 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
   - `stage.v_pdf_boxes_latest` view exposes the latest per unique box for QA.
 - Training: consume PDF-point geometry directly, or convert back to pixels at any DPI on demand.
 
-## Hugging Face Repositories
+## Datasets & Storage
 
-- NER annotations dataset (JSONL shards): `hfDatasetRepoNER` (ESC) → env `HF_REPO_NER`
-- Docling annotations dataset (JSONL shards): `hfDatasetRepoDocling` (ESC) → env `HF_REPO_DOCLING`
-- Legacy/default dataset repo: `hfDatasetRepo` → env `HF_REPO` (used as fallback)
-- PDFs (XeT-backed): separate dataset repo, recommended layout documented in `docs/datasets/pdfs.md`
+- Annotations (JSONL shards):
+  - NER: `hfDatasetRepoNER` (ESC) → env `HF_REPO_NER`
+  - Docling: `hfDatasetRepoDocling` (ESC) → env `HF_REPO_DOCLING`
+  - Fallback/default: `hfDatasetRepo` → env `HF_REPO`
+- Original PDFs:
+  - Not stored in Hugging Face, GitHub, or Postgres.
+  - SMEs configure per‑project S3 storage in Label Studio. The sink stores only references (URL and derived `s3_bucket`, `s3_key`, optional `s3_version_id`) and a stable `source_tag` for auditing.
 
-Training consumers must read shard paths starting with `vertical=` or `schema-` and, if needed, normalize records into model-specific formats.
+Training consumers read annotation shards (`vertical=` or `schema-` paths) and may fetch original PDFs directly from S3 if required, using the stored S3 references. The system does not copy PDF bytes into HF or DB.
 
 ## CSV/XLSX Handling
 

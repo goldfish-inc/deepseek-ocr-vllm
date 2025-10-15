@@ -14,6 +14,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Config holds all environment variables
@@ -186,6 +187,7 @@ func initDB(cfg *Config) error {
         target_repo TEXT,
         task_type TEXT,
         vertical TEXT,
+        source_tag TEXT,
         shard_path TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         processed_at TIMESTAMPTZ,
@@ -211,8 +213,10 @@ func initDB(cfg *Config) error {
     ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS target_repo TEXT;
     ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS task_type TEXT;
     ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS vertical TEXT;
+    ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS source_tag TEXT;
     CREATE INDEX IF NOT EXISTS idx_annotations_outbox_repo ON stage.annotations_outbox(target_repo, processed_at);
     CREATE INDEX IF NOT EXISTS idx_annotations_outbox_vertical ON stage.annotations_outbox(vertical) WHERE processed_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_annotations_outbox_source_tag ON stage.annotations_outbox(source_tag) WHERE processed_at IS NULL;
     `
 	if _, err := db.ExecContext(ctx, alters); err != nil {
 		log.Printf("Warning: annotations_outbox alter had issues: %v", err)
@@ -269,8 +273,22 @@ func webhookHandler(cfg *Config) http.HandlerFunc {
 		}
 
 		if db != nil && cfg.HFToken != "" && cfg.HFRepo != "" && shouldEnqueueAction(payload.Action) {
-			if err := enqueueAnnotation(payload, cfg); err != nil {
-				log.Printf("Failed to enqueue annotation for HuggingFace: %v", err)
+			// Determine task type for metrics
+			_, taskType, _ := determineTarget(payload, cfg)
+			valid := "false"
+			if ok, reason := validateAnnotation(payload); !ok {
+				log.Printf("Validation failed, skipping enqueue: %s", reason)
+				webhooksTotal.WithLabelValues(strings.ToUpper(payload.Action), valid, taskType).Inc()
+			} else {
+				valid = "true"
+				webhooksTotal.WithLabelValues(strings.ToUpper(payload.Action), valid, taskType).Inc()
+				repo, _, _ := determineTarget(payload, cfg)
+				if err := enqueueAnnotation(payload, cfg); err != nil {
+					log.Printf("Failed to enqueue annotation for HuggingFace: %v", err)
+					enqueueTotal.WithLabelValues(repo, taskType, "error").Inc()
+				} else {
+					enqueueTotal.WithLabelValues(repo, taskType, "ok").Inc()
+				}
 			}
 		}
 
@@ -335,6 +353,87 @@ func determineTarget(payload WebhookPayload, cfg *Config) (repo string, taskType
 	}
 
 	return repo, taskType, vertical
+}
+
+// validateAnnotation performs minimal schema validation on LS payloads
+func validateAnnotation(payload WebhookPayload) (bool, string) {
+	// Determine task type from results
+	repo := ""
+	taskType := ""
+	vert := ""
+	repo, taskType, vert = determineTarget(payload, &Config{HFRepo: repo})
+	_ = vert // not used in validation
+
+	// General checks
+	if payload.Annotation == nil {
+		return false, "missing annotation"
+	}
+	results, ok := payload.Annotation["result"].([]interface{})
+	if !ok || len(results) == 0 {
+		return false, "annotation.result missing or empty"
+	}
+	// Task-specific checks
+	switch taskType {
+	case "ner":
+		// Require at least one valid span
+		valid := 0
+		for _, r := range results {
+			rm, ok := r.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if t, _ := rm["type"].(string); strings.ToLower(t) != "labels" && strings.ToLower(t) != "choices" {
+				continue
+			}
+			val, _ := rm["value"].(map[string]interface{})
+			if val == nil {
+				continue
+			}
+			_, hasStart := val["start"].(float64)
+			_, hasEnd := val["end"].(float64)
+			labs, _ := val["labels"].([]interface{})
+			if hasStart && hasEnd && len(labs) > 0 {
+				valid++
+			}
+		}
+		if valid == 0 {
+			return false, "no valid NER spans"
+		}
+		return true, ""
+	case "docling":
+		// Require at least one valid bbox
+		valid := 0
+		for _, r := range results {
+			rm, ok := r.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			t, _ := rm["type"].(string)
+			lt := strings.ToLower(t)
+			if lt != "rectanglelabels" && lt != "polygonlabels" {
+				continue
+			}
+			val, _ := rm["value"].(map[string]interface{})
+			if val == nil {
+				continue
+			}
+			// rectangle: x,y,width,height present
+			_, hx := val["x"].(float64)
+			_, hy := val["y"].(float64)
+			_, hw := val["width"].(float64)
+			_, hh := val["height"].(float64)
+			if hx && hy && hw && hh {
+				valid++
+			}
+		}
+		if valid == 0 {
+			return false, "no valid Docling boxes"
+		}
+		return true, ""
+	default:
+		// Unknown type: allow but warn if needed
+		return true, ""
+	}
 }
 
 func ingestHandler(cfg *Config) http.HandlerFunc {
@@ -555,6 +654,9 @@ func main() {
 		// Continue without database
 	}
 
+	// Metrics registry
+	initMetrics()
+
 	var outboxCancel context.CancelFunc
 	if db != nil && cfg.HFToken != "" && cfg.HFRepo != "" {
 		processor := newOutboxProcessor(db, cfg)
@@ -572,6 +674,8 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/webhook", webhookHandler(cfg))
 	mux.HandleFunc("/ingest", ingestHandler(cfg))
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/audit/source", auditSourceHandler)
 
 	log.Printf("Starting annotations-sink on %s", cfg.ListenAddr)
 	if cfg.DatabaseURL != "" {
@@ -586,4 +690,90 @@ func main() {
 	if err := http.ListenAndServe(cfg.ListenAddr, mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// auditSourceHandler returns outbox entries matching a source_tag
+func auditSourceHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if db == nil {
+		http.Error(w, "Database not configured", http.StatusServiceUnavailable)
+		return
+	}
+	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
+	if tag == "" {
+		http.Error(w, "missing tag", http.StatusBadRequest)
+		return
+	}
+	includePayload := r.URL.Query().Get("include_payload") == "1"
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	var rows *sql.Rows
+	var err error
+	if includePayload {
+		rows, err = db.QueryContext(ctx, `
+            SELECT id, event_id, project_id, schema_version, target_repo, task_type, vertical, source_tag, shard_path, created_at, processed_at, payload
+            FROM stage.annotations_outbox
+            WHERE source_tag = $1
+            ORDER BY created_at DESC
+            LIMIT 200`, tag)
+	} else {
+		rows, err = db.QueryContext(ctx, `
+            SELECT id, event_id, project_id, schema_version, target_repo, task_type, vertical, source_tag, shard_path, created_at, processed_at
+            FROM stage.annotations_outbox
+            WHERE source_tag = $1
+            ORDER BY created_at DESC
+            LIMIT 200`, tag)
+	}
+	if err != nil {
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type item struct {
+		ID          int64           `json:"id"`
+		EventID     string          `json:"event_id"`
+		ProjectID   string          `json:"project_id"`
+		Schema      string          `json:"schema_version"`
+		Repo        string          `json:"target_repo"`
+		TaskType    string          `json:"task_type"`
+		Vertical    string          `json:"vertical"`
+		SourceTag   string          `json:"source_tag"`
+		ShardPath   string          `json:"shard_path"`
+		CreatedAt   time.Time       `json:"created_at"`
+		ProcessedAt *time.Time      `json:"processed_at,omitempty"`
+		Payload     json.RawMessage `json:"payload,omitempty"`
+	}
+
+	var out struct {
+		Items []item `json:"items"`
+	}
+
+	for rows.Next() {
+		var it item
+		if includePayload {
+			if err := rows.Scan(&it.ID, &it.EventID, &it.ProjectID, &it.Schema, &it.Repo, &it.TaskType, &it.Vertical, &it.SourceTag, &it.ShardPath, &it.CreatedAt, &it.ProcessedAt, &it.Payload); err != nil {
+				http.Error(w, "scan failed", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			if err := rows.Scan(&it.ID, &it.EventID, &it.ProjectID, &it.Schema, &it.Repo, &it.TaskType, &it.Vertical, &it.SourceTag, &it.ShardPath, &it.CreatedAt, &it.ProcessedAt); err != nil {
+				http.Error(w, "scan failed", http.StatusInternalServerError)
+				return
+			}
+		}
+		out.Items = append(out.Items, it)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "rows error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
 }

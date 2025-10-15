@@ -144,6 +144,59 @@ jobs:
         run: |
           bash scripts/export_onnx.sh ./models/ner-distilbert distilbert_onnx 63
 
+      - name: Check ONNX size and report
+        run: |
+          set -euo pipefail
+          FILE="distilbert_onnx/model.onnx"
+          if [ ! -f "$FILE" ]; then echo "ONNX missing" >&2; exit 1; fi
+          BYTES=$(wc -c < "$FILE" | tr -d ' ')
+          MB=$(awk -v b="$BYTES" 'BEGIN{printf "%.2f", b/1024/1024}')
+          echo "ONNX size: ${MB} MB (${BYTES} bytes)"
+          THRESHOLD=$((80*1024*1024)) # 80 MB
+          if [ "$BYTES" -gt "$THRESHOLD" ]; then
+            echo "::warning title=ONNX size::Model size ${MB} MB exceeds 80 MB threshold"
+          fi
+          echo "ONNX_BYTES=${BYTES}" >> $GITHUB_ENV
+
+      - name: Collect training metrics
+        run: |
+          set -euo pipefail
+          METRICS_PATH="./models/ner-distilbert/metrics.json"
+          if [ -f "$METRICS_PATH" ]; then
+            echo "Found metrics at $METRICS_PATH";
+          else
+            echo '{}' > "$METRICS_PATH"
+          fi
+          echo "METRICS_PATH=$METRICS_PATH" >> $GITHUB_ENV
+
+      - name: Publish metrics to HF model repo
+        if: success()
+        env:
+          HF_TOKEN: ${{ env.HF_TOKEN }}
+          HF_MODEL_REPO: ${{ env.HF_MODEL_REPO }}
+          ONNX_BYTES: ${{ env.ONNX_BYTES }}
+          METRICS_PATH: ${{ env.METRICS_PATH }}
+        run: |
+          python - << 'PY'
+          import os, io, json
+          from datetime import datetime
+          from huggingface_hub import HfApi, CommitOperationAdd
+          repo=os.environ['HF_MODEL_REPO']
+          api=HfApi(token=os.environ['HF_TOKEN'])
+          api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
+          ts=datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+          metrics_path=os.environ.get('METRICS_PATH','./models/ner-distilbert/metrics.json')
+          try:
+            metrics=json.load(open(metrics_path,'r'))
+          except Exception:
+            metrics={}
+          metrics['onnx_bytes']=int(os.environ.get('ONNX_BYTES','0') or 0)
+          data=json.dumps(metrics, ensure_ascii=False, indent=2).encode('utf-8')
+          op=CommitOperationAdd(path_in_repo=f'metrics/ner_{ts}.json', path_or_fileobj=io.BytesIO(data))
+          api.create_commit(repo_id=repo, repo_type='model', operations=[op], commit_message=f"Add metrics {ts}")
+          print('published metrics to', repo)
+          PY
+
       - name: Publish ONNX to HF model repo
         env:
           HF_TOKEN: ${{ env.HF_TOKEN }}

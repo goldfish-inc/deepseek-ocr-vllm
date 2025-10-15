@@ -56,9 +56,10 @@
   - Non-scratch base (e.g., `alpine`/distroless/cc) for the ETL image where OpenZL binaries are copied to `/usr/local/bin`.
 - Failure policy: Proceed with plain Parquet (zstd) if OpenZL compression fails; emit metrics/logs and mark the run “degraded”.
 
-### Hugging Face Publishing
+### Publishing & Storage
 
-- Prefer HF Hub HTTP API (create_repo, create_commit) over Git/LFS to minimize image tooling for JSONL annotations (mirrors `apps/training-worker` approach). For large PDFs, use XeT-backed Git pushes.
+- Prefer HF Hub HTTP API (create_repo, create_commit) for JSONL annotations (mirrors `apps/training-worker` approach).
+- Original PDFs remain in S3 (Label Studio per‑project storage) and are not copied to HF or DB. The ETL reads PDFs directly from S3 when needed.
 - Layout proposal:
   - JSONL (training): `vertical=<vertical>/schema-<version>/project-<project_id>/<YYYY>/<MM>/<DD>/<HH>/batch-<uuid>.jsonl`
   - Parquet: `parquet/{date}/project-{project_id}/{export_id}.parquet`

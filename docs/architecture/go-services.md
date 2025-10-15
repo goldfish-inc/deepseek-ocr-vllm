@@ -89,6 +89,10 @@ The sink routes by task type and vertical, storing outbox shards under:
 
 ```
 vertical=<vertical>/schema-<version>/project-<id>/YYYY/MM/DD/HH/batch-<uuid>.jsonl
+
+Audit Reference
+- Outbox payloads include `source_ref` with the original source URL (if present) and derived S3 location fields: `s3_bucket`, `s3_key`, `s3_version_id`.
+- A stable `source_tag` is stored in the outbox table to allow exact lookup of records by S3 object (e.g., `s3://bucket/key#version`).
 ```
 
 ## Resource Comparison

@@ -30,6 +30,15 @@ type annotationRecord struct {
 	SchemaVersion string          `json:"schema_version"`
 	Source        string          `json:"source"`
 	ReceivedAt    time.Time       `json:"received_at"`
+	SourceRef     *sourceRef      `json:"source_ref,omitempty"`
+}
+
+type sourceRef struct {
+	URL         string `json:"url,omitempty"`
+	S3Bucket    string `json:"s3_bucket,omitempty"`
+	S3Key       string `json:"s3_key,omitempty"`
+	S3VersionID string `json:"s3_version_id,omitempty"`
+	Tag         string `json:"tag,omitempty"`
 }
 
 func enqueueAnnotation(payload WebhookPayload, cfg *Config) error {
@@ -50,9 +59,22 @@ func enqueueAnnotation(payload WebhookPayload, cfg *Config) error {
 	// Determine routing and vertical
 	repo, taskType, vertical := determineTarget(payload, cfg)
 
+	src := extractSourceRef(record)
+	srcTag := ""
+	if src != nil {
+		srcTag = src.Tag
+	}
+	// Refresh payload to include source_ref if present
+	if src != nil {
+		record.SourceRef = src
+		if b, mErr := json.Marshal(record); mErr == nil {
+			payloadJSON = b
+		}
+	}
+
 	_, err = db.Exec(
-		`INSERT INTO stage.annotations_outbox (event_id, project_id, payload, schema_version, target_repo, task_type, vertical)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO stage.annotations_outbox (event_id, project_id, payload, schema_version, target_repo, task_type, vertical, source_tag)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (event_id) DO NOTHING`,
 		record.EventID,
 		record.ProjectID,
@@ -61,6 +83,7 @@ func enqueueAnnotation(payload WebhookPayload, cfg *Config) error {
 		repo,
 		taskType,
 		vertical,
+		srcTag,
 	)
 	if err != nil {
 		return fmt.Errorf("insert into annotations_outbox: %w", err)
@@ -99,7 +122,7 @@ func buildAnnotationRecord(payload WebhookPayload, schemaVersion string) (*annot
 
 	projectTitle, _ := toString(payload.Project["title"])
 
-	return &annotationRecord{
+	rec := &annotationRecord{
 		EventID:       eventID,
 		Action:        payload.Action,
 		ProjectID:     projectID,
@@ -111,7 +134,93 @@ func buildAnnotationRecord(payload WebhookPayload, schemaVersion string) (*annot
 		SchemaVersion: schemaVersion,
 		Source:        "label_studio_webhook",
 		ReceivedAt:    time.Now().UTC(),
-	}, nil
+	}
+	return rec, nil
+}
+
+func extractSourceRef(rec *annotationRecord) *sourceRef {
+	// Try to parse task_data for a source URL and S3 bucket/key
+	var task map[string]interface{}
+	if rec.TaskData != nil {
+		_ = json.Unmarshal(rec.TaskData, &task)
+	}
+	if task == nil {
+		task = map[string]interface{}{}
+	}
+	// Common keys to look for
+	candidates := []string{"pdf_url", "url", "file", "image", "s3_url"}
+	var urlStr string
+	for _, k := range candidates {
+		if v, ok := task[k].(string); ok && v != "" {
+			urlStr = v
+			break
+		}
+	}
+	bkt, key, ver := parseS3FromURL(urlStr)
+	if bkt == "" || key == "" {
+		// Some LS storages embed bucket/key as separate fields
+		if v, ok := task["s3_bucket"].(string); ok {
+			bkt = v
+		}
+		if v, ok := task["s3_key"].(string); ok {
+			key = v
+		}
+		if v, ok := task["s3_version_id"].(string); ok {
+			ver = v
+		}
+	}
+	if urlStr == "" && bkt == "" && key == "" {
+		return nil
+	}
+	tag := buildSourceTag(bkt, key, ver)
+	return &sourceRef{URL: urlStr, S3Bucket: bkt, S3Key: key, S3VersionID: ver, Tag: tag}
+}
+
+func parseS3FromURL(raw string) (bucket, key, version string) {
+	if raw == "" {
+		return "", "", ""
+	}
+	// Very tolerant parse for virtual-hosted-style and path-style S3 URLs
+	// Examples: https://bucket.s3.amazonaws.com/key, https://s3.amazonaws.com/bucket/key
+	// Also supports custom endpoints like https://bucket.s3.us-east-1.amazonaws.com/key
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", "", ""
+	}
+	q := u.Query()
+	version = q.Get("versionId")
+	host := u.Hostname()
+	path := strings.TrimPrefix(u.EscapedPath(), "/")
+	// virtual-hosted-style: <bucket>.s3.*.amazonaws.com/<key>
+	if strings.Contains(host, ".s3") && !strings.HasPrefix(path, "s3/") {
+		parts := strings.Split(host, ".")
+		if len(parts) > 0 {
+			bucket = parts[0]
+		}
+		key, _ = url.PathUnescape(path)
+		return bucket, key, version
+	}
+	// path-style: s3.*.amazonaws.com/<bucket>/<key>
+	if strings.Contains(host, "amazonaws.com") {
+		seg := strings.SplitN(path, "/", 2)
+		if len(seg) == 2 {
+			bucket, _ = url.PathUnescape(seg[0])
+			key, _ = url.PathUnescape(seg[1])
+			return bucket, key, version
+		}
+	}
+	return "", "", version
+}
+
+func buildSourceTag(bucket, key, version string) string {
+	if bucket == "" || key == "" {
+		return ""
+	}
+	tag := "s3://" + bucket + "/" + key
+	if version != "" {
+		tag += "#" + version
+	}
+	return tag
 }
 
 func extractCompletedBy(annotation map[string]interface{}) string {
@@ -309,12 +418,14 @@ func (p *outboxProcessor) flushRecords(ctx context.Context, records []outboxReco
 
 			if err := client.Commit(ctx, ops, message); err != nil {
 				log.Printf("Outbox: commit failed (%s/%s): %v", repo, projectID, err)
+				outboxCommitsTotal.WithLabelValues(repo, "error").Inc()
 				if updateErr := p.markFailed(ctx, recs, err); updateErr != nil {
 					log.Printf("Outbox: mark failed error: %v", updateErr)
 				}
 				continue
 			}
 
+			outboxCommitsTotal.WithLabelValues(repo, "ok").Inc()
 			if err := p.markProcessed(ctx, recs, path); err != nil {
 				log.Printf("Outbox: mark processed error: %v", err)
 			}
@@ -364,12 +475,20 @@ func (p *outboxProcessor) markProcessed(ctx context.Context, records []outboxRec
 	}
 
 	_, err := p.db.ExecContext(ctx, `
-		UPDATE stage.annotations_outbox
-		SET processed_at = NOW(), last_error = NULL, shard_path = $2, locked_at = NULL
-		WHERE id = ANY($1)`,
+        UPDATE stage.annotations_outbox
+        SET processed_at = NOW(), last_error = NULL, shard_path = $2, locked_at = NULL
+        WHERE id = ANY($1)`,
 		pq.Array(ids),
 		path,
 	)
+	// Update processed counter by repo (best effort: derive from last record)
+	if len(records) > 0 {
+		repo := records[len(records)-1].TargetRepo
+		if repo == "" {
+			repo = p.cfg.HFRepo
+		}
+		outboxRecordsProcessedTotal.WithLabelValues(repo).Add(float64(len(records)))
+	}
 	return err
 }
 
@@ -384,12 +503,19 @@ func (p *outboxProcessor) markFailed(ctx context.Context, records []outboxRecord
 
 	errMsg := truncateError(cause, 512)
 	_, err := p.db.ExecContext(ctx, `
-		UPDATE stage.annotations_outbox
-		SET last_error = $2, locked_at = NULL
-		WHERE id = ANY($1)`,
+        UPDATE stage.annotations_outbox
+        SET last_error = $2, locked_at = NULL
+        WHERE id = ANY($1)`,
 		pq.Array(ids),
 		errMsg,
 	)
+	if len(records) > 0 {
+		repo := records[len(records)-1].TargetRepo
+		if repo == "" {
+			repo = p.cfg.HFRepo
+		}
+		outboxRecordsFailedTotal.WithLabelValues(repo).Add(float64(len(records)))
+	}
 	return err
 }
 
