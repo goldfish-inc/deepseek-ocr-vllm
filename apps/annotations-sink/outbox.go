@@ -47,14 +47,20 @@ func enqueueAnnotation(payload WebhookPayload, cfg *Config) error {
 		return fmt.Errorf("marshal annotation record: %w", err)
 	}
 
+	// Determine routing and vertical
+	repo, taskType, vertical := determineTarget(payload, cfg)
+
 	_, err = db.Exec(
-		`INSERT INTO stage.annotations_outbox (event_id, project_id, payload, schema_version)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (event_id) DO NOTHING`,
+		`INSERT INTO stage.annotations_outbox (event_id, project_id, payload, schema_version, target_repo, task_type, vertical)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (event_id) DO NOTHING`,
 		record.EventID,
 		record.ProjectID,
 		string(payloadJSON),
 		cfg.SchemaVersion,
+		repo,
+		taskType,
+		vertical,
 	)
 	if err != nil {
 		return fmt.Errorf("insert into annotations_outbox: %w", err)
@@ -135,17 +141,20 @@ func deriveEventID(action string, payload WebhookPayload, projectID, taskID stri
 }
 
 type outboxRecord struct {
-	ID        int64
-	ProjectID string
-	Payload   json.RawMessage
-	CreatedAt time.Time
-	Attempts  int
+	ID         int64
+	ProjectID  string
+	TargetRepo string
+	Vertical   string
+	Payload    json.RawMessage
+	CreatedAt  time.Time
+	Attempts   int
 }
 
 type outboxProcessor struct {
 	db            *sql.DB
 	cfg           *Config
-	hf            *hfClient
+	hfDefault     *hfClient
+	hfClients     map[string]*hfClient
 	batchSize     int
 	pollInterval  time.Duration
 	lockTimeout   time.Duration
@@ -158,7 +167,8 @@ func newOutboxProcessor(db *sql.DB, cfg *Config) *outboxProcessor {
 	return &outboxProcessor{
 		db:            db,
 		cfg:           cfg,
-		hf:            client,
+		hfDefault:     client,
+		hfClients:     map[string]*hfClient{cfg.HFRepo: client},
 		batchSize:     cfg.OutboxBatchSize,
 		pollInterval:  cfg.OutboxInterval,
 		lockTimeout:   cfg.OutboxLockTimeout,
@@ -211,13 +221,13 @@ func (p *outboxProcessor) claimBatch(ctx context.Context) ([]outboxRecord, error
 	}()
 
 	rows, err := tx.QueryContext(ctx, `
-		SELECT id, project_id, payload, created_at, attempts
-		FROM stage.annotations_outbox
-		WHERE processed_at IS NULL
-		  AND (locked_at IS NULL OR locked_at < NOW() - ($2 * INTERVAL '1 second'))
-		ORDER BY created_at
-		LIMIT $1
-		FOR UPDATE SKIP LOCKED`,
+        SELECT id, project_id, COALESCE(target_repo, ''), COALESCE(vertical, ''), payload, created_at, attempts
+        FROM stage.annotations_outbox
+        WHERE processed_at IS NULL
+          AND (locked_at IS NULL OR locked_at < NOW() - ($2 * INTERVAL '1 second'))
+        ORDER BY created_at
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED`,
 		p.batchSize,
 		int(p.lockTimeout.Seconds()),
 	)
@@ -229,7 +239,7 @@ func (p *outboxProcessor) claimBatch(ctx context.Context) ([]outboxRecord, error
 	var records []outboxRecord
 	for rows.Next() {
 		var rec outboxRecord
-		if err := rows.Scan(&rec.ID, &rec.ProjectID, &rec.Payload, &rec.CreatedAt, &rec.Attempts); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.ProjectID, &rec.TargetRepo, &rec.Vertical, &rec.Payload, &rec.CreatedAt, &rec.Attempts); err != nil {
 			return nil, err
 		}
 		records = append(records, rec)
@@ -267,35 +277,47 @@ func (p *outboxProcessor) claimBatch(ctx context.Context) ([]outboxRecord, error
 }
 
 func (p *outboxProcessor) flushRecords(ctx context.Context, records []outboxRecord) error {
-	groups := make(map[string][]outboxRecord)
+	// Group by target_repo then project_id
+	repoGroups := make(map[string]map[string][]outboxRecord)
 	for _, rec := range records {
-		groups[rec.ProjectID] = append(groups[rec.ProjectID], rec)
+		repo := rec.TargetRepo
+		if repo == "" {
+			repo = p.cfg.HFRepo
+		}
+		if _, ok := repoGroups[repo]; !ok {
+			repoGroups[repo] = make(map[string][]outboxRecord)
+		}
+		repoGroups[repo][rec.ProjectID] = append(repoGroups[repo][rec.ProjectID], rec)
 	}
 
-	for projectID, recs := range groups {
-		path := buildShardPath(p.schemaVersion, projectID, recs[0].CreatedAt)
-		payload := buildJSONL(recs)
+	for repo, projGroup := range repoGroups {
+		client := p.getClient(repo)
+		for projectID, recs := range projGroup {
+			vertical := recs[0].Vertical
+			path := buildShardPath(p.schemaVersion, vertical, projectID, recs[0].CreatedAt)
+			payload := buildJSONL(recs)
 
-		ops := []commitOperation{
-			{
-				Operation: "addOrUpdate",
-				Path:      path,
-				Content:   base64.StdEncoding.EncodeToString(payload),
-			},
-		}
-
-		message := fmt.Sprintf("Add %d annotations for project %s", len(recs), projectID)
-
-		if err := p.hf.Commit(ctx, ops, message); err != nil {
-			log.Printf("Outbox: commit failed (%s): %v", projectID, err)
-			if updateErr := p.markFailed(ctx, recs, err); updateErr != nil {
-				log.Printf("Outbox: mark failed error: %v", updateErr)
+			ops := []commitOperation{
+				{
+					Operation: "addOrUpdate",
+					Path:      path,
+					Content:   base64.StdEncoding.EncodeToString(payload),
+				},
 			}
-			continue
-		}
 
-		if err := p.markProcessed(ctx, recs, path); err != nil {
-			log.Printf("Outbox: mark processed error: %v", err)
+			message := fmt.Sprintf("Add %d annotations for project %s (vertical=%s)", len(recs), projectID, vertical)
+
+			if err := client.Commit(ctx, ops, message); err != nil {
+				log.Printf("Outbox: commit failed (%s/%s): %v", repo, projectID, err)
+				if updateErr := p.markFailed(ctx, recs, err); updateErr != nil {
+					log.Printf("Outbox: mark failed error: %v", updateErr)
+				}
+				continue
+			}
+
+			if err := p.markProcessed(ctx, recs, path); err != nil {
+				log.Printf("Outbox: mark processed error: %v", err)
+			}
 		}
 	}
 
@@ -311,10 +333,11 @@ func buildJSONL(records []outboxRecord) []byte {
 	return buf.Bytes()
 }
 
-func buildShardPath(schemaVersion, projectID string, t time.Time) string {
+func buildShardPath(schemaVersion, vertical, projectID string, t time.Time) string {
 	ts := t.UTC()
 	return fmt.Sprintf(
-		"schema-%s/project-%s/%s/%s/%s/%s/batch-%s.jsonl",
+		"vertical=%s/schema-%s/project-%s/%s/%s/%s/%s/batch-%s.jsonl",
+		safePathComponent(vertical),
 		safePathComponent(schemaVersion),
 		safePathComponent(projectID),
 		ts.Format("2006"),
@@ -470,6 +493,18 @@ func (c *hfClient) Commit(ctx context.Context, ops []commitOperation, message st
 	}
 
 	return nil
+}
+
+func (p *outboxProcessor) getClient(repo string) *hfClient {
+	if repo == "" || repo == p.cfg.HFRepo {
+		return p.hfDefault
+	}
+	if c, ok := p.hfClients[repo]; ok {
+		return c
+	}
+	c := newHFClient(repo, p.cfg.HFToken, p.cfg.HFBranch)
+	p.hfClients[repo] = c
+	return c
 }
 
 func toString(value interface{}) (string, bool) {

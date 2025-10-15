@@ -51,7 +51,9 @@ Agent setup (once, on a host with kubeconfig):
 Configure once in Pulumi ESC (no GitHub Secrets/Vars required):
 
 - `pulumiConfig.oceanid-cluster:hfAccessToken` → HF write token (used by sink + CI)
-- `pulumiConfig.oceanid-cluster:hfDatasetRepo` → e.g., `goldfish-inc/oceanid-annotations`
+- `pulumiConfig.oceanid-cluster:hfDatasetRepo` → default dataset repo (fallback)
+- `pulumiConfig.oceanid-cluster:hfDatasetRepoNER` → NER annotations dataset (preferred for NER)
+- `pulumiConfig.oceanid-cluster:hfDatasetRepoDocling` → Docling annotations dataset
 - `pulumiConfig.oceanid-cluster:hfModelRepo` → e.g., `goldfish-inc/oceanid-ner-distilbert`
 - `pulumiConfig.oceanid-cluster:postgres_url` → CrunchyBridge PG 17 URL (for migrations)
 
@@ -60,6 +62,8 @@ ESC commands:
 ```bash
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "<HF_WRITE_TOKEN>" --secret
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoNER "goldfish-inc/oceanid-annotations-ner"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoDocling "goldfish-inc/oceanid-annotations-docling"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:nautilusSyncToken "<GITHUB_PAT_WITH_repo_WRITE_ON_goldfish-inc/nautilus>" --secret

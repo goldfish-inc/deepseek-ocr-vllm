@@ -10,7 +10,7 @@
 ## Fit With Current Repo
 
 - Services: Go microservices on scratch are the norm (`apps/annotations-sink`, `apps/ls-triton-adapter`, `apps/project-bootstrapper`). The ETL should be a separate Go Job/CronJob (not the always-on sink).
-- Training: `apps/training-worker` (Python) currently pulls JSONL from HF (`annotations/*.jsonl`). Keep JSONL for training compatibility; add Parquet(+OpenZL) in parallel for archive/analytics.
+- Training: `apps/training-worker` (Python) pulls JSONL shards from HF (`vertical=*/schema-*/project-*/**/*.jsonl`) and normalizes to model-specific training rows. Keep JSONL for training compatibility; add Parquet(+OpenZL) in parallel for archive/analytics.
 - Database target: `cluster/sql/cleandata` defines the “clean data” schema. ETL will map LS exports to these tables (or a derived staging schema → `cleandata`).
 - Infra patterns: Pulumi component resources in `cluster/src/components` provision Deployments/Jobs; images come from GHCR; `imagePullSecrets: ghcr-creds`; secrets via ESC. The ETL follows the same conventions.
 
@@ -58,9 +58,9 @@
 
 ### Hugging Face Publishing
 
-- Prefer HF Hub HTTP API (create_repo, create_commit) over Git/LFS to minimize image tooling and complexity (mirrors `apps/training-worker` approach).
+- Prefer HF Hub HTTP API (create_repo, create_commit) over Git/LFS to minimize image tooling for JSONL annotations (mirrors `apps/training-worker` approach). For large PDFs, use XeT-backed Git pushes.
 - Layout proposal:
-  - JSONL (training): `annotations/{date}/project-{project_id}.jsonl`
+  - JSONL (training): `vertical=<vertical>/schema-<version>/project-<project_id>/<YYYY>/<MM>/<DD>/<HH>/batch-<uuid>.jsonl`
   - Parquet: `parquet/{date}/project-{project_id}/{export_id}.parquet`
   - OpenZL: `parquet/{date}/project-{project_id}/{export_id}.parquet.zl`
 
@@ -173,7 +173,7 @@ for _, obj := range s3.ListNew(prefix) {
 
 ```
 dataset-repo/
-  annotations/2025-10-07/project-123.jsonl
+vertical=maritime/schema-1.0.0/project-123/2025/10/07/03/batch-<uuid>.jsonl
   parquet/2025-10-07/project-123/export-abc.parquet
   parquet/2025-10-07/project-123/export-abc.parquet.zl
 ```

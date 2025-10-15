@@ -155,6 +155,8 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "
 
 # Optional: repo names (defaults are shown)
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoNER "goldfish-inc/oceanid-annotations-ner"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoDocling "goldfish-inc/oceanid-annotations-docling"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
 
 # CrunchyBridge Postgres URL for migrations
@@ -166,7 +168,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerP
 
 Workflows:
 
-- `train-ner.yml` reads `hfAccessToken`, `hfDatasetRepo`, and `hfModelRepo` from ESC.
+- `train-ner.yml` reads `hfAccessToken`, prefers `hfDatasetRepoNER` (fallback `hfDatasetRepo`), and `hfModelRepo` from ESC.
 - `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
 
 ## Label Studio DB (labelfish) — Manual provisioning on ebisu

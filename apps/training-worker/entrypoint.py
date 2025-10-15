@@ -23,19 +23,19 @@ def env(key: str, default: str = "") -> str:
     return v
 
 
-def fetch_annotations(token: str, dataset_repo: str, out_dir: pathlib.Path) -> None:
+def fetch_annotations(token: str, dataset_repo: str, shards_dir: pathlib.Path) -> None:
     api = HfApi(token=token)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    shards_dir.mkdir(parents=True, exist_ok=True)
     files = list_repo_files(dataset_repo, repo_type="dataset")
     count = 0
     for f in files:
-        if f.startswith("annotations/") and f.endswith(".jsonl"):
+        if (f.startswith("vertical=") or f.startswith("schema-")) and f.endswith(".jsonl"):
             p = hf_hub_download(dataset_repo, filename=f, repo_type="dataset", token=token)
-            dst = out_dir / pathlib.Path(f).name
+            dst = shards_dir / pathlib.Path(f.replace("/","__")).name
             with open(p, "rb") as src, open(dst, "wb") as dstf:
                 dstf.write(src.read())
             count += 1
-    log(f"Downloaded {count} JSONL files to {out_dir}")
+    log(f"Downloaded {count} JSONL shard files to {shards_dir}")
 
 
 def run(cmd: list[str]) -> None:
@@ -109,13 +109,14 @@ def reload_triton_model(triton_url: str, model_name: str, max_retries: int = 3) 
 def main() -> None:
     log("Training job started")
     hf_token = env("HF_TOKEN")
-    dataset_repo = env("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations")
+    dataset_repo = env("HF_DATASET_REPO_NER", "") or env("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations")
     model_repo = env("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert")
     ann_count = env("ANNOTATION_COUNT", "0")
     triton_url = env("TRITON_URL", "http://triton.triton.svc.cluster.local:8000")
     model_name = env("TRITON_MODEL_NAME", "ner-distilbert")
 
     work = pathlib.Path("/workspace")
+    shards = work / "shards"
     anns = work / "local_annotations"
     model_out = work / "models/ner-distilbert"
     onnx_out = work / "distilbert_onnx"
@@ -124,10 +125,21 @@ def main() -> None:
     work.mkdir(parents=True, exist_ok=True)
 
     log("Fetching annotations from HF…")
-    fetch_annotations(hf_token, dataset_repo, anns)
+    fetch_annotations(hf_token, dataset_repo, shards)
 
-    if not anns.exists() or not any(anns.glob("*.jsonl")):
+    if not shards.exists() or not any(shards.glob("*.jsonl")):
         raise SystemExit("No annotations downloaded; aborting")
+
+    # Normalize shards into training format
+    anns.mkdir(parents=True, exist_ok=True)
+    run([
+        "python",
+        "/app/normalize_ner_from_outbox.py",
+        "--in",
+        str(shards),
+        "--out",
+        str(anns),
+    ])
 
     log("Starting NER training…")
     run([

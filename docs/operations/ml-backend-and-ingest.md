@@ -12,7 +12,11 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
     - CSV → header‑aware flattening → NER (simplified in Go)
 - Sink: `annotations-sink` (**Go service**, ~50Mi RAM) in namespace `apps`
   - Health: `/health` (includes DB connectivity status)
-  - Webhook: `/webhook` for annotation events — enqueues to a Postgres outbox and asynchronously commits JSONL shards to the Hugging Face dataset repo (`hfDatasetRepo`), while keeping spans in `stage.*` tables for metrics/QC.
+  - Webhook: `/webhook` for annotation events — enqueues to a Postgres outbox and asynchronously commits JSONL shards to the correct Hugging Face dataset repo based on task type:
+    - Text NER → `HF_REPO_NER` (fallback `HF_REPO`)
+    - PDF layout/boxes (Docling) → `HF_REPO_DOCLING` (fallback `HF_REPO`)
+    - Shard path: `vertical=<vertical>/schema-<version>/project-<id>/YYYY/MM/DD/HH/batch-<uuid>.jsonl`
+    - Outbox columns: `target_repo`, `task_type`, `vertical` (added for routing/lineage)
   - Ingest: `/ingest` for task-create events (writes raw rows to `stage.table_ingest` and flattened text to `stage.documents`)
 - Provisioner (one‑off Job): `ls-provisioner-ner-data`
   - Connects ML backend to project `NER_Data`
@@ -43,6 +47,15 @@ This document describes the in‑cluster ML backend (adapter), the raw ingestion
   - Fields include percent geometry and, when possible, PDF-point geometry (x_pt/y_pt/w_pt/h_pt) computed in-cluster using the source PDF page size.
   - `stage.v_pdf_boxes_latest` view exposes the latest per unique box for QA.
 - Training: consume PDF-point geometry directly, or convert back to pixels at any DPI on demand.
+
+## Hugging Face Repositories
+
+- NER annotations dataset (JSONL shards): `hfDatasetRepoNER` (ESC) → env `HF_REPO_NER`
+- Docling annotations dataset (JSONL shards): `hfDatasetRepoDocling` (ESC) → env `HF_REPO_DOCLING`
+- Legacy/default dataset repo: `hfDatasetRepo` → env `HF_REPO` (used as fallback)
+- PDFs (XeT-backed): separate dataset repo, recommended layout documented in `docs/datasets/pdfs.md`
+
+Training consumers must read shard paths starting with `vertical=` or `schema-` and, if needed, normalize records into model-specific formats.
 
 ## CSV/XLSX Handling
 

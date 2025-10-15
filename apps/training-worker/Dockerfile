@@ -19,7 +19,7 @@ RUN pip install --upgrade pip \
     && rm -rf /root/.cache/pip
 
 # Copy training scripts and assets
-COPY scripts/ner_train.py scripts/export_onnx.sh labels.json $WORKDIR/
+COPY scripts/ner_train.py scripts/export_onnx.sh scripts/normalize_ner_from_outbox.py labels.json $WORKDIR/
 COPY apps/training-worker/entrypoint.py $WORKDIR/entrypoint.py
 
 RUN chmod +x export_onnx.sh

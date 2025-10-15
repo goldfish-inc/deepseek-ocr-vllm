@@ -22,6 +22,8 @@ type Config struct {
 	DatabaseURL       string
 	HFToken           string
 	HFRepo            string
+	HFRepoNER         string
+	HFRepoDocling     string
 	HFBranch          string
 	SchemaVersion     string
 	EnableDBIndex     bool
@@ -43,6 +45,8 @@ func loadConfig() *Config {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		HFToken:           os.Getenv("HF_TOKEN"),
 		HFRepo:            getEnv("HF_REPO", "goldfish-inc/oceanid-annotations"),
+		HFRepoNER:         getEnv("HF_REPO_NER", "goldfish-inc/oceanid-annotations-ner"),
+		HFRepoDocling:     getEnv("HF_REPO_DOCLING", "goldfish-inc/oceanid-annotations-docling"),
 		HFBranch:          getEnv("HF_BRANCH", "main"),
 		SchemaVersion:     getEnv("SCHEMA_VERSION", "1.0.0"),
 		EnableDBIndex:     enableIndex,
@@ -117,7 +121,7 @@ func initDB(cfg *Config) error {
 
 	// Create schema and tables
 	schema := `
-	CREATE SCHEMA IF NOT EXISTS stage;
+    CREATE SCHEMA IF NOT EXISTS stage;
 
 	CREATE TABLE IF NOT EXISTS stage.documents (
 		id BIGSERIAL PRIMARY KEY,
@@ -173,30 +177,45 @@ func initDB(cfg *Config) error {
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	);
 
-	CREATE TABLE IF NOT EXISTS stage.annotations_outbox (
-		id BIGSERIAL PRIMARY KEY,
-		event_id TEXT UNIQUE,
-		project_id TEXT NOT NULL,
-		payload JSONB NOT NULL,
-		schema_version TEXT,
-		shard_path TEXT,
-		created_at TIMESTAMPTZ DEFAULT NOW(),
-		processed_at TIMESTAMPTZ,
-		attempts INT DEFAULT 0,
-		last_error TEXT,
-		locked_at TIMESTAMPTZ
-	);
+    CREATE TABLE IF NOT EXISTS stage.annotations_outbox (
+        id BIGSERIAL PRIMARY KEY,
+        event_id TEXT UNIQUE,
+        project_id TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        schema_version TEXT,
+        target_repo TEXT,
+        task_type TEXT,
+        vertical TEXT,
+        shard_path TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        processed_at TIMESTAMPTZ,
+        attempts INT DEFAULT 0,
+        last_error TEXT,
+        locked_at TIMESTAMPTZ
+    );
 
 	CREATE INDEX IF NOT EXISTS idx_annotations_outbox_pending
 		ON stage.annotations_outbox (processed_at, created_at);
 
-	CREATE INDEX IF NOT EXISTS idx_annotations_outbox_project
-		ON stage.annotations_outbox (project_id, processed_at);
-	`
+    CREATE INDEX IF NOT EXISTS idx_annotations_outbox_project
+        ON stage.annotations_outbox (project_id, processed_at);
+    `
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		// Log but don't fail - tables might already exist
 		log.Printf("Warning: schema creation had issues (may already exist): %v", err)
+	}
+
+	// Ensure new columns exist for routing and vertical dimension
+	alters := `
+    ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS target_repo TEXT;
+    ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS task_type TEXT;
+    ALTER TABLE stage.annotations_outbox ADD COLUMN IF NOT EXISTS vertical TEXT;
+    CREATE INDEX IF NOT EXISTS idx_annotations_outbox_repo ON stage.annotations_outbox(target_repo, processed_at);
+    CREATE INDEX IF NOT EXISTS idx_annotations_outbox_vertical ON stage.annotations_outbox(vertical) WHERE processed_at IS NULL;
+    `
+	if _, err := db.ExecContext(ctx, alters); err != nil {
+		log.Printf("Warning: annotations_outbox alter had issues: %v", err)
 	}
 
 	log.Println("Database initialized successfully")
@@ -262,6 +281,60 @@ func webhookHandler(cfg *Config) http.HandlerFunc {
 			"action": payload.Action,
 		})
 	}
+}
+
+// determineTarget determines the HF dataset repo, task type, and vertical for a payload
+func determineTarget(payload WebhookPayload, cfg *Config) (repo string, taskType string, vertical string) {
+	// Default values
+	repo = cfg.HFRepo
+	taskType = ""
+	vertical = ""
+
+	// Try to get vertical from task.data.vertical
+	if payload.Task != nil {
+		if dataAny, ok := payload.Task["data"]; ok {
+			if data, ok := dataAny.(map[string]interface{}); ok {
+				if v, ok := data["vertical"].(string); ok {
+					vertical = strings.TrimSpace(strings.ToLower(v))
+				}
+			}
+		}
+	}
+	if vertical == "" {
+		// Default to maritime until projects carry vertical explicitly
+		vertical = "maritime"
+	}
+
+	// Detect annotation result types
+	if payload.Annotation != nil {
+		if results, ok := payload.Annotation["result"].([]interface{}); ok {
+			for _, r := range results {
+				rm, ok := r.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				t, _ := rm["type"].(string)
+				switch strings.ToLower(t) {
+				case "labels", "choices":
+					// Text NER
+					taskType = "ner"
+					if cfg.HFRepoNER != "" {
+						repo = cfg.HFRepoNER
+					}
+					return repo, taskType, vertical
+				case "rectanglelabels", "polygonlabels":
+					// PDF layout boxes (Docling)
+					taskType = "docling"
+					if cfg.HFRepoDocling != "" {
+						repo = cfg.HFRepoDocling
+					}
+					return repo, taskType, vertical
+				}
+			}
+		}
+	}
+
+	return repo, taskType, vertical
 }
 
 func ingestHandler(cfg *Config) http.HandlerFunc {

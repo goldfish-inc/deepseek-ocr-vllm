@@ -55,9 +55,12 @@ jobs:
 
           # Get HF repos from ESC (with sensible defaults)
           HF_DATASET_REPO=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo --value string 2>/dev/null || echo "goldfish-inc/oceanid-annotations")
+          HF_DATASET_REPO_NER=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoNER --value string 2>/dev/null || echo "")
           HF_MODEL_REPO=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo --value string 2>/dev/null || echo "goldfish-inc/oceanid-ner-distilbert")
           if [ -z "$HF_DATASET_REPO" ]; then HF_DATASET_REPO="goldfish-inc/oceanid-annotations"; fi
           if [ -z "$HF_MODEL_REPO" ]; then HF_MODEL_REPO="goldfish-inc/oceanid-ner-distilbert"; fi
+          # Prefer NER-specific dataset repo if provided
+          if [ -n "$HF_DATASET_REPO_NER" ]; then HF_DATASET_REPO="$HF_DATASET_REPO_NER"; fi
           echo "HF_DATASET_REPO=$HF_DATASET_REPO" >> "$GITHUB_ENV"
           echo "HF_MODEL_REPO=$HF_MODEL_REPO" >> "$GITHUB_ENV"
 
@@ -77,13 +80,60 @@ jobs:
           HF_TOKEN=os.environ['HF_TOKEN']
           REPO=os.environ.get('HF_DATASET_REPO','goldfish-inc/oceanid-annotations')
           api=HfApi(token=HF_TOKEN)
-          out=pathlib.Path('local_annotations'); out.mkdir(exist_ok=True)
-          for f in list_repo_files(REPO, repo_type='dataset'):
-              if f.startswith('annotations/') and f.endswith('.jsonl'):
-                  p=hf_hub_download(REPO, filename=f, repo_type='dataset', token=HF_TOKEN)
-                  dst=out/ pathlib.Path(f).name
-                  open(dst,'wb').write(open(p,'rb').read())
-          print('downloaded jsonl files to', out)
+          shards=pathlib.Path('shards'); shards.mkdir(exist_ok=True)
+          files=list_repo_files(REPO, repo_type='dataset')
+          count=0
+          for f in files:
+              # Outbox shards pattern
+              if f.startswith('schema-') or f.startswith('vertical='):
+                  if f.endswith('.jsonl'):
+                      p=hf_hub_download(REPO, filename=f, repo_type='dataset', token=HF_TOKEN)
+                      dst=shards/ pathlib.Path(f.replace('/','__')).name
+                      with open(p,'rb') as src, open(dst,'wb') as out:
+                          out.write(src.read())
+                      count+=1
+          print('downloaded shard jsonl files to', shards, 'count=', count)
+
+          # Normalize into training format {"text": str, "spans": [{start,end,label},...]}
+          norm=pathlib.Path('local_annotations'); norm.mkdir(exist_ok=True)
+          out_path=norm/'ner.jsonl'
+          with open(out_path,'w',encoding='utf-8') as outf:
+              for p in shards.glob('*.jsonl'):
+                  with open(p,'r',encoding='utf-8') as f:
+                      for line in f:
+                          line=line.strip()
+                          if not line:
+                              continue
+                          try:
+                              rec=json.loads(line)
+                          except Exception:
+                              continue
+                          # annotationRecord payload
+                          ann = rec.get('annotation') or {}
+                          task_data = rec.get('task_data') or {}
+                          text = ''
+                          if isinstance(task_data, dict):
+                              text = task_data.get('text') or ''
+                          spans=[]
+                          try:
+                              results = ann.get('result') or []
+                              for r in results:
+                                  if not isinstance(r, dict):
+                                      continue
+                                  if r.get('type') not in ('labels','choices'):
+                                      continue
+                                  val = r.get('value') or {}
+                                  if all(k in val for k in ('start','end','labels')):
+                                      label_list = val.get('labels') or []
+                                      label = label_list[0] if label_list else None
+                                      if label is None:
+                                          continue
+                                      spans.append({'start': int(val.get('start',0)), 'end': int(val.get('end',0)), 'label': str(label)})
+                          except Exception:
+                              pass
+                          if text and spans:
+                              outf.write(json.dumps({'text': text, 'spans': spans}, ensure_ascii=False) + '\n')
+          print('normalized training data written to', out_path)
           PY
 
       - name: Train NER

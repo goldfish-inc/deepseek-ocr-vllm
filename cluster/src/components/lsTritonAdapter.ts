@@ -32,6 +32,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         const hfToken = cfgPulumi.getSecret("hfAccessToken");
         const hfDatasetRepo = cfgPulumi.get("hfDatasetRepo") || "goldfish-inc/oceanid-annotations";
         const hfModelRepo = cfgPulumi.get("hfModelRepo") || "goldfish-inc/oceanid-ner-distilbert";
+        const hfDatasetRepoNER = cfgPulumi.get("hfDatasetRepoNER") || "";
         const defaultLabels = [
             "O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"
         ];
@@ -70,6 +71,7 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             TRAIN_GPU_COUNT: cfgPulumi.get("trainingGpuCount") ?? "1",
             HF_DATASET_REPO: hfDatasetRepo,
             HF_MODEL_REPO: hfModelRepo,
+            HF_DATASET_REPO_NER: (hfDatasetRepoNER || hfDatasetRepo) as any,
             TRAIN_HF_SECRET_NAME: "hf-credentials",
             TRAIN_HF_SECRET_KEY: "token",
             ...toEnvVars(sentry),

@@ -79,9 +79,17 @@ All Oceanid application services have been migrated from Python to Go for extrem
 **Environment Variables**:
 - `DATABASE_URL` - PostgreSQL connection string
 - `HF_TOKEN` - HuggingFace API token
-- `HF_REPO` - HuggingFace dataset repository
+- `HF_REPO` - Default HuggingFace dataset repository (fallback)
+- `HF_REPO_NER` - NER annotations dataset repository
+- `HF_REPO_DOCLING` - Docling annotations dataset repository
 - `SCHEMA_VERSION` - Schema version identifier
 - `SUBDIR_TEMPLATE` - HF storage path template
+
+The sink routes by task type and vertical, storing outbox shards under:
+
+```
+vertical=<vertical>/schema-<version>/project-<id>/YYYY/MM/DD/HH/batch-<uuid>.jsonl
+```
 
 ## Resource Comparison
 

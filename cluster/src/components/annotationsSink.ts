@@ -7,6 +7,8 @@ export interface AnnotationsSinkArgs {
   serviceName?: string;
   replicas?: number;
   hfRepo?: pulumi.Input<string>; // e.g., goldfish-inc/oceanid-annotations
+  hfRepoNER?: pulumi.Input<string>; // e.g., goldfish-inc/oceanid-annotations-ner
+  hfRepoDocling?: pulumi.Input<string>; // e.g., goldfish-inc/oceanid-annotations-docling
   hfToken?: pulumi.Input<string>; // Pulumi secret from ESC (preferred)
   dbUrl?: pulumi.Input<string>;   // Optional: postgres connection string
   schemaVersion?: pulumi.Input<string>; // e.g., 1.0.0
@@ -28,6 +30,8 @@ export class AnnotationsSink extends pulumi.ComponentResource {
       serviceName = "annotations-sink",
       replicas = 1,
       hfRepo = "goldfish-inc/oceanid-annotations",
+      hfRepoNER = "goldfish-inc/oceanid-annotations-ner",
+      hfRepoDocling = "goldfish-inc/oceanid-annotations-docling",
       hfToken,
       dbUrl,
       schemaVersion = "1.0.0",
@@ -40,6 +44,8 @@ export class AnnotationsSink extends pulumi.ComponentResource {
     const env: any[] = [
       { name: "SCHEMA_VERSION", value: schemaVersion },
       { name: "HF_REPO", value: hfRepo },
+      { name: "HF_REPO_NER", value: hfRepoNER },
+      { name: "HF_REPO_DOCLING", value: hfRepoDocling },
       { name: "SUBDIR_TEMPLATE", value: "schema-{schema_version}" },
     ];
 
