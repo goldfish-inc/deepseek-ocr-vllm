@@ -16,6 +16,8 @@ jobs:
   scan:
     name: Gitleaks
     runs-on: ubuntu-latest
+    env:
+      GITLEAKS_HAS_LICENSE: ${{ secrets.GITLEAKS_LICENSE != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,9 +25,15 @@ jobs:
           fetch-depth: 0
 
       - name: Run Gitleaks
+        if: ${{ env.GITLEAKS_HAS_LICENSE == 'true' && github.actor != 'dependabot[bot]' }}
         uses: gitleaks/gitleaks-action@v2
         with:
           redact: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Skip Gitleaks (no license or dependabot)
+        if: ${{ !(env.GITLEAKS_HAS_LICENSE == 'true' && github.actor != 'dependabot[bot]') }}
+        run: |
+          echo "Skipping Gitleaks: license not configured or Dependabot PR."

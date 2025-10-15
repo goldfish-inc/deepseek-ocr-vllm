@@ -76,3 +76,6 @@ ENV/
 # Ansible
 *.retry
 ansible/inventory/hostsner_labels.json
+
+# ignore local go binaries
+apps/**/annotations-sink

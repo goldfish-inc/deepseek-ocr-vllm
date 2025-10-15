@@ -63,7 +63,8 @@ jobs:
         # Check if all required components are present
         REQUIRED_PATHS=(
           "src/components/sshKeyManager.ts"
-          "src/components/k3sTokenRotator.ts"
+          # K3s token rotation is now managed by the cloud stack; do not require local component
+          # "src/components/k3sTokenRotator.ts"
           "src/components/securityHardening.ts"
           "src/components/credentialSynchronizer.ts"
           "src/components/migrationOrchestrator.ts"
