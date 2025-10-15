@@ -170,6 +170,18 @@ Workflows:
 
 - `train-ner.yml` reads `hfAccessToken`, prefers `hfDatasetRepoNER` (fallback `hfDatasetRepo`), and `hfModelRepo` from ESC.
 - `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
+- `publish-grafana-dashboard.yml` reads Grafana Cloud URL/token from ESC and publishes dashboards to your Grafana stack.
+
+Grafana Cloud (ESC keys):
+
+```bash
+# Required
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.url "https://<your-stack>.grafana.net"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.accessPolicyId "ab19c8ea-4637-4041-a196-025d070d15fe"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.token "<grafana_access_policy_token>" --secret
+```
+
+Then run the workflow (default dashboard: `dashboards/oceanid-sink.json`).
 
 ## Label Studio DB (labelfish) — Manual provisioning on ebisu
 

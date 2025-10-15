@@ -1,0 +1,84 @@
+{
+  "dashboard": {
+    "title": "Oceanid — Sink & Training",
+    "uid": "oceanid-sink",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "type": "stat",
+        "title": "Webhooks (valid)",
+        "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+        "options": { "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false } },
+        "targets": [
+          {
+            "expr": "sum(increase(sink_webhooks_total{valid=\"true\"}[5m]))",
+            "legendFormat": "valid",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Webhooks (invalid)",
+        "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+        "options": { "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false } },
+        "targets": [
+          {
+            "expr": "sum(increase(sink_webhooks_total{valid=\"false\"}[5m]))",
+            "legendFormat": "invalid",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "bargauge",
+        "title": "Enqueue result by repo/task",
+        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+        "options": { "displayMode": "basic" },
+        "targets": [
+          {
+            "expr": "sum by (repo,task_type,status) (increase(sink_enqueue_total[5m]))",
+            "legendFormat": "{{repo}}/{{task_type}} ({{status}})",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Outbox commits by repo",
+        "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (repo,status) (increase(sink_outbox_commits_total[5m]))",
+            "legendFormat": "{{repo}} ({{status}})",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Outbox records processed/failed",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (repo) (increase(sink_outbox_records_processed_total[5m]))",
+            "legendFormat": "processed {{repo}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum by (repo) (increase(sink_outbox_records_failed_total[5m]))",
+            "legendFormat": "failed {{repo}}",
+            "refId": "B"
+          }
+        ]
+      }
+    ],
+    "templating": { "list": [] }
+  },
+  "folderUid": "",
+  "message": "Add Oceanid sink dashboard",
+  "overwrite": true
+}

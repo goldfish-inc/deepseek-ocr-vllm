@@ -1,0 +1,58 @@
+name: Publish Grafana Dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      dashboard_file:
+        description: 'Path to dashboard JSON'
+        required: false
+        default: 'dashboards/oceanid-sink.json'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
+
+      - name: Load Grafana credentials from ESC
+        id: esc
+        run: |
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          export PATH="$HOME/.pulumi/bin:$PATH"
+          GRAFANA_URL=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.url --value string 2>/dev/null || true)
+          POLICY_ID=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.accessPolicyId --value string 2>/dev/null || true)
+          TOKEN=$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.token --show-secrets --value string 2>/dev/null || true)
+          if [ -z "$GRAFANA_URL" ] || [ -z "$TOKEN" ]; then
+            echo "❌ Missing Grafana URL or token in ESC (grafana.url, grafana.token)" >&2
+            exit 1
+          fi
+          echo "GRAFANA_URL=$GRAFANA_URL" >> "$GITHUB_ENV"
+          echo "POLICY_ID=$POLICY_ID" >> "$GITHUB_ENV"
+          echo "::add-mask::$TOKEN"
+          echo "GRAFANA_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Publish dashboard
+        env:
+          GRAFANA_URL: ${{ env.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ env.GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          FILE="${{ inputs.dashboard_file }}"
+          if [ ! -f "$FILE" ]; then echo "missing $FILE" >&2; exit 1; fi
+          curl -sS -H "Authorization: Bearer $GRAFANA_TOKEN" -H 'Content-Type: application/json' \
+            -X POST "$GRAFANA_URL/api/dashboards/db" --data-binary "@$FILE"
+          echo "✅ Published dashboard from $FILE to $GRAFANA_URL"
