@@ -2,20 +2,23 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - ../base/stacks
+  # PKO Stack managed by Pulumi components, not Flux
+  # See CLAUDE.md: "PKO is managed by Pulumi components, not Flux"
+  # - ../base/stacks
   - infrastructure.yaml
   - version-monitoring.yaml
   - apps.yaml
 
-patches:
-  - target:
-      kind: Stack
-      name: oceanid-cluster-prod
-      namespace: pulumi-system
-    patch: |-
-      - op: replace
-        path: /spec/config/oceanid-cluster:nodeName
-        value: tethys
-      - op: add
-        path: /spec/config/oceanid-cluster:nodeRole
-        value: control-plane
+# Stack patches removed - PKO managed by Pulumi
+# patches:
+#   - target:
+#       kind: Stack
+#       name: oceanid-cluster-prod
+#       namespace: pulumi-system
+#     patch: |-
+#       - op: replace
+#         path: /spec/config/oceanid-cluster:nodeName
+#         value: tethys
+#       - op: add
+#         path: /spec/config/oceanid-cluster:nodeRole
+#         value: control-plane
