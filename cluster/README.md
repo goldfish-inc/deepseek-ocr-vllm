@@ -257,7 +257,35 @@ kubectl logs -n flux-system deploy/kustomize-controller
 flux reconcile source git flux-system --with-source
 ```
 
+### Known Issues (Non-Blocking)
+
+**Pulumi Stack CRD Schema Warning**
+
+Flux may report a Kustomization dry-run warning:
+```
+⚠️  Kustomization not ready: Stack/pulumi-system/oceanid-cluster-prod dry-run failed:
+.spec.resources: field not declared in schema
+```
+
+**Impact:** None - deployments work correctly. This is a schema validation issue with PKO v2.2.0 CRDs.
+
+**Resolution:** Will be fixed when upgrading to PKO v2.3.0+ (when available).
+
+**Verification:**
+```bash
+# Check actual Pulumi Stack status (should show healthy)
+kubectl get stack -n pulumi-system oceanid-cluster-prod
+```
+
 ## Migration Notes
+
+**2025-10-15:** Cluster deployments migrated to GitHub-hosted runners:
+
+- Self-hosted runner removed (no longer required)
+- Kubeconfig stored in GitHub Secrets (base64-encoded)
+- Direct connection to public endpoint (`https://157.173.210.123:6443`)
+- No SSH tunnels needed for CI/CD
+- OIDC authentication to Pulumi Cloud
 
 **2025-01-30:** Cloud resources migrated to separate `oceanid-cloud` stack:
 
