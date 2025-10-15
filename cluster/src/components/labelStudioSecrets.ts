@@ -36,6 +36,10 @@ export class LabelStudioSecrets extends pulumi.ComponentResource {
                     "oceanid.cluster/managed-by": "pulumi",
                     "oceanid.cluster/sync-source": "esc",
                 },
+                annotations: {
+                    // Prevent Flux from pruning Pulumi-managed secrets
+                    "kustomize.toolkit.fluxcd.io/prune": "disabled",
+                },
             },
             stringData: {
                 DATABASE_URL: labelStudioDbUrl as any,
@@ -56,6 +60,10 @@ export class LabelStudioSecrets extends pulumi.ComponentResource {
                 labels: {
                     "oceanid.cluster/managed-by": "pulumi",
                     "oceanid.cluster/sync-source": "esc",
+                },
+                annotations: {
+                    // Prevent Flux from pruning Pulumi-managed secrets
+                    "kustomize.toolkit.fluxcd.io/prune": "disabled",
                 },
             },
             stringData: {
