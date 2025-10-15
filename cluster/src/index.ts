@@ -37,6 +37,18 @@ import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
 const cfg = new pulumi.Config();
 const namespaceName = "apps";
 
+// Ensure the 'apps' namespace exists before any resources target it.
+// Pulumi owns foundational namespaces; Flux owns workloads inside them.
+const appsNamespace = new k8s.core.v1.Namespace("apps-namespace", {
+    metadata: {
+        name: namespaceName,
+        labels: {
+            "app.kubernetes.io/part-of": "apps",
+            "pod-security.kubernetes.io/enforce": "baseline",
+        },
+    },
+}, { provider: k8sProvider });
+
 // SSH keys for host-level components (Calypso connectors, Tailscale)
 const privateKeys = {
     tethys: cfg.requireSecret("tethys_ssh_key"),
@@ -151,11 +163,11 @@ if (enableAppsStack) {
                 primary: { persistence: { enabled: true, size: "50Gi" } },
                 service: { type: "ClusterIP" },
             },
-        }, { provider: k8sProvider });
+        }, { provider: k8sProvider, parent: appsNamespace });
 
         // Bootstrap schemas/tables for control/raw/stage/label/curated
         const dbUrl = pulumi.interpolate`postgresql://postgres:${pgPassword}@postgres.${namespaceName}.svc.cluster.local:5432/postgres`;
-        new DbBootstrap("db-bootstrap", { k8sProvider, namespace: namespaceName, dbUrl }, { dependsOn: [pg] });
+        new DbBootstrap("db-bootstrap", { k8sProvider, namespace: namespaceName, dbUrl }, { parent: appsNamespace, dependsOn: [pg] });
     }
     // MinIO/Airflow intentionally skipped per ops decision; add flags later if needed.
 }
@@ -209,7 +221,7 @@ const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
     cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
     image: (adapterImage as any) || undefined,
     imageTag: adapterImage ? undefined : adapterImageTag,
-});
+}, { parent: appsNamespace });
 
 // Label Studio deployment moved to GitOps (Flux)
 // See clusters/tethys/apps/label-studio-release.yaml
@@ -239,7 +251,7 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
         awsSecretAccessKey: awsSecretAccessKey as any,
         awsBucketName,
         awsRegion,
-    });
+    }, { parent: appsNamespace });
 }
 
 // GHCR image pull secret (private images)
@@ -254,7 +266,7 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
             metadata: { name: "ghcr-creds", namespace: "apps" },
             type: "kubernetes.io/dockerconfigjson",
             data: { ".dockerconfigjson": dockerconfig.apply(v => Buffer.from(v).toString("base64")) },
-        }, { provider: k8sProvider });
+        }, { provider: k8sProvider, parent: appsNamespace });
     }
 })();
 // In-cluster one-off provisioner Job to configure Label Studio project "NER_Data"
@@ -578,12 +590,12 @@ if __name__ == "__main__":
     const provConfig = new k8s.core.v1.ConfigMap("ls-provisioner-code", {
         metadata: { name: "ls-provisioner-code", namespace: "apps" },
         data: { "provision.py": provisionerCode },
-    }, { provider: k8sProvider, ignoreChanges: ["spec"] as any });
+    }, { provider: k8sProvider, parent: appsNamespace, ignoreChanges: ["spec"] as any });
 
     const provSecret = new k8s.core.v1.Secret("ls-provisioner-secret", {
         metadata: { name: "ls-provisioner-secret", namespace: "apps" },
         stringData: { LABEL_STUDIO_PAT: lsPat as any },
-    }, { provider: k8sProvider });
+    }, { provider: k8sProvider, parent: appsNamespace });
 
     const provisionerEnv: pulumi.Input<k8s.types.input.core.v1.EnvVar>[] = [
         { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
@@ -638,7 +650,7 @@ if __name__ == "__main__":
                 },
             },
         },
-    }, { provider: k8sProvider, dependsOn: [lsAdapter, provConfig, provSecret] }); // labelStudio removed - managed by Flux
+    }, { provider: k8sProvider, parent: appsNamespace, dependsOn: [lsAdapter, provConfig, provSecret] }); // labelStudio removed - managed by Flux
 })();
 
 // Verification: List webhooks and confirm NER_Data exists (runs once)
@@ -667,8 +679,8 @@ h={'Authorization':f'Bearer {tok}'}
 http('GET', ls.rstrip('/')+'/api/projects/', h)
 http('GET', ls.rstrip('/')+'/api/webhooks', h)
 `;
-    const cm = new k8s.core.v1.ConfigMap("ls-verify-code", { metadata: { name: "ls-verify-code", namespace: "apps" }, data: { "verify.py": code } }, { provider: k8sProvider });
-    const sec = new k8s.core.v1.Secret("ls-verify-secret", { metadata: { name: "ls-verify-secret", namespace: "apps" }, stringData: { LABEL_STUDIO_PAT: lsPat as any }}, { provider: k8sProvider });
+    const cm = new k8s.core.v1.ConfigMap("ls-verify-code", { metadata: { name: "ls-verify-code", namespace: "apps" }, data: { "verify.py": code } }, { provider: k8sProvider, parent: appsNamespace });
+    const sec = new k8s.core.v1.Secret("ls-verify-secret", { metadata: { name: "ls-verify-secret", namespace: "apps" }, stringData: { LABEL_STUDIO_PAT: lsPat as any }}, { provider: k8sProvider, parent: appsNamespace });
     new k8s.batch.v1.Job("ls-verify", {
         metadata: { name: "ls-verify", namespace: "apps" },
         spec: {
@@ -683,7 +695,7 @@ http('GET', ls.rstrip('/')+'/api/webhooks', h)
                 volumeMounts: [{ name: "code", mountPath: "/app" }],
             }], volumes: [{ name: "code", configMap: { name: cm.metadata.name } }] } },
         }
-    }, { provider: k8sProvider, dependsOn: [cm, sec] });
+    }, { provider: k8sProvider, parent: appsNamespace, dependsOn: [cm, sec] });
 })();
 
 // Verification: DB ingest check (stage.table_ingest)
@@ -748,7 +760,7 @@ const annotationsSink = new AnnotationsSink("annotations-sink", {
     schemaVersion,
     image: (sinkImage as any) || undefined,
     imageTag: sinkImage ? undefined : sinkImageTag,
-});
+}, { parent: appsNamespace });
 
 // Project Bootstrapper service: creates Label Studio projects via API with ML backend + webhooks
 const enableProjectBootstrapperService = cfg.getBoolean("enableProjectBootstrapperService") ?? false;
@@ -775,7 +787,7 @@ if (enableProjectBootstrapperService) {
         awsSecretAccessKey: awsSecretAccessKey as any,
         image: (bootstrapperImage as any) || undefined,
         imageTag: bootstrapperImage ? undefined : bootstrapperImageTag,
-    }, { provider: k8sProvider });
+    }, { provider: k8sProvider, parent: appsNamespace });
 }
 
 // CSV Ingestion Worker: processes CSV files from Label Studio webhooks
@@ -795,7 +807,7 @@ if (enableCsvIngestionWorker) {
         image: (csvWorkerImage as any) || undefined,
         imageTag: csvWorkerImage ? undefined : csvWorkerImageTag,
         replicas: 2,
-    }, { provider: k8sProvider });
+    }, { provider: k8sProvider, parent: appsNamespace });
 }
 
 // =============================================================================
@@ -844,7 +856,7 @@ exec socat -d -d TCP-LISTEN:5432,fork,reuseaddr TCP:${upstreamHost}:${upstreamPo
                 },
             },
         },
-    }, { provider: k8sProvider });
+    }, { provider: k8sProvider, parent: appsNamespace });
 
     new k8s.core.v1.Service("egress-db-proxy", {
         metadata: { name: "egress-db-proxy", namespace: namespaceName },
@@ -853,7 +865,7 @@ exec socat -d -d TCP-LISTEN:5432,fork,reuseaddr TCP:${upstreamHost}:${upstreamPo
             ports: [{ name: "pg", port: 5432, targetPort: "pg" as any }],
             type: "ClusterIP",
         },
-    }, { provider: k8sProvider, dependsOn: [dep] });
+    }, { provider: k8sProvider, parent: appsNamespace, dependsOn: [dep] });
 })();
 
 // =============================================================================

@@ -21,49 +21,56 @@ This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational 
 
 ## Deployment Model (Default)
 
-This stack is deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). The workflow is responsible for providing `KUBECONFIG` to the Pulumi program. Do not run `pulumi up` from GitHub‑hosted runners without a self‑hosted agent and kubeconfig.
+This stack is deployed by **GitHub-hosted runners** (`ubuntu-latest`) via GitHub Actions. The workflow fetches kubeconfig from GitHub Secrets and connects to the cluster's public endpoint (`https://157.173.210.123:6443`).
 
-### Self‑Hosted Actions Runner (Required)
+### Automated Deployment
 
-Install a GitHub Actions runner on tethys and register it to this repository or organization. Then use the provided workflow to run `pulumi up` on push to `main` for `cluster/` changes.
+**Trigger**: Push to `main` branch touching `cluster/` directory
 
-Monitoring:
-- GitHub Actions → Deploy Cluster (self‑hosted)
+**How it works**:
+1. GitHub Actions workflow starts on GitHub-hosted runner
+2. Kubeconfig decoded from GitHub Secrets (base64-encoded)
+3. Connects to cluster at public IP (no SSH tunnel needed)
+4. Runs pre-flight checks (ownership conflicts, cluster health)
+5. Executes `pulumi up` to deploy cluster resources
 
-### Kubeconfig Provisioning (Required)
+**Monitoring**:
+- GitHub Actions → Deploy Cluster workflow
+- Real-time logs in GitHub UI
+- No self-hosted infrastructure required
 
-- The self‑hosted workflow must set `KUBECONFIG` to a kubeconfig file path. There is no fallback to Pulumi config or repo files.
-- If `KUBECONFIG` is unset, the program fails fast with a clear error.
-- If `KUBECONFIG` contains multiple paths, only the first is used.
+### Kubeconfig Provisioning
 
-Example (runner setup):
+**CI/CD (GitHub Actions)**:
+- Kubeconfig stored in GitHub Secrets as `KUBECONFIG` (base64-encoded)
+- Automatically decoded and used by workflow
+- Connects to public endpoint: `https://157.173.210.123:6443`
+- Update via: `base64 < ~/.kube/k3s-tethys-public.yaml | gh secret set KUBECONFIG`
 
-```bash
-echo "KUBECONFIG=$HOME/.kube/k3s-tethys-public.yaml" >> "$GITHUB_ENV"
-# For immediate use in the same step:
-export KUBECONFIG="$HOME/.kube/k3s-tethys-public.yaml"
+**Local Development**:
+- Export kubeconfig path: `export KUBECONFIG=~/.kube/k3s-tethys-public.yaml`
+- Connect directly to public endpoint (WARP recommended, SSH tunnel fallback)
+- Validate: `kubectl cluster-info --request-timeout=10s`
 
-# Validate and confirm endpoint
-kubectl cluster-info --request-timeout=10s
-kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
-# Expected: https://157.173.210.123:6443
-```
+### Manual Deployment (Emergency Only)
 
-### Manual Fallback (Discouraged)
-
-For break‑glass only (coord with ops):
+For break‑glass scenarios (coordinate with ops first):
 
 ```bash
 cd cluster/
 pnpm install && pnpm build
-PULUMI_CONFIG_PASSPHRASE=… pulumi up
+
+# Use public endpoint kubeconfig
+export KUBECONFIG=~/.kube/k3s-tethys-public.yaml
+
+# Deploy
+pulumi up
 ```
 
-Prereqs: SSH tunnel to control plane (see [CLAUDE.md](../CLAUDE.md#k3s-cluster-access)) and `KUBECONFIG` exported to your kubeconfig path, e.g.:
-
-```bash
-export KUBECONFIG=~/.kube/k3s-config.yaml
-```
+**Prerequisites**:
+- Cluster access via WARP (preferred) or SSH tunnel (see [CLAUDE.md](../CLAUDE.md#cluster-access))
+- Pulumi Cloud authentication: `pulumi login`
+- Valid kubeconfig with public endpoint
 
 ## Stack Configuration
 
@@ -88,11 +95,15 @@ pulumi config set --secret github_token <token>
 pulumi config set --secret postgres_url <url>
 ```
 
-## CI Guard
+## CI/CD Architecture
 
-This stack includes a runtime guard to prevent accidental execution in GitHub‑hosted runners. It requires a self‑hosted runner and sets `SELF_HOSTED=true`.
+**GitHub-hosted runners** are used for all cluster deployments. The workflow:
+- Fetches kubeconfig from GitHub Secrets (stored as base64)
+- Connects to cluster's public endpoint (`157.173.210.123:6443`)
+- Runs pre-flight validation checks
+- Deploys using Pulumi with OIDC authentication
 
-If you see an error about GitHub‑hosted runners, run this stack only from your self‑hosted runner or locally.
+No self-hosted infrastructure, SSH tunnels, or VPN required for CI/CD.
 
 ## Architecture
 
@@ -151,6 +162,16 @@ flux reconcile source git flux-system
 flux reconcile kustomization apps
 ```
 
+## Namespace Ownership
+
+- Pulumi owns foundational namespaces and creates them before any workloads:
+  - `flux-system` (via FluxBootstrap component)
+  - `pulumi-system` (via PulumiOperator component)
+  - `cloudflared` (via CloudflareTunnel component)
+  - `apps` (created early in `src/index.ts`)
+- Flux owns workloads inside those namespaces and should not declare Namespace objects for them. Avoid `createNamespace: true` in Flux for these.
+- CI must not create namespaces imperatively; ordering is encoded in the Pulumi program.
+
 ## Common Operations
 
 ### Update K3s Node Configuration
@@ -187,18 +208,27 @@ pulumi up
 
 ## Troubleshooting
 
-### "Unable to connect to cluster"
+### "Unable to connect to cluster" (Local Development)
 
+**For GitHub Actions**: Verify GitHub Secret `KUBECONFIG` is set correctly
+
+**For local debugging**:
 ```bash
-# Verify SSH tunnel is active
-lsof -ti:16443
+# Verify kubeconfig points to public endpoint
+export KUBECONFIG=~/.kube/k3s-tethys-public.yaml
+kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'
+# Expected: https://157.173.210.123:6443
 
-# If not, establish tunnel
-ssh -L 16443:localhost:6443 tethys -N &
-
-# Verify kubeconfig
-export KUBECONFIG=~/.kube/k3s-config.yaml
+# Test connection
 kubectl get nodes
+
+# If using WARP (recommended)
+warp-cli status
+warp-cli disconnect && warp-cli connect
+
+# If using SSH tunnel (fallback)
+ssh -L 16443:localhost:6443 tethys -N &
+export KUBECONFIG=~/.kube/k3s-config.yaml
 ```
 
 ### "Resource already exists"

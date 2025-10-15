@@ -58,7 +58,12 @@
       "Bash(tee:*)",
       "Bash(pulumi state delete:*)",
       "Bash(esc env set:*)",
-      "Bash(pulumi config rm:*)"
+      "Bash(pulumi config rm:*)",
+      "Bash(esc env get:*)",
+      "Bash(esc env open:*)",
+      "Bash(lsof:*)",
+      "Bash(op read:*)",
+      "Bash(op:*)"
     ],
     "deny": [],
     "ask": []

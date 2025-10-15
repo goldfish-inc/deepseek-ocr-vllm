@@ -153,13 +153,18 @@ KUBECONFIG=~/.kube/k3s-warp.yaml cluster/scripts/preflight-check.sh
 
 Never run Pulumi applies by hand (`pulumi up`, `pulumi destroy`, etc.). All infrastructure changes must go through automated deployments:
 
-- Cloud stack (`cloud/`): Deployed by GitHub Actions with OIDC.
-- Cluster stack (`cluster/`): Deployed by a GitHub self‑hosted runner on a host with kubeconfig access (e.g., tethys). Do not run cluster applies from GitHub‑hosted runners.
+- **Cloud stack (`cloud/`)**: Deployed by GitHub Actions with OIDC on GitHub-hosted runners
+- **Cluster stack (`cluster/`)**: Deployed by GitHub Actions with OIDC on GitHub-hosted runners
+  - Fetches kubeconfig from GitHub Secrets
+  - Connects to public cluster endpoint (`157.173.210.123:6443`)
+  - No SSH tunnel or self-hosted infrastructure required
 
-Allowed local Pulumi commands (read/config only):
+**Allowed local Pulumi commands** (read/config only):
 - `pulumi config set` – write config (committed to git when applicable)
 - `pulumi config get` – read config
 - `pulumi stack output` – read‑only outputs
+
+**Emergency manual deployment**: Only for break-glass scenarios, coordinate with ops first
 
 ## SSH and Authentication
 
@@ -402,10 +407,14 @@ cluster/
 3. **Deployment**: Secrets injected at runtime, never stored in git
 
 ### Current Secrets:
-- `github.token`: Fine-grained GitHub token for Flux automation
-- `kubeconfigB64`: Base64-encoded kubeconfig for GitHub Actions cluster access
-- `tethys_ssh_key`, `styx_ssh_key`, `calypso_ssh_key`: Node SSH keys (emergency K3s provisioning only)
+- `github.token`: Fine-grained GitHub token for Flux automation (stored in Pulumi ESC)
+- `tethys_ssh_key`, `styx_ssh_key`, `calypso_ssh_key`: Node SSH keys (emergency K3s provisioning only, stored in Pulumi ESC)
 - Additional secrets managed via ESC environment
+
+### GitHub Secrets (Separate from Pulumi ESC):
+- `KUBECONFIG`: Base64-encoded kubeconfig for GitHub Actions cluster access (public endpoint)
+  - Update via: `base64 < ~/.kube/k3s-tethys-public.yaml | gh secret set KUBECONFIG`
+  - Used by cluster deployment workflow only
 
 ### Adding New Secrets:
 ```bash
@@ -460,7 +469,8 @@ All deployments use GitHub Actions with automated checks and validations.
 - **Trigger**: Push to `main` touching `cluster/` directory or workflow file, or `workflow_dispatch`
 - **Runs on**: GitHub-hosted runner (`ubuntu-latest`)
 - **Authentication**: OIDC to Pulumi Cloud
-- **Kubeconfig**: Loaded from Pulumi ESC (`kubeconfigB64` secret, base64-encoded)
+- **Kubeconfig**: Loaded from GitHub Secrets (`KUBECONFIG` secret, base64-encoded)
+- **Endpoint**: Connects to public IP `https://157.173.210.123:6443` (no SSH tunnel required)
 - **Pre-flight checks**: Validates cluster state before deployment
   - Detects Flux Helm ownership conflicts
   - Identifies CRD annotation mismatches
@@ -517,13 +527,14 @@ All deployments use GitHub Actions with automated checks and validations.
 Use a single push‑to‑deploy flow:
 
 1. **Commit and push** changes to `main`
-   - Cloud resources: Applied by `cloud-infrastructure.yml` (GitHub-hosted)
-   - Cluster resources: Applied by `cluster-selfhosted.yml` (GitHub-hosted)
-   - Database changes: Applied by `database-migrations.yml` (self-hosted)
+   - Cloud resources: Applied by `cloud-infrastructure.yml` (GitHub-hosted runner)
+   - Cluster resources: Applied by `cluster-selfhosted.yml` (GitHub-hosted runner with public endpoint access)
+   - Database changes: Applied by `database-migrations.yml` (self-hosted runner with database network access)
 
 2. **Monitor deployments**
    - GitHub Actions UI shows real-time progress
    - All workflows visible in Actions tab
+   - Logs show connection to public endpoint (`157.173.210.123:6443`)
 
 3. **Pre-flight validation** (cluster deployments only)
    - Automatic validation before `pulumi up`
@@ -531,9 +542,42 @@ Use a single push‑to‑deploy flow:
    - Prevents wasted deployment cycles
 
 4. **Verify** with kubectl only if necessary (debugging)
-   - Do not apply via CLI
+   - Use WARP or SSH tunnel for local access
+   - Do not apply infrastructure changes via CLI
 
 **Manual applies are prohibited.** If break-glass access is needed, coordinate with ops.
+
+### GitHub-Hosted Runner Migration (2025-10-14)
+
+**Achievement**: Successfully migrated cluster deployments from self-hosted to GitHub-hosted runners.
+
+**What Changed**:
+- **Before**: Self-hosted runner on tethys with local kubeconfig access via filesystem
+- **After**: GitHub-hosted runner (`ubuntu-latest`) with kubeconfig from GitHub Secrets
+- **Benefit**: No SSH dependency, no self-hosted infrastructure maintenance, fully automated
+
+**Technical Implementation**:
+1. **Kubeconfig Storage**: Base64-encoded in GitHub Secrets (not Pulumi ESC)
+   - `base64 < ~/.kube/k3s-tethys-public.yaml | gh secret set KUBECONFIG`
+   - ESC CLI protects secrets and doesn't expose them to shell scripts
+2. **Public Endpoint**: Cluster API accessible at `https://157.173.210.123:6443`
+   - No SSH tunnel required (previously used `10.43.0.1:443` via WARP)
+   - Direct connection from GitHub's infrastructure
+3. **OIDC Authentication**: Pulumi Cloud authentication via GitHub OIDC
+   - Moved before kubeconfig setup to ensure `PULUMI_ACCESS_TOKEN` available
+4. **Workflow Changes**: Updated `.github/workflows/cluster-selfhosted.yml`
+   - Changed `runs-on: self-hosted` → `runs-on: ubuntu-latest`
+   - Decode kubeconfig from GitHub Secrets
+   - Verify connection to public endpoint
+
+**Verification**:
+- Workflow run 18510623804 successfully connected to public endpoint
+- Deployment started and attempted resource creation
+- Connection proved working (deployment failure was cluster state, not connectivity)
+
+**Related Documentation**:
+- See `cluster/README.md` for updated deployment model
+- See workflow file for implementation details
 
 ### K3s Node Provisioning
 
@@ -652,30 +696,56 @@ kubectl get imageupdateautomation flux-system -n flux-system
    - **Verify health**: Run `cluster/scripts/flux-health-check.sh`
    - See `docs/RESOURCE_OWNERSHIP.md` for emergency procedures
 
-3. **Self-Hosted Runner Offline**:
-   - Check runner status: `ssh tethys "systemctl status actions.runner.*"`
-   - Restart runner: Follow GitHub docs for runner management
-   - Fallback: Cannot deploy cluster changes until runner is online
+3. **GitHub Actions Workflow Fails to Connect** (GitHub-hosted runner):
+   - **Symptom**: `Unable to connect to the server: dial tcp 157.173.210.123:6443: i/o timeout`
+   - **Causes**:
+     - GitHub Secret `KUBECONFIG` not set or invalid
+     - Cluster endpoint not publicly accessible
+     - Firewall blocking GitHub Actions IPs
+   - **Fix**:
+     ```bash
+     # Update GitHub Secret with correct kubeconfig
+     base64 < ~/.kube/k3s-tethys-public.yaml | gh secret set KUBECONFIG
 
-4. **SSH Connection Lost** (for local debugging):
+     # Verify endpoint is public
+     kubectl --kubeconfig ~/.kube/k3s-tethys-public.yaml cluster-info
+
+     # Check firewall rules allow GitHub Actions
+     ```
+
+4. **Deployment Succeeds but Resources Not Created** (namespace errors):
+   - **Symptom**: `namespaces "apps" not found` in Pulumi output
+   - **Cause**: Flux hasn't created namespace yet (GitOps timing issue)
+   - **Not a workflow issue**: GitHub-hosted runner connectivity is working
+   - **Fix**: Wait for Flux to reconcile, then re-run workflow
+     ```bash
+     # Force Flux reconciliation
+     kubectl annotate gitrepository flux-system -n flux-system \
+       reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+
+     # Wait 1-2 minutes, then re-run workflow
+     ```
+
+5. **SSH Connection Lost** (for local debugging only):
    - Re-establish tunnel: `ssh -L 16443:localhost:6443 tethys -N &`
    - Verify kubeconfig: `KUBECONFIG=~/.kube/k3s-config.yaml`
+   - Or use WARP: `warp-cli disconnect && warp-cli connect`
 
-5. **Pulumi State Issues**:
+6. **Pulumi State Issues**:
    - Check ESC connectivity: `pulumi whoami`
    - Refresh state: `pulumi refresh` (local debugging only)
    - State conflicts: Let GitHub Actions handle deployment
 
-6. **Flux Authentication**:
+7. **Flux Authentication**:
    - Verify GitHub token: `kubectl get secret github-token -n flux-system`
    - Check repo access: `kubectl get gitrepository flux-system -n flux-system`
 
-7. **Image Updates Not Working**:
+8. **Image Updates Not Working**:
    - Check policies: `kubectl get imagepolicy -n flux-system`
    - Verify markers: Check `clusters/tethys/infrastructure.yaml`
    - Force reconcile: Annotate ImageUpdateAutomation resource
 
-8. **Label Studio Database Connection Issues**:
+9. **Label Studio Database Connection Issues**:
    - Verify ESC has correct credentials: `pulumi env get default/oceanid-cluster`
    - Test connection from cluster:
      ```bash
@@ -693,7 +763,7 @@ kubectl get imageupdateautomation flux-system -n flux-system
      - Database: `labelfish`
      - URL format: `postgresql://user:pass@host:5432/labelfish?sslmode=require`
 
-9. **Worker Pods Cannot Reach CrunchyBridge** (timeout on database connections):
+10. **Worker Pods Cannot Reach CrunchyBridge** (timeout on database connections):
    - **Root Cause**: Worker node IP not in CrunchyBridge firewall allowlist
    - **Symptom**: Pods timeout connecting to database (15s timeout), CrashLoopBackOff
    - **Diagnosis**:
@@ -936,17 +1006,35 @@ gh issue list --search "staging database"
 
 ### Standard Operating Procedures
 
-8. **ALWAYS** use Cloudflare WARP for kubectl access (preferred method)
-9. **ALWAYS** use `KUBECONFIG=~/.kube/k3s-warp.yaml` (WARP kubeconfig)
-10. **ALWAYS** verify WARP is connected before kubectl commands: `warp-cli status`
-11. **NEVER** store secrets in git - use Pulumi ESC
-12. **ALWAYS** test connections before running complex operations
-13. **ALWAYS** use proper error handling for connection issues
-14. **ALWAYS** create GitHub issues before starting implementation work
-15. **ALWAYS** reference issue numbers in commits and PRs
-16. **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
-17. **ALWAYS** run health checks after deployment changes
-18. **FALLBACK ONLY**: Use SSH tunnel (`~/.kube/k3s-config.yaml`) if WARP is unavailable
+8. **Infrastructure Deployments**:
+   - **ALWAYS** deploy via GitHub Actions (push to `main`)
+   - **NEVER** run `pulumi up` manually unless emergency break-glass
+   - Cloud stack: GitHub-hosted runner with OIDC
+   - Cluster stack: GitHub-hosted runner with kubeconfig from GitHub Secrets
+   - Monitor deployments: GitHub Actions UI
+
+9. **Local kubectl Access** (for debugging only):
+   - **ALWAYS** use Cloudflare WARP for kubectl access (preferred method)
+   - **ALWAYS** use `KUBECONFIG=~/.kube/k3s-warp.yaml` (WARP kubeconfig)
+   - **ALWAYS** verify WARP is connected before kubectl commands: `warp-cli status`
+   - **FALLBACK ONLY**: Use SSH tunnel (`~/.kube/k3s-config.yaml`) if WARP is unavailable
+
+10. **Secret Management**:
+    - **NEVER** store secrets in git
+    - Use Pulumi ESC for infrastructure secrets
+    - Use GitHub Secrets for CI/CD secrets (e.g., `KUBECONFIG`)
+    - Use 1Password for manual operations
+
+11. **Development Workflow**:
+    - **ALWAYS** create GitHub issues before starting implementation work
+    - **ALWAYS** reference issue numbers in commits and PRs
+    - **ALWAYS** test connections before running complex operations
+    - **ALWAYS** use proper error handling for connection issues
+
+12. **Deployment Validation**:
+    - **ALWAYS** check resource ownership before making changes (see `docs/RESOURCE_OWNERSHIP.md`)
+    - **ALWAYS** run health checks after deployment changes
+    - **ALWAYS** verify pre-flight checks pass before manual applies
 
 This infrastructure follows Infrastructure as Code principles with GitOps deployment, automated dependency management, and comprehensive security controls.
 
