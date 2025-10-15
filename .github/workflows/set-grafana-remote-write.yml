@@ -1,0 +1,48 @@
+name: Set Grafana Remote Write ESC Keys
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Grafana Cloud Prometheus remote_write URL'
+        required: true
+      username:
+        description: 'Grafana Cloud instance ID (remote_write username)'
+        required: true
+      password:
+        description: 'Grafana Cloud API key (remote_write password)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  set-keys:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Authenticate to Pulumi Cloud (OIDC)
+        uses: pulumi/auth-actions@v1
+        with:
+          organization: ryan-taylor
+          requested-token-type: urn:pulumi:token-type:access_token:personal
+          scope: user:ryan-taylor
+
+      - name: Install Pulumi ESC CLI
+        run: |
+          curl -fsSL https://get.pulumi.com/esc/install.sh | sh
+          echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+      - name: Set ESC keys (grafana remote_write)
+        env:
+          URL: ${{ inputs.url }}
+          USERNAME: ${{ inputs.username }}
+          PASSWORD: ${{ inputs.password }}
+        run: |
+          set -euo pipefail
+          esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWriteUrl "$URL"
+          esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWriteUsername "$USERNAME"
+          esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWritePassword "$PASSWORD" --secret
+          echo "✅ ESC keys updated. Run pulumi up (cluster) to apply remote_write."

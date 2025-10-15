@@ -179,6 +179,12 @@ Grafana Cloud (ESC keys):
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.url "https://<your-stack>.grafana.net"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.accessPolicyId "ab19c8ea-4637-4041-a196-025d070d15fe"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafana.token "<grafana_access_policy_token>" --secret
+
+# Optional: Prometheus remote_write (Grafana Cloud Prometheus)
+# These feed the in-cluster Prometheus (kube-prometheus-stack) remote_write config
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWriteUrl "https://prometheus-prod-XX.grafana.net/api/prom/push"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWriteUsername "<instance_id>"
+esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWritePassword "<api_key>" --secret
 ```
 
 Then run the workflow (default dashboard: `dashboards/oceanid-sink.json`).

@@ -26,6 +26,7 @@ import { ProjectBootstrapper } from "./components/projectBootstrapper";
 import { CSVIngestionWorker } from "./components/csvIngestionWorker";
 import { TailscaleOperator } from "./components/tailscaleOperator";
 import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
+import { PrometheusOperator } from "./components/prometheusOperator";
 
 // =============================================================================
 // CLUSTER RESOURCES
@@ -203,6 +204,21 @@ if (enableNodeTunnels) {
         // NOTE: Cloudflare DNS & Access are managed by the cloud stack
     });
 }
+
+// Monitoring (Prometheus Operator with ServiceMonitor for sink)
+(() => {
+    const cfgProm = new pulumi.Config();
+    const rwUrl = cfgProm.get("grafanaRemoteWriteUrl");
+    const rwUser = cfgProm.getSecret("grafanaRemoteWriteUsername");
+    const rwPass = cfgProm.getSecret("grafanaRemoteWritePassword");
+    const remoteWrite = rwUrl ? { url: rwUrl as any, username: rwUser as any, password: rwPass as any } : undefined;
+    new PrometheusOperator("prom-operator", {
+        k8sProvider,
+        namespace: "monitoring",
+        remoteWrite,
+        scrapeInterval: "60s",
+    });
+})();
 
 // Deploy Label Studio on the control-plane VPS (Kubernetes)
 // Triton adapter (in-cluster) bridging LS -> Triton HTTP v2
