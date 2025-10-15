@@ -63,7 +63,9 @@
       "Bash(esc env open:*)",
       "Bash(lsof:*)",
       "Bash(op read:*)",
-      "Bash(op:*)"
+      "Bash(op:*)",
+      "Bash(git rm:*)",
+      "Bash(pulumi stack output:*)"
     ],
     "deny": [],
     "ask": []

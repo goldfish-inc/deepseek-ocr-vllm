@@ -52,11 +52,15 @@ export class PulumiOperator extends pulumi.ComponentResource {
         }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
 
         // Deploy PKO via standard Helm (NOT through Flux which isn't installed yet)
+        // Allow overriding PKO chart version via Pulumi config key `pkoChartVersion`.
+        const cfgVersion = new pulumi.Config();
+        const pkoChartVersion = cfgVersion.get("pkoChartVersion") || "2.2.0";
+
         const helmRelease = new k8s.helm.v3.Release(`${name}-helm`, {
             name: "pulumi-kubernetes-operator",
             namespace: namespaceName,
             chart: "oci://ghcr.io/pulumi/helm-charts/pulumi-kubernetes-operator",
-            version: "2.2.0",
+            version: pkoChartVersion,
             values: {
                 // PKO v2 requires cluster-wide installation
                 // Install CRDs since we're not using Flux

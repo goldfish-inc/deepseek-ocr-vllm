@@ -52,8 +52,7 @@ for deployment in "${CRITICAL_DEPLOYMENTS[@]}"; do
         matching=$(kubectl -n "$NAMESPACE" get deployments -o name | grep -i "$deployment" | head -1 || echo "")
 
         if [ -z "$matching" ]; then
-            echo "⚠️  Deployment not found: $deployment"
-            echo "   This deployment may not be part of the current stack."
+            echo "ℹ️  Deployment not present: $deployment (skipping)"
             echo ""
             continue
         fi
