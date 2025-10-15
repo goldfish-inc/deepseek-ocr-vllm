@@ -134,6 +134,8 @@ export class FluxBootstrap extends pulumi.ComponentResource {
                 prune: true,
                 wait: true,
                 force: false,
+                // Use client-side validation to avoid server dry-run failures on CRDs (e.g., PKO Stack schema mismatches)
+                validation: "client",
                 sourceRef: {
                     kind: "GitRepository",
                     name: gitRepository.metadata.name,

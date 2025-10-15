@@ -33,7 +33,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: '20.x'
+  NODE_VERSION: '24.x'
   PNPM_VERSION: '9.12.2'
   PULUMI_VERSION: '3.197.0'
   PULUMI_STACK: 'ryan-taylor/oceanid-cloud/prod'
