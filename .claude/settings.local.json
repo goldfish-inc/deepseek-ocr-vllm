@@ -65,7 +65,10 @@
       "Bash(op read:*)",
       "Bash(op:*)",
       "Bash(git rm:*)",
-      "Bash(pulumi stack output:*)"
+      "Bash(pulumi stack output:*)",
+      "Bash(find:*)",
+      "Bash(for i in {1..6})",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
