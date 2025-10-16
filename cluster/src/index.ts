@@ -793,7 +793,7 @@ if (enableProjectBootstrapperService) {
     projectBootstrapper = new ProjectBootstrapper("project-bootstrapper", {
         k8sProvider,
         namespace: "apps",
-        labelStudioUrl: "http://label-studio-ls-app.apps.svc.cluster.local", // Internal cluster URL for API calls
+        labelStudioUrl: "http://label-studio-ls-app.apps.svc.cluster.local:8080", // Internal cluster URL for API calls
         labelStudioPat: lsPat as any,
         nerBackendUrl: lsAdapter.serviceUrl,
         sinkIngestUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/ingest`,
