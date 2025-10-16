@@ -248,7 +248,12 @@ func ensureWebhooks(cfg *Config, token string) error {
 			"events":       []string{"TASK_CREATED", "TASKS_BULK_CREATED"},
 		}
 		body, _ := json.Marshal(payload)
-		doRequest("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", url, headers, body)
+		if err == nil && (status == 200 || status == 201) {
+			log.Printf("✅ Registered TASK webhook: %s", cfg.SinkIngestURL)
+		} else {
+			log.Printf("⚠️  Failed to register TASK webhook: %d %s (err: %v)", status, string(respBody), err)
+		}
 	}
 
 	if cfg.SinkWebhookURL != "" && !hasURL(cfg.SinkWebhookURL) {
@@ -258,7 +263,12 @@ func ensureWebhooks(cfg *Config, token string) error {
 			"events":       []string{"ANNOTATION_CREATED", "ANNOTATION_UPDATED", "ANNOTATION_DELETED"},
 		}
 		body, _ := json.Marshal(payload)
-		doRequest("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", url, headers, body)
+		if err == nil && (status == 200 || status == 201) {
+			log.Printf("✅ Registered ANNOTATION webhook: %s", cfg.SinkWebhookURL)
+		} else {
+			log.Printf("⚠️  Failed to register ANNOTATION webhook: %d %s (err: %v)", status, string(respBody), err)
+		}
 	}
 
 	return nil
