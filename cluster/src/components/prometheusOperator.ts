@@ -108,6 +108,46 @@ export class PrometheusOperator extends pulumi.ComponentResource {
       },
     }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
 
+    // Alert when Flux or Pulumi controllers enter sustained CrashLoopBackOff states
+    new k8s.apiextensions.CustomResource(`${name}-controller-restart-alerts`, {
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "PrometheusRule",
+      metadata: {
+        name: "controller-restarts",
+        namespace,
+        labels: { release: release.name },
+      },
+      spec: {
+        groups: [
+          {
+            name: "controller-restarts",
+            rules: [
+              {
+                alert: "FluxControllersCrashLooping",
+                expr: "sum(kube_pod_container_status_waiting_reason{namespace=\"flux-system\",reason=\"CrashLoopBackOff\"}) > 0",
+                for: "5m",
+                labels: { severity: "warning" },
+                annotations: {
+                  summary: "Flux controllers stuck in CrashLoopBackOff",
+                  description: "One or more Flux controllers have been in CrashLoopBackOff for over 5 minutes. Investigate Kubernetes API reachability and Flux pod logs.",
+                },
+              },
+              {
+                alert: "PulumiOperatorCrashLooping",
+                expr: "sum(kube_pod_container_status_waiting_reason{namespace=\"pulumi-system\",reason=\"CrashLoopBackOff\"}) > 0",
+                for: "5m",
+                labels: { severity: "warning" },
+                annotations: {
+                  summary: "Pulumi operator stuck in CrashLoopBackOff",
+                  description: "The Pulumi Kubernetes Operator has been in CrashLoopBackOff for over 5 minutes. Confirm cluster networking and operator access to the Kubernetes API.",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
+
     this.registerOutputs({});
   }
 }

@@ -1,0 +1,213 @@
+{
+  "dashboard": {
+    "title": "Oceanid — Health & Alerts",
+    "uid": "oceanid-health",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "type": "stat",
+        "title": "⚠️ CRITICAL: Tasks Without Webhooks",
+        "description": "Tasks in Label Studio but no webhook triggers sent",
+        "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 1, "color": "orange" },
+                { "value": 100, "color": "red" }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "label_studio_tasks_total - on() sink_webhooks_total",
+            "legendFormat": "Unprocessed Tasks",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Project Bootstrapper Health",
+        "description": "Attempts to connect to Label Studio API",
+        "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "up{job=\"project-bootstrapper\"}",
+            "legendFormat": "Bootstrapper UP",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Annotations Sink Health",
+        "description": "Webhook receiver and HuggingFace uploader status",
+        "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "up{job=\"annotations-sink\"}",
+            "legendFormat": "Sink UP",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Webhook Processing Rate (last 24h)",
+        "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(sink_webhooks_total{valid=\"true\"}[5m])",
+            "legendFormat": "Valid webhooks/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(sink_webhooks_total{valid=\"false\"}[5m])",
+            "legendFormat": "Invalid webhooks/sec",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "HuggingFace Upload Rate (annotations/sec)",
+        "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(sink_outbox_commits_total{status=\"ok\"}[5m])",
+            "legendFormat": "Successful uploads",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(sink_outbox_commits_total{status=\"error\"}[5m])",
+            "legendFormat": "Failed uploads",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "table",
+        "title": "Recent Errors (last 1h)",
+        "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (pod, container) (rate(log_messages_total{level=\"error\"}[1h]))",
+            "legendFormat": "{{pod}}/{{container}}",
+            "refId": "A",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Annotations in Outbox (pending upload)",
+        "description": "Annotations waiting to be uploaded to HuggingFace",
+        "gridPos": { "x": 0, "y": 20, "w": 8, "h": 4 },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 100, "color": "yellow" },
+                { "value": 1000, "color": "red" }
+              ]
+            }
+          }
+        },
+        "targets": [
+          {
+            "expr": "sink_outbox_pending_total",
+            "legendFormat": "Pending annotations",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "CSV Tasks Ingested (last 24h)",
+        "gridPos": { "x": 8, "y": 20, "w": 8, "h": 4 },
+        "options": {
+          "graphMode": "area",
+          "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+        },
+        "targets": [
+          {
+            "expr": "increase(csv_ingestion_tasks_total[24h])",
+            "legendFormat": "CSV tasks",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Annotations Uploaded (last 24h)",
+        "gridPos": { "x": 16, "y": 20, "w": 8, "h": 4 },
+        "options": {
+          "graphMode": "area",
+          "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false }
+        },
+        "targets": [
+          {
+            "expr": "increase(sink_outbox_commits_total{status=\"ok\"}[24h])",
+            "legendFormat": "Uploaded",
+            "refId": "A"
+          }
+        ]
+      }
+    ],
+    "templating": { "list": [] },
+    "annotations": { "list": [] }
+  },
+  "folderId": 0,
+  "overwrite": true
+}
