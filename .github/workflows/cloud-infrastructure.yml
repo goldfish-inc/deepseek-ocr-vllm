@@ -116,6 +116,7 @@ jobs:
           work-dir: cloud
           comment-on-pr: true
           diff: true
+          pulumi-version: latest
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
@@ -169,5 +170,6 @@ jobs:
           stack-name: ${{ env.PULUMI_STACK }}
           work-dir: cloud
           refresh: true
+          pulumi-version: latest
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}

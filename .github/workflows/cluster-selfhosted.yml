@@ -97,6 +97,7 @@ jobs:
           work-dir: cluster
           refresh: true
           diff: true
+          pulumi-version: latest
 
       - name: Post-deployment Health Check (Flux)
         if: always()
