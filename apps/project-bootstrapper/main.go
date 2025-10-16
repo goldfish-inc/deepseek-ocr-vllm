@@ -24,6 +24,22 @@ type Config struct {
 	SinkWebhookURL   string
 	NERLabelsJSON    string
 	AllowedOrigins   []string
+	PollInterval     time.Duration
+}
+
+// Project represents a Label Studio project
+type Project struct {
+	ID        int       `json:"id"`
+	Title     string    `json:"title"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Webhook represents a Label Studio webhook
+type Webhook struct {
+	ID          int      `json:"id"`
+	URL         string   `json:"url"`
+	Events      []string `json:"events"`
+	SendPayload bool     `json:"send_payload"`
 }
 
 var (
@@ -62,6 +78,13 @@ func loadConfig() *Config {
 		}
 	}
 
+	pollInterval := 30 * time.Second
+	if interval := os.Getenv("POLL_INTERVAL"); interval != "" {
+		if d, err := time.ParseDuration(interval); err == nil {
+			pollInterval = d
+		}
+	}
+
 	return &Config{
 		ListenAddr:       getEnv("LISTEN_ADDR", ":8080"),
 		LabelStudioURL:   os.Getenv("LS_URL"),
@@ -72,6 +95,7 @@ func loadConfig() *Config {
 		SinkWebhookURL:   os.Getenv("SINK_WEBHOOK_URL"),
 		NERLabelsJSON:    os.Getenv("NER_LABELS_JSON"),
 		AllowedOrigins:   allowedOrigins,
+		PollInterval:     pollInterval,
 	}
 }
 
@@ -198,199 +222,143 @@ func getAccessToken(cfg *Config) (string, error) {
 	return "", fmt.Errorf("no access token in response")
 }
 
-// ensureWebhooks creates webhooks if they don't exist
-func ensureWebhooks(cfg *Config, token string) error {
+// fetchProjects retrieves all projects from Label Studio
+func fetchProjects(cfg *Config, token string) ([]Project, error) {
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
+	}
+
+	url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/projects"
+	status, respBody, err := doRequest("GET", url, headers, nil)
+	if err != nil || status != 200 {
+		return nil, fmt.Errorf("fetch projects failed: %d %v", status, err)
+	}
+
+	var response struct {
+		Results []Project `json:"results"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("parse projects failed: %v", err)
+	}
+
+	return response.Results, nil
+}
+
+// fetchProjectWebhooks retrieves webhooks for a specific project
+func fetchProjectWebhooks(cfg *Config, token string, projectID int) ([]Webhook, error) {
+	headers := map[string]string{
+		"Authorization": "Bearer " + token,
+	}
+
+	url := fmt.Sprintf("%s/api/projects/%d/webhooks", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
+	status, respBody, err := doRequest("GET", url, headers, nil)
+	if err != nil || status != 200 {
+		return nil, fmt.Errorf("fetch webhooks failed: %d %v", status, err)
+	}
+
+	var webhooks []Webhook
+	if err := json.Unmarshal(respBody, &webhooks); err != nil {
+		return nil, fmt.Errorf("parse webhooks failed: %v", err)
+	}
+
+	return webhooks, nil
+}
+
+// hasWebhookURL checks if a webhook with the given URL exists
+func hasWebhookURL(webhooks []Webhook, targetURL string) bool {
+	for _, wh := range webhooks {
+		if wh.URL == targetURL {
+			return true
+		}
+	}
+	return false
+}
+
+// configureProjectWebhooks registers TASK and ANNOTATION webhooks for a project
+func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
+	// Fetch existing webhooks
+	webhooks, err := fetchProjectWebhooks(cfg, token, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch webhooks: %v", err)
+	}
+
 	headers := map[string]string{
 		"Authorization": "Bearer " + token,
 		"Content-Type":  "application/json",
 	}
 
-	url := strings.TrimSuffix(cfg.LabelStudioURL, "/") + "/api/webhooks"
-	status, respBody, err := doRequest("GET", url, headers, nil)
-	if err != nil || status != 200 {
-		return err
-	}
+	webhookURL := fmt.Sprintf("%s/api/projects/%d/webhooks", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
 
-	var existing []map[string]interface{}
-	json.Unmarshal(respBody, &existing)
-
-	hasURL := func(targetURL string) bool {
-		for _, wh := range existing {
-			if u, ok := wh["url"].(string); ok && u == targetURL {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Register PROJECT_CREATED webhook for automatic S3 configuration
-	// Use cluster-internal service URL for webhook callback
-	bootstrapperURL := "http://project-bootstrapper.apps.svc.cluster.local:8080/webhook"
-	if !hasURL(bootstrapperURL) {
-		payload := map[string]interface{}{
-			"url":          bootstrapperURL,
-			"send_payload": true,
-			"events":       []string{"PROJECT_CREATED"},
-		}
-		body, _ := json.Marshal(payload)
-		status, respBody, err := doRequest("POST", url, headers, body)
-		if err == nil && (status == 200 || status == 201) {
-			log.Printf("✅ Registered PROJECT_CREATED webhook: %s", bootstrapperURL)
-		} else {
-			log.Printf("⚠️  Failed to register PROJECT_CREATED webhook: %d %s", status, string(respBody))
-		}
-	}
-
-	if cfg.SinkIngestURL != "" && !hasURL(cfg.SinkIngestURL) {
+	// Register TASK webhook if missing
+	if cfg.SinkIngestURL != "" && !hasWebhookURL(webhooks, cfg.SinkIngestURL) {
 		payload := map[string]interface{}{
 			"url":          cfg.SinkIngestURL,
 			"send_payload": true,
 			"events":       []string{"TASK_CREATED", "TASKS_BULK_CREATED"},
 		}
 		body, _ := json.Marshal(payload)
-		status, respBody, err := doRequest("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", webhookURL, headers, body)
 		if err == nil && (status == 200 || status == 201) {
-			log.Printf("✅ Registered TASK webhook: %s", cfg.SinkIngestURL)
+			log.Printf("✅ Project %d: Registered TASK webhook → %s", projectID, cfg.SinkIngestURL)
 		} else {
-			log.Printf("⚠️  Failed to register TASK webhook: %d %s (err: %v)", status, string(respBody), err)
+			log.Printf("⚠️  Project %d: Failed to register TASK webhook: %d %s (err: %v)", projectID, status, string(respBody), err)
+			return fmt.Errorf("TASK webhook registration failed: %d", status)
 		}
 	}
 
-	if cfg.SinkWebhookURL != "" && !hasURL(cfg.SinkWebhookURL) {
+	// Register ANNOTATION webhook if missing
+	if cfg.SinkWebhookURL != "" && !hasWebhookURL(webhooks, cfg.SinkWebhookURL) {
 		payload := map[string]interface{}{
 			"url":          cfg.SinkWebhookURL,
 			"send_payload": true,
 			"events":       []string{"ANNOTATION_CREATED", "ANNOTATION_UPDATED", "ANNOTATION_DELETED"},
 		}
 		body, _ := json.Marshal(payload)
-		status, respBody, err := doRequest("POST", url, headers, body)
+		status, respBody, err := doRequest("POST", webhookURL, headers, body)
 		if err == nil && (status == 200 || status == 201) {
-			log.Printf("✅ Registered ANNOTATION webhook: %s", cfg.SinkWebhookURL)
+			log.Printf("✅ Project %d: Registered ANNOTATION webhook → %s", projectID, cfg.SinkWebhookURL)
 		} else {
-			log.Printf("⚠️  Failed to register ANNOTATION webhook: %d %s (err: %v)", status, string(respBody), err)
+			log.Printf("⚠️  Project %d: Failed to register ANNOTATION webhook: %d %s (err: %v)", projectID, status, string(respBody), err)
+			return fmt.Errorf("ANNOTATION webhook registration failed: %d", status)
 		}
 	}
 
 	return nil
 }
 
-// slugify converts a string to a URL-safe slug
-func slugify(s string) string {
-	s = strings.ToLower(s)
-	s = strings.ReplaceAll(s, " ", "-")
-	// Remove non-alphanumeric characters except hyphens
-	var result strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			result.WriteRune(r)
+// configureAllProjects configures webhooks for all existing projects
+func configureAllProjects(cfg *Config, token string) error {
+	projects, err := fetchProjects(cfg, token)
+	if err != nil {
+		return fmt.Errorf("failed to fetch projects: %v", err)
+	}
+
+	log.Printf("📋 Found %d projects to configure", len(projects))
+
+	for _, project := range projects {
+		if err := configureProjectWebhooks(cfg, token, project.ID); err != nil {
+			log.Printf("⚠️  Project %d (%s): Configuration failed: %v", project.ID, project.Title, err)
+			continue
 		}
-	}
-	return result.String()
-}
-
-// configureS3Storage configures S3 storage for a project with per-project prefix
-func configureS3Storage(cfg *Config, token string, projectID int, projectTitle string) error {
-	slug := slugify(projectTitle)
-	prefix := fmt.Sprintf("projects/%s/", slug)
-
-	storagePayload := map[string]interface{}{
-		"type":           "s3",
-		"title":          "S3 Storage",
-		"description":    fmt.Sprintf("Per-project S3 storage (prefix: %s)", prefix),
-		"bucket":         os.Getenv("S3_BUCKET"),
-		"prefix":         prefix,
-		"region":         os.Getenv("AWS_REGION"),
-		"s3_endpoint":    os.Getenv("S3_ENDPOINT"),
-		"presign":        true,
-		"presign_ttl":    3600,
-		"recursive_scan": true,
-		"use_blob_urls":  true,
+		log.Printf("✅ Project %d (%s): Configuration complete", project.ID, project.Title)
 	}
 
-	// Add AWS credentials if available
-	if accessKey := os.Getenv("AWS_ACCESS_KEY_ID"); accessKey != "" {
-		storagePayload["aws_access_key_id"] = accessKey
-	}
-	if secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY"); secretKey != "" {
-		storagePayload["aws_secret_access_key"] = secretKey
-	}
-
-	body, _ := json.Marshal(storagePayload)
-	headers := map[string]string{
-		"Authorization": "Bearer " + token,
-		"Content-Type":  "application/json",
-	}
-
-	url := fmt.Sprintf("%s/api/storages/s3?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
-	status, respBody, err := doRequest("POST", url, headers, body)
-	if err != nil || (status != 200 && status != 201) {
-		return fmt.Errorf("S3 storage config failed: %d %s", status, string(respBody))
-	}
-
-	log.Printf("✅ Configured S3 storage for project %d (%s) with prefix: %s", projectID, projectTitle, prefix)
 	return nil
 }
 
-// WebhookEvent represents a Label Studio webhook event
+// WebhookEvent represents a Label Studio webhook event (kept for backward compatibility)
 type WebhookEvent struct {
 	Action  string                 `json:"action"`
 	Project map[string]interface{} `json:"project"`
 }
 
-// webhookHandler handles POST /webhook for Label Studio webhooks
+// webhookHandler handles POST /webhook (deprecated - no longer used)
 func webhookHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		var event WebhookEvent
-		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-			http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
-			return
-		}
-
-		// Only handle PROJECT_CREATED events
-		if event.Action != "PROJECT_CREATED" {
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "ignored", "action": event.Action})
-			return
-		}
-
-		// Extract project ID and title
-		projectID, ok := event.Project["id"].(float64)
-		if !ok {
-			http.Error(w, "Missing project ID", http.StatusBadRequest)
-			return
-		}
-
-		projectTitle, ok := event.Project["title"].(string)
-		if !ok {
-			projectTitle = fmt.Sprintf("project-%d", int(projectID))
-		}
-
-		log.Printf("📦 Received PROJECT_CREATED webhook for project %d: %s", int(projectID), projectTitle)
-
-		// Get access token
-		token, err := getAccessToken(cfg)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Auth failed: %v", err), http.StatusBadGateway)
-			return
-		}
-
-		// Configure S3 storage with per-project prefix
-		if err := configureS3Storage(cfg, token, int(projectID), projectTitle); err != nil {
-			log.Printf("⚠️  Failed to configure S3 storage: %v", err)
-			http.Error(w, fmt.Sprintf("S3 config failed: %v", err), http.StatusBadGateway)
-			return
-		}
-
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":     "success",
-			"project_id": int(projectID),
-			"title":      projectTitle,
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "deprecated",
+			"message": "PROJECT_CREATED webhooks require Enterprise license. Webhooks now configured via polling.",
 		})
 	}
 }
@@ -501,8 +469,10 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 			doRequest("POST", url, headers, body)
 		}
 
-		// Ensure webhooks
-		ensureWebhooks(cfg, token)
+		// Configure webhooks for the new project
+		if err := configureProjectWebhooks(cfg, token, projectID); err != nil {
+			log.Printf("⚠️  Failed to configure webhooks for project %d: %v", projectID, err)
+		}
 
 		// Return response
 		response := map[string]interface{}{
@@ -565,7 +535,7 @@ func main() {
 	// S3 credentials are optional for initial startup (may not be configured until Label Studio is set up)
 	log.Printf("✅ Configuration validated: LS_URL=%s", cfg.LabelStudioURL)
 
-	// Register webhook on startup with retry logic
+	// Configure webhooks on startup with retry logic
 	go func() {
 		time.Sleep(5 * time.Second) // Wait for server to start
 
@@ -577,8 +547,7 @@ func main() {
 			attempt++
 			token, err := getAccessToken(cfg)
 			if err != nil {
-				log.Printf("⚠️  Attempt %d: Failed to get access token: %v", attempt, err)
-				// Exponential backoff with max of 60s
+				log.Printf("⚠️  Startup config attempt %d: Failed to get access token: %v", attempt, err)
 				backoff := time.Duration(attempt) * retryDelay
 				if backoff > maxBackoff {
 					backoff = maxBackoff
@@ -587,9 +556,8 @@ func main() {
 				continue
 			}
 
-			if err := ensureWebhooks(cfg, token); err != nil {
-				log.Printf("⚠️  Attempt %d: Failed to register webhooks: %v", attempt, err)
-				// Exponential backoff with max of 60s
+			if err := configureAllProjects(cfg, token); err != nil {
+				log.Printf("⚠️  Startup config attempt %d: Failed to configure projects: %v", attempt, err)
 				backoff := time.Duration(attempt) * retryDelay
 				if backoff > maxBackoff {
 					backoff = maxBackoff
@@ -598,8 +566,28 @@ func main() {
 				continue
 			}
 
-			log.Printf("✅ Successfully registered webhooks on attempt %d", attempt)
-			return
+			log.Printf("✅ Startup configuration complete on attempt %d", attempt)
+			break // Exit retry loop, continue to polling
+		}
+
+		// Start polling loop for new projects
+		log.Printf("🔄 Starting polling loop (interval: %s)", cfg.PollInterval)
+		ticker := time.NewTicker(cfg.PollInterval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			token, err := getAccessToken(cfg)
+			if err != nil {
+				log.Printf("⚠️  Poll: Failed to get access token: %v", err)
+				continue
+			}
+
+			if err := configureAllProjects(cfg, token); err != nil {
+				log.Printf("⚠️  Poll: Failed to configure projects: %v", err)
+				continue
+			}
+
+			log.Printf("🔄 Poll complete")
 		}
 	}()
 
