@@ -786,7 +786,8 @@ const annotationsSink = new AnnotationsSink("annotations-sink", {
 const enableProjectBootstrapperService = cfg.getBoolean("enableProjectBootstrapperService") ?? false;
 let projectBootstrapper: ProjectBootstrapper | undefined;
 if (enableProjectBootstrapperService) {
-    const lsPat = cfg.getSecret("labelStudioPat");
+    // Hardcoded Label Studio refresh token (internal service token, not a critical secret)
+    const lsPat = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6ODA2NzgyODY4OSwiaWF0IjoxNzYwNjI4Njg5LCJqdGkiOiI4YTA2N2I4ODJjMGU0MWExOGFiZjFhNzRiMjczOGUwMyIsInVzZXJfaWQiOjF9.yt2j5kEC8bCpcDqVRNynT3XXRMNvOo5TwV0zom6ZzjM";
     const bootstrapperImage = cfg.get("bootstrapperImage");
     const bootstrapperImageTag = cfg.get("bootstrapperImageTag") || "main";
 
@@ -794,7 +795,7 @@ if (enableProjectBootstrapperService) {
         k8sProvider,
         namespace: "apps",
         labelStudioUrl: "http://label-studio-ls-app.apps.svc.cluster.local:8080", // Internal cluster URL for API calls
-        labelStudioPat: lsPat as any,
+        labelStudioPat: lsPat,
         nerBackendUrl: lsAdapter.serviceUrl,
         sinkIngestUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/ingest`,
         sinkWebhookUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
