@@ -35,7 +35,6 @@ defaults:
 env:
   NODE_VERSION: '24.x'
   PNPM_VERSION: '9.12.2'
-  PULUMI_VERSION: '3.197.0'
   PULUMI_STACK: 'ryan-taylor/oceanid-cloud/prod'
   PULUMI_PROJECT: 'oceanid-cloud'
   PULUMI_ORGANIZATION: 'ryan-taylor'
@@ -117,7 +116,6 @@ jobs:
           work-dir: cloud
           comment-on-pr: true
           diff: true
-          pulumi-version: ${{ env.PULUMI_VERSION }}
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
@@ -171,6 +169,5 @@ jobs:
           stack-name: ${{ env.PULUMI_STACK }}
           work-dir: cloud
           refresh: true
-          pulumi-version: ${{ env.PULUMI_VERSION }}
         env:
           PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}

@@ -29,7 +29,6 @@ jobs:
       id-token: write
       contents: read
     env:
-      PULUMI_VERSION: '3.202.0'
       NODE_VERSION: '24.x'
     steps:
       - name: Checkout
