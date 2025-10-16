@@ -254,6 +254,7 @@ func fetchProjectWebhooks(cfg *Config, token string, projectID int) ([]Webhook, 
 	url := fmt.Sprintf("%s/api/webhooks/?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
 	status, respBody, err := doRequest("GET", url, headers, nil)
 	if err != nil || status != 200 {
+		log.Printf("🐛 DEBUG: Project %d webhook fetch failed: GET %s → %d, body: %s", projectID, url, status, string(respBody))
 		return nil, fmt.Errorf("fetch webhooks failed: %d %v", status, err)
 	}
 
