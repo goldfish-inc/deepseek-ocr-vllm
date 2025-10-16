@@ -68,6 +68,7 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
                     return `tunnel: ${cluster.cloudflare.tunnelId}
 credentials-file: /etc/cloudflared/token/token
 no-autoupdate: true
+protocol: http2
 metrics: 0.0.0.0:${cluster.metricsPort}
 
 # Enable WARP routing for private network access (Zero Trust)

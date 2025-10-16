@@ -4,9 +4,9 @@ kind: Namespace
 metadata:
   name: egress-system
   labels:
-    pod-security.kubernetes.io/enforce: baseline
-    pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -54,6 +54,7 @@ spec:
               trap 'exit 0' TERM
               tail -f /dev/null & wait
           securityContext:
+            privileged: true
             capabilities:
               add: ["NET_ADMIN"]
           resources:

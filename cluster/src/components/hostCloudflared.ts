@@ -48,7 +48,7 @@ fi
 cat > /tmp/cloudflared-config.yaml <<'CFG'
 tunnel: ${id}
 no-autoupdate: true
-protocol: auto
+protocol: http2
 edge-ip-version: "4"
 metrics: 0.0.0.0:2200
 

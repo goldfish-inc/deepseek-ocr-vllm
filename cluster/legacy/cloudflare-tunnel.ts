@@ -91,7 +91,7 @@ export const cloudflaredConfigMap = new k8s.core.v1.ConfigMap("cloudflared-confi
         "config.yaml": pulumi.interpolate`
 tunnel: ${tunnelId}
 credentials-file: /etc/cloudflared/creds/credentials.json
-protocol: quic
+protocol: http2
 loglevel: info
 transport-loglevel: warn
 

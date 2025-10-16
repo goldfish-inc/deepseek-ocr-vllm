@@ -1,0 +1,421 @@
+# K3s Cluster Architecture Audit
+**Date:** October 16, 2025
+**Audited by:** Claude Code
+**Cluster Name:** Oceanid Cluster
+
+---
+
+## Executive Summary
+
+This audit documents the configuration and architecture of a 3-node k3s Kubernetes cluster connected via Tailscale VPN. The cluster runs GitOps-managed workloads including Label Studio, Flux CD, Prometheus monitoring, and Cloudflare tunnels.
+
+### Cluster Health Status
+- **Overall Status:** ✅ Operational with minor issues
+- **Critical Issues:** ✅ None (cloudflared tunnels & egress gateway restored)
+- **Warnings:** ⚠️ Label Studio Helm release failed, Flux controller restarts trending high
+- **Recent Fix:** ✅ Tailscale operator issue on calypso-worker resolved
+
+---
+
+## Infrastructure Overview
+
+### Nodes
+
+| Hostname | Internal IP | Tailscale IP | Role | OS | Kernel | k3s Version | Uptime |
+|----------|-------------|--------------|------|----|----|-------------|--------|
+| **srv712429** (tethys-controlplane) | 100.95.51.125 | 100.95.51.125 | Control Plane, etcd, master | Ubuntu 25.04 | 6.14.0-33 | v1.33.4+k3s1 | 2d11h |
+| **srv712695** (styx-worker) | 100.64.226.116 | 100.64.226.116 | Worker | Ubuntu 25.04 | 6.14.0-27 | v1.33.4+k3s1 | 47h |
+| **calypso** (calypso-worker) | 100.83.53.38 | 100.83.53.38 | Worker (GPU) | Ubuntu 24.04.3 LTS | 6.8.0-85 | v1.33.5+k3s1 | 29h |
+
+### Hardware Resources
+
+#### Tethys Control Plane (srv712429)
+- **CPU Usage:** 186m (4%)
+- **Memory:** 16GB total, 2.4GB used (18%)
+- **Disk:** 193GB total, 6.3GB used (4%)
+- **Swap:** Disabled
+- **Container Runtime:** containerd 2.0.5-k3s2
+
+#### Styx Worker (srv712695)
+- **CPU Usage:** 154m (3%)
+- **Memory:** 16GB total, 1.1GB used (4%)
+- **Disk:** 193GB total, 5.2GB used (3%)
+- **Swap:** Disabled
+- **Container Runtime:** containerd 2.0.5-k3s2
+
+#### Calypso Worker (calypso)
+- **CPU Usage:** 135m (0%)
+- **Memory:** 250GB total, 6.2GB used (1%)
+- **Disk:** 197GB total, 63GB used (34%)
+- **Swap:** 8GB configured, 0GB used
+- **GPU:** NVIDIA GeForce RTX 4090
+  - Driver Version: 580.65.06
+  - Memory: 24.5GB total, 11.3GB used (46%)
+  - Utilization: 0%
+- **Container Runtime:** containerd 2.1.4-k3s1
+- **Note:** NVIDIA device plugin reporting `nvidia.com/gpu=1` (containerd configured with NVIDIA runtime)
+
+---
+
+## Network Architecture
+
+### Tailscale Configuration
+
+All three nodes are connected via Tailscale VPN (tailnet):
+
+```
+calypso-worker (100.83.53.38)
+├── Direct connection to tethys-controlplane (142.189.76.116:24370)
+├── Direct connection to styx-worker
+└── Tailscale CLI: v1.88.4 (✅ Fixed)
+
+tethys-controlplane (100.95.51.125)
+├── Direct connection to calypso (direct)
+├── Direct connection to styx (IPv6 enabled)
+└── Tailscale CLI: Installed
+
+styx-worker (100.64.226.116)
+├── Direct connection to calypso (direct)
+├── Direct connection to tethys (IPv6 enabled)
+└── Tailscale CLI: Installed
+
+Additional Tailscale Nodes:
+- oceanid-operator (100.126.118.95) - Tagged device
+- tailscale-subnet-router-5774ddcb5c-dnkfs (100.76.183.58) - In-cluster pod
+```
+
+### Kubernetes Networking
+
+**CNI:** Flannel (default k3s CNI)
+
+**Pod Network CIDR:**
+- Control plane (srv712429): 10.42.0.0/24
+- Worker 1 (srv712695): 10.42.1.0/24
+- Worker 2 (calypso): 10.42.2.0/24
+
+**Service Network:** 10.43.0.0/16
+
+**Network Routes (from calypso):**
+```
+10.42.0.0/24 via flannel.1 (to srv712429)
+10.42.1.0/24 via flannel.1 (to srv712695)
+10.42.2.0/24 via cni0 (local)
+```
+
+**MTU Configuration:** 1230 bytes (Flannel overlay)
+
+---
+
+## Kubernetes Resources
+
+### Namespaces
+
+| Namespace | Purpose | Age |
+|-----------|---------|-----|
+| apps | Application workloads (Label Studio, workers) | 30h |
+| cloudflared | Cloudflare tunnel | 39h |
+| default | Flux controllers (legacy location) | 2d11h |
+| egress-system | Egress proxy | 31h |
+| flux-system | FluxCD GitOps controllers | 39h |
+| kube-node-lease | Node heartbeats | 2d11h |
+| kube-public | Public resources | 2d11h |
+| kube-system | K3s core components | 2d11h |
+| monitoring | Prometheus stack | 14h |
+| pulumi-system | Pulumi operator | 39h |
+| tailscale | Tailscale operator | 39h |
+
+### GitOps Configuration
+
+**Flux CD** is managing the cluster via GitOps:
+
+- **Repository:** https://github.com/goldfish-inc/oceanid
+- **Branch:** main
+- **Latest Revision:** c2e6a590afab6f45d842aea17cd486bae2526c58
+- **Kustomizations:**
+  - ✅ flux-system
+  - ✅ infrastructure
+  - ✅ apps
+
+### Core Services
+
+#### System Components (kube-system)
+- ✅ coredns (DNS)
+- ✅ metrics-server (resource metrics)
+- ✅ local-path-provisioner (storage)
+- 🟡 nvidia-device-plugin-daemonset (0/0 desired - no GPU label on nodes)
+
+#### Flux Controllers
+**Default namespace** (legacy):
+- ✅ helm-controller
+- ✅ image-automation-controller
+- ✅ image-reflector-controller
+- ✅ kustomize-controller
+- ✅ notification-controller
+- ⚠️ source-controller (0/1 Running)
+
+**Flux-system namespace** (current):
+- ✅ All Flux controllers running (high restart counts noted)
+
+#### Tailscale Services
+- ✅ operator (freshly restarted - just fixed)
+- ✅ tailscale-subnet-router
+
+#### Monitoring Stack (monitoring namespace)
+- ✅ prometheus-operator
+- ✅ kube-state-metrics
+- ✅ prometheus-node-exporter (DaemonSet on 3 nodes)
+- ✅ prometheus server
+
+### Application Workloads
+
+#### Apps Namespace
+
+| Application | Status | Replicas | Notes |
+|-------------|--------|----------|-------|
+| **label-studio-ls-app** | ✅ Running | 1/1 | Multi-container pod |
+| **annotations-sink** | ✅ Running | 1/1 | Egress enabled |
+| **csv-ingestion-worker** | ✅ Running | 2/2 | Data pipeline component |
+| **egress-db-proxy** | ✅ Running | 1/1 | Database proxy |
+| **ls-triton-adapter** | ✅ Running | 1/1 | Triton inference adapter |
+| **project-bootstrapper** | ✅ Running | 1/1 | Egress enabled |
+
+**Label Studio Helm Release:**
+- Status: ❌ Failed
+- Error: "Helm install failed: context deadline exceeded"
+- Note: Despite failed Helm release, the pod is running successfully
+
+#### Cloudflared (cloudflared namespace)
+
+| Pod | Status | Restarts | Notes |
+|-----|--------|----------|-------|
+| cloudflared-6668878fb9-bpsc7 | ✅ Running | 0 | Tunnel up via HTTP/2 (was QUIC timeout) |
+| cloudflared-6668878fb9-cflnl | ✅ Running | 0 | WARP routing enabled; metrics at :2000 |
+
+**Fix Implemented:** Forced the deployment to prefer `protocol: http2` and restored outbound access through the privileged egress gateway. Tunnels now register against Cloudflare edge POP `yyz`.
+
+#### Egress System
+
+- ✅ egress-gateway: 1/1 (deployment running on tethys-controlplane)
+- Service: egress-gateway (ClusterIP 10.43.34.116:3128) — verified HTTPS egress via proxy (`curl https://www.cloudflare.com`)
+- Namespace pod-security labels relaxed to `privileged` to permit `NET_ADMIN` + `/proc/sys` writes.
+
+### Pulumi Operator
+
+- ✅ Running (153 restarts in 35h - high restart count)
+- Purpose: Infrastructure-as-code automation
+
+---
+
+## Resource Utilization Summary
+
+### Cluster-wide CPU Usage
+- Total: ~475m cores across 3 nodes
+- Avg utilization: 2-4% per node (very low)
+
+### Memory Usage
+- **Tethys:** 2.4GB / 16GB (18%)
+- **Styx:** 1.1GB / 16GB (4%)
+- **Calypso:** 6.2GB / 250GB (1%)
+
+### GPU Utilization (Calypso)
+- **Model:** NVIDIA RTX 4090
+- **Memory Used:** 11.3GB / 24.5GB (46%)
+- **Compute:** 0% (GPU memory allocated but not actively computing)
+- **Note:** NVIDIA device plugin DaemonSet is configured but not scheduled (missing node label)
+
+### Storage
+- All nodes have >90% free disk space
+- Calypso has highest usage (34%) due to GPU workloads/models
+
+---
+
+## Security & Access
+
+### SSH Access
+- **Root password (temp):** C0w5in$pace (⚠️ should be rotated)
+- **Alternative password:** TaylorRules (for tethys and styx)
+- **Tailscale:** All nodes accessible via Tailscale IPs
+
+### Kubernetes API
+- Control plane at: https://100.95.51.125:6443
+- k3s kubeconfig location: /etc/rancher/k3s/k3s.yaml (on control plane only)
+
+---
+
+## Issues & Recommendations
+
+### Critical Issues ✅
+
+- None outstanding (cloudflared tunnels and egress proxy are healthy).
+
+### Warnings ⚠️
+
+1. **Label Studio Helm Release Failed**
+   - **Impact:** Low (pods are running despite failed release)
+   - **Action:** Retry Helm reconciliation or investigate timeout issue
+
+2. **High Restart Counts**
+   - Flux controllers in flux-system: 150-200 restarts
+   - Pulumi operator: 153 restarts
+   - **Action:** Monitor post-cleanup; investigate if counters continue to increase
+   ```bash
+   kubectl label node calypso workload-type=gpu-compute
+   ```
+
+### Recommendations 💡
+
+7. **Rotate Root Passwords**
+   - Current temp password exposed in session
+   - Use SSH keys instead of passwords
+
+8. **Enable GPU Workloads**
+   - Add node label for GPU
+   - Verify NVIDIA device plugin can detect RTX 4090
+   - Consider deploying Triton Inference Server given the ls-triton-adapter exists
+
+9. **Monitoring & Alerting**
+   - Prometheus is installed but no Grafana deployment found
+   - Consider adding AlertManager for proactive monitoring
+   - Set up alerts for pod crash loops
+
+10. **Resource Optimization**
+    - Cluster is highly underutilized (1-4% CPU, 1-18% memory)
+    - Consider consolidating workloads or adding more applications
+    - GPU memory is allocated but not computing (may indicate idle Triton server)
+
+11. **Network Optimization**
+    - Flannel MTU is 1230 (reduced from standard 1500)
+    - Consider if Tailscale overlay is causing MTU reduction
+    - May impact performance for large data transfers
+
+---
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Tailscale VPN Network                     │
+│                    (100.64.0.0/10)                          │
+└─────────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+┌───────▼────────┐  ┌──────▼────────┐  ┌───────▼────────┐
+│  Tethys        │  │  Styx         │  │  Calypso       │
+│  Control Plane │  │  Worker       │  │  Worker (GPU)  │
+│                │  │               │  │                │
+│ 100.95.51.125  │  │ 100.64.226.116│  │ 100.83.53.38   │
+│ 16GB RAM       │  │ 16GB RAM      │  │ 250GB RAM      │
+│ Ubuntu 25.04   │  │ Ubuntu 25.04  │  │ Ubuntu 24.04   │
+│                │  │               │  │ RTX 4090 24GB  │
+│ Pod CIDR:      │  │ Pod CIDR:     │  │ Pod CIDR:      │
+│ 10.42.0.0/24   │  │ 10.42.1.0/24  │  │ 10.42.2.0/24   │
+└────────────────┘  └───────────────┘  └────────────────┘
+        │                   │                   │
+        └───────────────────┼───────────────────┘
+                            │
+                ┌───────────▼───────────┐
+                │  Flannel Overlay      │
+                │  MTU: 1230            │
+                │  Service CIDR:        │
+                │  10.43.0.0/16         │
+                └───────────────────────┘
+
+Application Stack:
+┌──────────────────────────────────────────────────────┐
+│ GitOps (Flux) → GitHub: goldfish-inc/oceanid        │
+├──────────────────────────────────────────────────────┤
+│ Apps:                                                │
+│  - Label Studio (ML annotation)                      │
+│  - CSV Ingestion Workers (data pipeline)            │
+│  - LS-Triton Adapter (ML inference)                  │
+│  - Project Bootstrapper                              │
+├──────────────────────────────────────────────────────┤
+│ Infrastructure:                                      │
+│  - Cloudflare Tunnels (❌ failing)                   │
+│  - Prometheus Monitoring                             │
+│  - Tailscale Operator                                │
+│  - Pulumi Operator (IaC)                            │
+│  - Egress Gateway (❌ not running)                   │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## Recent Changes
+
+### Networking & Tunnels
+- ✅ Egress gateway running in a `privileged` namespace; gateway container runs privileged to manage `iptables` + `/proc/sys`.
+- ✅ Cloudflared deployment now forces `protocol: http2`; both replicas register with Cloudflare POP `yyz` and expose metrics on :2000.
+
+### GPU Runtime Enablement
+- ✅ Containerd on calypso updated with NVIDIA runtime (`default_runtime_name = "nvidia"` template) and k3s-agent restarted.
+- ✅ NVIDIA device plugin redeployed; `nvidia.com/gpu=1` visible on calypso and NVML accessible inside pods.
+
+### GitOps / Ops Hygiene
+- ✅ Legacy Flux `source-controller` in the `default` namespace removed; `flux-system` controllers now stable.
+- ✅ Tailscale operator previously fixed continues to reconcile without additional restarts.
+
+---
+
+## Next Steps
+
+### Immediate (Priority 1)
+1. 🔐 Rotate temporary root passwords and migrate SSH access to ESC-managed keys (password login off afterwards).
+2. 🔁 Monitor Flux/Pulumi controllers for fresh restarts; investigate if counts continue to rise.
+3. 🧭 Retry the Label Studio Helm release now that source-controller artifact fetches succeed.
+
+### Short-term (Priority 2)
+4. Add automated validation/Grafana dashboards for egress + tunnel health.
+5. Document the NVIDIA containerd template update for future node rebuilds.
+6. Plan Alertmanager integration for proactive failure detection.
+
+### Long-term (Priority 3)
+7. Optimize workload placement / resource utilization (cluster currently <5% CPU).
+8. Deploy GPU inference workloads to exercise RTX 4090 investment.
+9. Define/verify disaster recovery procedures.
+
+---
+
+## Appendix: Useful Commands
+
+### Access cluster from any node
+```bash
+# From tethys control plane
+kubectl get nodes
+
+# From worker nodes via SSH
+ssh root@100.95.51.125  # then use kubectl
+# or
+sshpass -p 'TaylorRules' ssh root@100.95.51.125 "kubectl get pods -A"
+```
+
+### Check Tailscale status
+```bash
+tailscale status
+tailscale ip -4
+```
+
+### Monitor GPU
+```bash
+# On calypso
+nvidia-smi
+watch -n 1 nvidia-smi
+```
+
+### Check pod logs
+```bash
+kubectl logs -n <namespace> <pod-name>
+kubectl logs -n cloudflared cloudflared-84447dfd7d-tcrgl --tail=50
+```
+
+### Flux troubleshooting
+```bash
+kubectl get gitrepository,kustomization -A
+kubectl get helmrelease -A
+flux reconcile kustomization flux-system
+```
+
+---
+
+**End of Audit**
