@@ -250,7 +250,8 @@ func fetchProjectWebhooks(cfg *Config, token string, projectID int) ([]Webhook, 
 		"Authorization": "Bearer " + token,
 	}
 
-	url := fmt.Sprintf("%s/api/projects/%d/webhooks", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
+	// Label Studio uses /api/webhooks/?project={id} not /api/projects/{id}/webhooks
+	url := fmt.Sprintf("%s/api/webhooks/?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
 	status, respBody, err := doRequest("GET", url, headers, nil)
 	if err != nil || status != 200 {
 		return nil, fmt.Errorf("fetch webhooks failed: %d %v", status, err)
@@ -287,11 +288,13 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 		"Content-Type":  "application/json",
 	}
 
-	webhookURL := fmt.Sprintf("%s/api/projects/%d/webhooks", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
+	// Label Studio creates webhooks at /api/webhooks/ with project in body
+	webhookURL := fmt.Sprintf("%s/api/webhooks/", strings.TrimSuffix(cfg.LabelStudioURL, "/"))
 
 	// Register TASK webhook if missing
 	if cfg.SinkIngestURL != "" && !hasWebhookURL(webhooks, cfg.SinkIngestURL) {
 		payload := map[string]interface{}{
+			"project":      projectID,
 			"url":          cfg.SinkIngestURL,
 			"send_payload": true,
 			"events":       []string{"TASK_CREATED", "TASKS_BULK_CREATED"},
@@ -309,6 +312,7 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 	// Register ANNOTATION webhook if missing
 	if cfg.SinkWebhookURL != "" && !hasWebhookURL(webhooks, cfg.SinkWebhookURL) {
 		payload := map[string]interface{}{
+			"project":      projectID,
 			"url":          cfg.SinkWebhookURL,
 			"send_payload": true,
 			"events":       []string{"ANNOTATION_CREATED", "ANNOTATION_UPDATED", "ANNOTATION_DELETED"},
