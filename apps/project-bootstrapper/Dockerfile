@@ -16,8 +16,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflag
 # Runtime stage - alpine for DNS resolver support
 FROM alpine:latest
 
-# Install CA certificates
-RUN apk --no-cache add ca-certificates
+# Install CA certificates and debugging tools for internal dev velocity
+RUN apk --no-cache add ca-certificates curl jq bash
 
 # Copy binary
 COPY --from=builder /build/bootstrapper /bootstrapper

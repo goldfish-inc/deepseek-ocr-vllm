@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -254,7 +255,14 @@ func fetchProjectWebhooks(cfg *Config, token string, projectID int) ([]Webhook, 
 	url := fmt.Sprintf("%s/api/webhooks/?project=%d", strings.TrimSuffix(cfg.LabelStudioURL, "/"), projectID)
 	status, respBody, err := doRequest("GET", url, headers, nil)
 	if err != nil || status != 200 {
-		log.Printf("🐛 DEBUG: Project %d webhook fetch failed: GET %s → %d, body: %s", projectID, url, status, string(respBody))
+		slog.Error("webhook fetch failed",
+			"project_id", projectID,
+			"method", "GET",
+			"url", url,
+			"status", status,
+			"response_body", string(respBody),
+			"error", err,
+		)
 		return nil, fmt.Errorf("fetch webhooks failed: %d %v", status, err)
 	}
 
@@ -305,7 +313,14 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 		if err == nil && (status == 200 || status == 201) {
 			log.Printf("✅ Project %d: Registered TASK webhook → %s", projectID, cfg.SinkIngestURL)
 		} else {
-			log.Printf("⚠️  Project %d: Failed to register TASK webhook: %d %s (err: %v)", projectID, status, string(respBody), err)
+			slog.Error("TASK webhook registration failed",
+				"project_id", projectID,
+				"method", "POST",
+				"url", webhookURL,
+				"status", status,
+				"response_body", string(respBody),
+				"error", err,
+			)
 			return fmt.Errorf("TASK webhook registration failed: %d", status)
 		}
 	}
@@ -323,7 +338,14 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 		if err == nil && (status == 200 || status == 201) {
 			log.Printf("✅ Project %d: Registered ANNOTATION webhook → %s", projectID, cfg.SinkWebhookURL)
 		} else {
-			log.Printf("⚠️  Project %d: Failed to register ANNOTATION webhook: %d %s (err: %v)", projectID, status, string(respBody), err)
+			slog.Error("ANNOTATION webhook registration failed",
+				"project_id", projectID,
+				"method", "POST",
+				"url", webhookURL,
+				"status", status,
+				"response_body", string(respBody),
+				"error", err,
+			)
 			return fmt.Errorf("ANNOTATION webhook registration failed: %d", status)
 		}
 	}
@@ -529,6 +551,16 @@ func contains(slice []string, item string) bool {
 
 func main() {
 	cfg := loadConfig()
+
+	// Configure structured logging based on LOG_LEVEL (default: info)
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
 
 	// Validate required configuration
 	if cfg.LabelStudioURL == "" {

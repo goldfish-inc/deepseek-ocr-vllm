@@ -79,6 +79,7 @@ export class ProjectBootstrapper extends pulumi.ComponentResource {
               {
                 name: serviceName,
                 image: bootstrapperImageRef as any,
+                imagePullPolicy: "Always", // Force pull :main tag for fast internal dev iteration
                 ports: [{ name: "http", containerPort: 8080 }],
                 env: [
                   { name: "LS_URL", value: labelStudioUrl as any },
