@@ -115,7 +115,7 @@ Plain `git push` fails - SSH agent disabled to avoid biometric prompts.
 
 ### Primary: SSH to Tethys (Always Available)
 ```bash
-# Direct kubectl access via SSH (NO WARP REQUIRED)
+# Direct kubectl access via SSH
 sshpass -p "TaylorRules" ssh -o StrictHostKeyChecking=no root@157.173.210.123 'kubectl get nodes'
 
 # Check pod logs
@@ -125,20 +125,23 @@ sshpass -p "TaylorRules" ssh -o StrictHostKeyChecking=no root@157.173.210.123 'k
 sshpass -p "TaylorRules" ssh -o StrictHostKeyChecking=no root@157.173.210.123 'kubectl -n apps get deployments'
 ```
 
-### Alternative: Cloudflare WARP (Local kubectl)
+### Direct SSH to Calypso (GPU Node)
 ```bash
-warp-cli status  # Must show "Connected"
-export KUBECONFIG=~/.kube/k3s-warp.yaml
-kubectl get nodes
-```
-- Routes `10.42.0.0/16`, `10.43.0.0/16`, `192.168.2.0/24` via Cloudflare
-- K8s API at `https://10.43.0.1:443`, no SSH tunnels needed
-- Org: `goldfishinc.cloudflareaccess.com`, Mode: Gateway with WARP
-- **Note**: WARP may disconnect due to settings changes - use SSH instead
+# LAN access to Calypso (192.168.2.110)
+# Password: C0w5in$pace
+ssh neptune@192.168.2.110
 
-### MCP Server (Docker Management)
-- **Available**: Docker MCP Gateway for local Docker management
-- Use MCP tools for Docker operations when available
+# Access Triton models
+ssh neptune@192.168.2.110 'ls -la /models/'
+
+# Check Triton server
+ssh neptune@192.168.2.110 'curl -s http://localhost:8000/v2/health/ready'
+```
+
+### MCP Server (Kubernetes & Docker)
+- **Available**: Docker MCP Gateway for Kubernetes and Docker management
+- Use MCP tools for kubectl operations and Docker management when available
+- **NEVER use WARP** for task access - use SSH or MCP tools only
 
 ## Grafana Cloud Operations
 

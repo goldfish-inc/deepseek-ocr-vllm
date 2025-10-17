@@ -35,12 +35,5 @@ dynamic_batching {
   max_queue_delay_microseconds: 100
 }
 
-# Optimization
-optimization {
-  execution_accelerators {
-    gpu_execution_accelerator : [ {
-      name : "tensorrt"
-      parameters { key: "precision_mode" value: "FP16" }
-    }]
-  }
-}
+# ONNX Runtime backend runs with CUDAExecutionProvider on GPU.
+# No TensorRT accelerator is configured here to avoid backend conflicts.
