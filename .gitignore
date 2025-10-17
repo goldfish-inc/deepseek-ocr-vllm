@@ -67,6 +67,11 @@ __pycache__/
 venv/
 ENV/
 
+# ML Training artifacts (models, checkpoints, large data files)
+apps/ner-training/models/
+apps/ner-training/*.json
+apps/ner-training/data/
+
 # Terraform (if any legacy)
 *.tfstate
 *.tfstate.*

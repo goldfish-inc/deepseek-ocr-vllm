@@ -55,21 +55,4 @@
 - **Backlog burn-down:** PDF/CSV backlog processed monthly.
 - **GPU utilisation:** DGX vs Calypso, ensure both are productive.
 
----
-
-## 7. Risks & Mitigations
-| Risk | Mitigation |
-|------|------------|
-| Facility power/cooling limits | Pre-check rack specs; monitor thermals |
-| Model portability gaps | Keep driver/CUDA versions aligned, use containerized builds |
-| Security | Restrict SSH to Tailscale, enforce key rotation, monitoring |
-| Under-utilisation | Schedule recurring training jobs, synthetic data runs |
-
----
-
-## 8. Ask from Leadership
-- Confirm facilities readiness (power/cooling/network) ahead of delivery.
-- Support infrastructure upgrades (10/25 GbE) if needed.
-- Approve ongoing GPU maintenance budget (drivers, support contracts).
-
 With the DGX Spark, we close the biggest gap in Oceanid—automated pre-annotation and rapid ML iteration. The result: SMEs work faster, models learn continuously, and we keep our advantage in data quality.

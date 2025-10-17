@@ -89,7 +89,8 @@
       "Bash(docker build:*)",
       "Bash(find:*)",
       "Bash(go get:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(docker buildx:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,30 +1,36 @@
 # Multi-stage build for document extraction service
 # Supports both x86_64 (cluster) and arm64 (local development)
 
-FROM python:3.13-slim as base
+# Build stage - install dependencies
+FROM python:3.12-slim as builder
 
-# Install system dependencies including build tools
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
-    g++ \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    libtesseract-dev \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies with retry on hash mismatch
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends build-essential gcc g++ || \
+     apt-get install -y --no-install-recommends --fix-missing build-essential gcc g++) && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies to /install directory
+COPY requirements.txt .
+RUN grep -vE "^mlx" requirements.txt > requirements-no-mlx.txt && \
+    pip install --no-cache-dir --prefix=/install -r requirements-no-mlx.txt
+
+# Runtime stage - minimal image
+FROM python:3.12-slim as base
+
+# Install runtime dependencies only with retry on hash mismatch
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng libgomp1 || \
+     apt-get install -y --no-install-recommends --fix-missing tesseract-ocr tesseract-ocr-eng libgomp1) && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
 
 # Set working directory
 WORKDIR /app
-
-# Copy requirements
-COPY requirements.txt .
-
-# Install Python dependencies
-# MLX only works on Apple Silicon, so conditional install
-RUN pip install --no-cache-dir -r requirements.txt || \
-    (grep -v "mlx" requirements.txt > /tmp/req-no-mlx.txt && \
-     pip install --no-cache-dir -r /tmp/req-no-mlx.txt)
 
 # Copy application code
 COPY main.py .
