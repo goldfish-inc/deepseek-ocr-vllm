@@ -215,6 +215,7 @@ await mcp.search_dashboards({
 **Pulumi ESC**: Centralized secrets (GitHub tokens, DB creds)
 **Crunchy Bridge**: Ebisu cluster, DB `labelfish`, user `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
 **Flux CD** v2.6.4: GitOps from `clusters/tethys/`
+**PostgreSQL Version Standard**: Always use postgresql17-client (17.x) in Alpine Dockerfiles. Never use postgresql16.
 
 ## CI/CD Workflows
 
