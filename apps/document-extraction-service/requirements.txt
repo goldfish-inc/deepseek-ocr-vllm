@@ -7,9 +7,9 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20  # For file uploads
 
 # Document processing
-docling==2.17.1
-docling-core==2.7.1
-docling-ibm-models==2.2.2
+docling==2.57.0  # Latest version (2025-10-17)
+docling-core==2.9.6  # Latest compatible version
+docling-ibm-models==2.3.1  # Latest compatible version
 mlx==0.24.0  # Apple Silicon acceleration
 mlx-vlm==0.1.0
 
