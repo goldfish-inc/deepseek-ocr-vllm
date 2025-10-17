@@ -2,7 +2,7 @@
 # Supports both x86_64 (cluster) and arm64 (local development)
 
 # Build stage - install dependencies
-FROM python:3.12-slim as builder
+FROM python:3.12-slim AS builder
 
 # Install build dependencies with retry on hash mismatch
 RUN apt-get update && \
@@ -18,7 +18,7 @@ RUN grep -vE "^mlx" requirements.txt > requirements-no-mlx.txt && \
     pip install --no-cache-dir --prefix=/install -r requirements-no-mlx.txt
 
 # Runtime stage - minimal image
-FROM python:3.12-slim as base
+FROM python:3.12-slim AS base
 
 # Install runtime dependencies only with retry on hash mismatch
 RUN apt-get update && \

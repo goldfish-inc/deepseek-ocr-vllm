@@ -60,12 +60,13 @@ if [ -n "$CHANGED_APPS" ]; then
                 echo "  → Checking $app_name Dockerfile..."
 
                 # Validate with buildx --check (fast, no actual build)
-                if ! docker buildx build --check -f "$app_path/Dockerfile" "$app_path" 2>&1 | grep -q "check complete"; then
-                    echo "❌ Dockerfile validation failed for $app_name!"
-                    docker buildx build --check -f "$app_path/Dockerfile" "$app_path" 2>&1
-                    CHECK_FAILED=1
-                else
+                # Exit code 0 = success (warnings are OK), non-zero = errors
+                if docker buildx build --check -f "$app_path/Dockerfile" "$app_path" >/dev/null 2>&1; then
                     echo "    ✅ $app_name Dockerfile valid"
+                else
+                    echo "❌ Dockerfile validation failed for $app_name!"
+                    docker buildx build --check -f "$app_path/Dockerfile" "$app_path"
+                    CHECK_FAILED=1
                 fi
             fi
         done
