@@ -19,7 +19,7 @@ Exit codes:
 import sys
 import os
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Configuration
 LS_URL = os.getenv("LS_URL", "https://label.boathou.se")
@@ -32,6 +32,8 @@ VALID_BACKENDS = [
     "http://ls-triton-adapter.apps:9090",  # Short form
     "http://ls-triton-adapter:9090",  # Shortest form (assumes same namespace)
 ]
+
+_ACCESS_TOKEN: Optional[str] = None
 
 
 def verify_credentials() -> None:
@@ -49,7 +51,7 @@ def exchange_token() -> str:
             f"{LS_URL}/api/token/refresh",
             json={"refresh": LS_PAT},
             headers={"Content-Type": "application/json"},
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()["access"]
@@ -58,10 +60,17 @@ def exchange_token() -> str:
         sys.exit(2)
 
 
+def get_access_token() -> str:
+    """Return cached short-lived access token."""
+    global _ACCESS_TOKEN
+    if _ACCESS_TOKEN is None:
+        _ACCESS_TOKEN = exchange_token()
+    return _ACCESS_TOKEN
+
+
 def get_headers() -> Dict[str, str]:
     """Return authorization headers for Label Studio API."""
-    access_token = exchange_token()
-    return {"Authorization": f"Bearer {access_token}"}
+    return {"Authorization": f"Bearer {get_access_token()}"}
 
 
 def fetch_projects() -> List[Dict[str, Any]]:
