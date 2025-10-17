@@ -42,9 +42,26 @@ def verify_credentials() -> None:
         sys.exit(2)
 
 
+def exchange_token() -> str:
+    """Exchange refresh token for short-lived access token."""
+    try:
+        response = requests.post(
+            f"{LS_URL}/api/token/refresh",
+            json={"refresh": LS_PAT},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()["access"]
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error exchanging token: {e}", file=sys.stderr)
+        sys.exit(2)
+
+
 def get_headers() -> Dict[str, str]:
     """Return authorization headers for Label Studio API."""
-    return {"Authorization": f"Token {LS_PAT}"}
+    access_token = exchange_token()
+    return {"Authorization": f"Bearer {access_token}"}
 
 
 def fetch_projects() -> List[Dict[str, Any]]:
@@ -52,7 +69,11 @@ def fetch_projects() -> List[Dict[str, Any]]:
     try:
         response = requests.get(f"{LS_URL}/api/projects", headers=get_headers(), timeout=30)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        # Handle paginated response
+        if isinstance(data, dict) and "results" in data:
+            return data["results"]
+        return data
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching projects: {e}", file=sys.stderr)
         sys.exit(2)
