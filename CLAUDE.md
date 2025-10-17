@@ -140,6 +140,71 @@ kubectl get nodes
 - **Available**: Docker MCP Gateway for local Docker management
 - Use MCP tools for Docker operations when available
 
+## Grafana Cloud Operations
+
+### ⚠️ ALWAYS Use Grafana MCP Server First
+
+**CRITICAL**: For ALL Grafana operations (dashboards, alerts, datasources, queries), use the Grafana MCP server tools via Claude Code. Do NOT manually configure in the Grafana UI or use `curl` unless MCP tools are unavailable.
+
+**Available MCP Tools** (50+ tools):
+- **Datasources**: `list_datasources`, `get_datasource_by_uid`, `query_prometheus`, `query_loki_logs`
+- **Dashboards**: `search_dashboards`, `get_dashboard_by_uid`, `update_dashboard`, `create_folder`
+- **Alerts**: `list_alert_rules`, `create_alert_rule`, `update_alert_rule`, `delete_alert_rule`
+- **Incidents**: `list_incidents`, `create_incident`, `get_incident`
+- **OnCall**: `list_oncall_schedules`, `get_current_oncall_users`, `list_oncall_teams`
+- **Teams**: `list_teams`, `search_teams`
+
+**Grafana Instance**: `https://lfgf.grafana.net`
+**Credentials**: Stored in Pulumi ESC as `grafanaApiToken` (encrypted)
+
+### Grafana MCP Usage Examples
+
+```typescript
+// Query Prometheus datasource via MCP
+await mcp.query_prometheus({
+  datasourceUid: "grafanacloud-prom",
+  expr: "up{job=\"ls-triton-adapter\"}",
+  startTime: "now-1h",
+  queryType: "range"
+});
+
+// Create alert rule via MCP
+await mcp.create_alert_rule({
+  title: "TritonAdapterDown",
+  folderUID: "oceanid-alerts",
+  ruleGroup: "production",
+  condition: "A",
+  data: [...],
+  noDataState: "Alerting",
+  execErrState: "Alerting",
+  for: "2m",
+  orgID: 1
+});
+
+// Search dashboards via MCP
+await mcp.search_dashboards({
+  query: "triton"
+});
+```
+
+**Benefits of MCP-First Approach**:
+- ✅ Infrastructure as Code (operations are scripted and versioned)
+- ✅ Automated via AI (Claude can perform complex multi-step operations)
+- ✅ Auditable (all operations logged in conversation history)
+- ✅ Reproducible (same operation works consistently)
+- ✅ No manual UI clicking (faster, less error-prone)
+
+**When to Use UI Instead**:
+- ❌ Never for production operations (use MCP)
+- ⚠️ Only for exploration/testing in dev environments
+- ⚠️ Only when MCP tools are genuinely unavailable
+
+**Grafana Datasources Available**:
+- **Prometheus**: `grafanacloud-lfgf-prom` (default) - metrics
+- **Loki**: `grafanacloud-lfgf-logs` - cluster logs
+- **Tempo**: `grafanacloud-lfgf-traces` - distributed tracing
+- **Pyroscope**: `grafanacloud-lfgf-profiles` - continuous profiling
+
 ## Architecture
 
 **K3s Cluster** (v1.33.4+k3s1): 3 nodes
