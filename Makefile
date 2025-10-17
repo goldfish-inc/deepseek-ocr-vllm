@@ -108,6 +108,24 @@ spark-infer:
 	  --output "$(OUTPUT)" \
 	  --adapter-url "$(ADAPTER_URL)"
 
+# Spark NER batch inference via Triton (micro-batched, GPU-optimized)
+.PHONY: spark-infer-batch
+spark-infer-batch:
+	@if ! command -v spark-submit >/dev/null 2>&1; then \
+		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
+	fi
+	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
+		echo "Usage: make spark-infer-batch INPUT=</tmp/preproc> OUTPUT=</tmp/infer-batch> [TRITON_URL=http://calypso.tail4a0e5.ts.net:8000] [MODEL_PATH=./models/ner-distilbert] [BATCH_SIZE=8]"; exit 1; \
+	fi
+	TOKENIZERS_PARALLELISM=false spark-submit --master local[*] \
+	  apps/spark-jobs/ner-inference/job.py \
+	  --batch-mode \
+	  --input "$(INPUT)" \
+	  --output "$(OUTPUT)" \
+	  --triton-url "$(TRITON_URL)" \
+	  --model-path "$(MODEL_PATH)" \
+	  --batch-size "$(BATCH_SIZE)"
+
 # Database (CrunchyBridge or any Postgres)
 .PHONY: db:migrate db:psql db:status
 
