@@ -28,6 +28,10 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
         const baseImage = "ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker";
         const imageRef = args.image || pulumi.interpolate`${baseImage}:${imageTag}`;
 
+        // Read webhook secret from ESC for signature verification
+        const cfgPulumi = new pulumi.Config();
+        const webhookSecret = cfgPulumi.getSecret("webhookSecret");
+
         // ConfigMap for confidence thresholds
         const confidenceConfig = new k8s.core.v1.ConfigMap(`${name}-config`, {
             metadata: {
@@ -95,58 +99,67 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
                                 containerPort: 8080,
                                 protocol: "TCP",
                             }],
-                            env: [
-                                // Route external HTTP(S) via egress gateway proxy; keep in-cluster direct
-                                { name: "HTTP_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
-                                { name: "HTTPS_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
-                                { name: "NO_PROXY", value: ".svc,.svc.cluster.local,10.42.0.0/16,10.43.0.0/16" },
-                                {
-                                    name: "DATABASE_URL",
-                                    value: (args.dbUrl as any).apply((url: string) => {
-                                        try {
-                                            const u = new URL(url);
-                                            u.hostname = "egress-db-proxy.apps.svc.cluster.local";
-                                            u.port = "5432";
-                                            return u.toString();
-                                        } catch {
-                                            return url;
-                                        }
-                                    }),
-                                },
-                                {
-                                    name: "S3_BUCKET",
-                                    value: args.s3Bucket,
-                                },
-                                {
-                                    name: "S3_REGION",
-                                    value: args.s3Region || "us-east-1",
-                                },
-                                {
-                                    name: "LABEL_STUDIO_URL",
-                                    value: args.labelStudioUrl,
-                                },
-                                {
-                                    name: "REVIEW_MANAGER_URL",
-                                    value: args.reviewManagerUrl || "http://review-queue-manager.apps:8080",
-                                },
-                                {
-                                    name: "CONFIDENCE_CONFIG",
-                                    valueFrom: {
-                                        configMapKeyRef: {
-                                            name: confidenceConfig.metadata.name,
-                                            key: "CONFIDENCE_CONFIG",
+                            env: (() => {
+                                const envVars = [
+                                    // Route external HTTP(S) via egress gateway proxy; keep in-cluster direct
+                                    { name: "HTTP_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                                    { name: "HTTPS_PROXY", value: "http://egress-gateway.egress-system.svc.cluster.local:3128" },
+                                    { name: "NO_PROXY", value: ".svc,.svc.cluster.local,10.42.0.0/16,10.43.0.0/16" },
+                                    {
+                                        name: "DATABASE_URL",
+                                        value: (args.dbUrl as any).apply((url: string) => {
+                                            try {
+                                                const u = new URL(url);
+                                                u.hostname = "egress-db-proxy.apps.svc.cluster.local";
+                                                u.port = "5432";
+                                                return u.toString();
+                                            } catch {
+                                                return url;
+                                            }
+                                        }),
+                                    },
+                                    {
+                                        name: "S3_BUCKET",
+                                        value: args.s3Bucket,
+                                    },
+                                    {
+                                        name: "S3_REGION",
+                                        value: args.s3Region || "us-east-1",
+                                    },
+                                    {
+                                        name: "LABEL_STUDIO_URL",
+                                        value: args.labelStudioUrl,
+                                    },
+                                    {
+                                        name: "REVIEW_MANAGER_URL",
+                                        value: args.reviewManagerUrl || "http://review-queue-manager.apps:8080",
+                                    },
+                                    {
+                                        name: "CONFIDENCE_CONFIG",
+                                        valueFrom: {
+                                            configMapKeyRef: {
+                                                name: confidenceConfig.metadata.name,
+                                                key: "CONFIDENCE_CONFIG",
+                                            },
                                         },
                                     },
-                                },
-                                {
-                                    name: "MAX_WORKERS",
-                                    value: "10",
-                                },
-                                {
-                                    name: "PORT",
-                                    value: "8080",
-                                },
-                            ],
+                                    {
+                                        name: "MAX_WORKERS",
+                                        value: "10",
+                                    },
+                                    {
+                                        name: "PORT",
+                                        value: "8080",
+                                    },
+                                ];
+
+                                // Add webhook secret if configured (for signature verification)
+                                if (webhookSecret) {
+                                    envVars.push({ name: "WEBHOOK_SECRET", value: webhookSecret as any });
+                                }
+
+                                return envVars;
+                            })(),
                             resources: {
                                 requests: {
                                     memory: "128Mi",

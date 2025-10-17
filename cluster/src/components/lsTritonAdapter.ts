@@ -38,6 +38,10 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         ];
         const nerLabelsFromConfig = cfgPulumi.getSecret("nerLabels");
 
+        // Docling integration configuration
+        const webhookSecret = cfgPulumi.getSecret("webhookSecret");
+        const tritonDoclingEnabled = cfgPulumi.get("tritonDoclingEnabled") || "false";
+
         // Prefer K8s Secret for NER_LABELS sourced from ESC; fallback to config/default env
         let nerLabelsSecret: k8s.core.v1.Secret | undefined;
         if (nerLabelsFromConfig) {
@@ -75,6 +79,9 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
             HF_DATASET_REPO_NER: (hfDatasetRepoNER || hfDatasetRepo) as any,
             TRAIN_HF_SECRET_NAME: "hf-credentials",
             TRAIN_HF_SECRET_KEY: "token",
+            // Docling integration
+            CSV_WORKER_WEBHOOK_URL: "http://csv-ingestion-worker.apps.svc.cluster.local:8080/webhook",
+            TRITON_DOCLING_ENABLED: tritonDoclingEnabled,
             ...toEnvVars(sentry),
         } as Record<string, pulumi.Input<string>>;
 
@@ -107,6 +114,29 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
         } else {
             // Fallback to config/default labels when Secret not provided
             envVars.push({ name: "NER_LABELS", value: (cfgPulumi.get("nerLabels") || JSON.stringify(defaultLabels)) } as any);
+        }
+
+        // Add S3 credentials from existing labelstudio-s3-credentials secret
+        envVars.push({
+            name: "AWS_ACCESS_KEY_ID",
+            valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_ACCESS_KEY_ID" } },
+        } as any);
+        envVars.push({
+            name: "AWS_SECRET_ACCESS_KEY",
+            valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_SECRET_ACCESS_KEY" } },
+        } as any);
+        envVars.push({
+            name: "AWS_REGION",
+            valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_S3_REGION_NAME" } },
+        } as any);
+        envVars.push({
+            name: "S3_BUCKET",
+            valueFrom: { secretKeyRef: { name: "labelstudio-s3-credentials", key: "AWS_STORAGE_BUCKET_NAME" } },
+        } as any);
+
+        // Add webhook secret from ESC if configured
+        if (webhookSecret) {
+            envVars.push({ name: "WEBHOOK_SECRET", value: webhookSecret as any });
         }
 
         // ServiceAccount and RBAC to allow Job creation

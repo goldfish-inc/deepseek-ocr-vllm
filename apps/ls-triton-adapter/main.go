@@ -11,9 +11,13 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/sugarme/tokenizer"
 	"github.com/sugarme/tokenizer/pretrained"
 	batchv1 "k8s.io/api/batch/v1"
@@ -48,6 +52,11 @@ type Config struct {
 	HFSecretName          string
 	HFSecretKey           string
 	TritonModelName       string
+	// S3 and webhook configuration for Docling integration
+	S3Bucket             string
+	WebhookSecret        string
+	CSVWorkerWebhookURL  string
+	TritonDoclingEnabled bool
 }
 
 // Global BERT tokenizer (initialized at startup)
@@ -55,6 +64,12 @@ var bertTokenizer *tokenizer.Tokenizer
 
 // Global document extraction client (initialized at startup)
 var docExtractionClient *DocumentExtractionClient
+
+// Global S3 client for Docling table uploads (initialized if S3_BUCKET configured)
+var s3Client *s3.Client
+
+// Global Triton Docling client (initialized if TRITON_DOCLING_ENABLED=true)
+var tritonDoclingClient *TritonDoclingClient
 
 func initTokenizer() error {
 	bertTokenizer = pretrained.BertBaseUncased()
@@ -118,6 +133,11 @@ func loadConfig() *Config {
 		HFSecretName:          getEnv("TRAIN_HF_SECRET_NAME", ""),
 		HFSecretKey:           getEnv("TRAIN_HF_SECRET_KEY", "token"),
 		TritonModelName:       getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
+		// S3 and webhook configuration for Docling integration
+		S3Bucket:             getEnv("S3_BUCKET", ""),
+		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
+		CSVWorkerWebhookURL:  getEnv("CSV_WORKER_WEBHOOK_URL", "http://csv-ingestion-worker:8080/webhook"),
+		TritonDoclingEnabled: getEnvBool("TRITON_DOCLING_ENABLED", false),
 	}
 }
 
@@ -152,11 +172,14 @@ type PredictRequest struct {
 	Text        string                 `json:"text,omitempty"`
 	PDFBase64   string                 `json:"pdf_base64,omitempty"`
 	ImageBase64 string                 `json:"image_base64,omitempty"`
-	DocType     string                 `json:"doc_type,omitempty"` // pdf, image, csv, xlsx, etc.
+	FileUpload  string                 `json:"file_upload,omitempty"` // S3 URL for PDF/image files
+	DocType     string                 `json:"doc_type,omitempty"`    // pdf, image, csv, xlsx, etc.
 	FileName    string                 `json:"file_name,omitempty"`
 	Prompt      string                 `json:"prompt,omitempty"`
 	Model       string                 `json:"model,omitempty"`
 	Task        string                 `json:"task,omitempty"`
+	TaskID      int64                  `json:"task_id,omitempty"`    // Label Studio task ID
+	ProjectID   int64                  `json:"project_id,omitempty"` // Label Studio project ID
 	Inputs      map[string]interface{} `json:"inputs,omitempty"`
 }
 
@@ -260,6 +283,34 @@ func makeTritonRequest(cfg *Config, model string, inputs []TritonTensor) (*Trito
 	}
 
 	return &tritonResp, nil
+}
+
+// extractDocumentText extracts text from PDF/image using Triton Docling or HTTP extractor
+// Returns (text, error) with fallback pattern
+func extractDocumentText(cfg *Config, tritonDoclingClient *TritonDoclingClient, pdfBytes []byte, filename string) (string, error) {
+	// Try Triton Docling first if enabled
+	if cfg.TritonDoclingEnabled && tritonDoclingClient != nil {
+		log.Printf("Attempting Triton Docling extraction for %s", filename)
+		doclingResult, err := tritonDoclingClient.ExtractFromPDF(pdfBytes)
+		if err == nil {
+			log.Printf("Triton Docling extraction successful for %s (%d words)", filename, doclingResult.WordCount)
+			return doclingResult.Text, nil
+		}
+		log.Printf("Triton Docling extraction failed for %s: %v, falling back to HTTP extractor", filename, err)
+	}
+
+	// Fallback to HTTP document extraction service
+	if docExtractionClient == nil {
+		return "", fmt.Errorf("no extraction method available (Triton disabled and HTTP client nil)")
+	}
+
+	log.Printf("Using HTTP extractor for %s", filename)
+	result, err := docExtractionClient.ExtractFromBytes(pdfBytes, filename)
+	if err != nil {
+		return "", fmt.Errorf("HTTP extraction failed: %w", err)
+	}
+
+	return result.Text, nil
 }
 
 func predictHandler(cfg *Config) http.HandlerFunc {
@@ -690,10 +741,85 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 			data = task
 		}
 
-		// Extract text
-		text, ok := data["text"].(string)
-		if !ok {
-			http.Error(w, "No text field in task", http.StatusBadRequest)
+		// Extract text or file_upload
+		text, hasText := data["text"].(string)
+		fileUpload, hasFileUpload := data["file_upload"].(string)
+
+		// If no text but file_upload exists, extract from S3
+		if !hasText && hasFileUpload && strings.HasPrefix(fileUpload, "s3://") {
+			if s3Client == nil {
+				http.Error(w, "S3 client not configured", http.StatusServiceUnavailable)
+				return
+			}
+
+			// Parse S3 URL (s3://bucket/key)
+			s3URL := strings.TrimPrefix(fileUpload, "s3://")
+			parts := strings.SplitN(s3URL, "/", 2)
+			if len(parts) != 2 {
+				http.Error(w, "Invalid S3 URL format", http.StatusBadRequest)
+				return
+			}
+			bucket, key := parts[0], parts[1]
+
+			// Download PDF from S3
+			log.Printf("Downloading %s from S3 bucket %s", key, bucket)
+			getResp, err := s3Client.GetObject(r.Context(), &s3.GetObjectInput{
+				Bucket: aws.String(bucket),
+				Key:    aws.String(key),
+			})
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to download from S3: %v", err), http.StatusInternalServerError)
+				return
+			}
+			defer func() { _ = getResp.Body.Close() }()
+
+			pdfBytes, err := io.ReadAll(getResp.Body)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Failed to read S3 object: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			// Extract text from PDF using Triton Docling or HTTP extractor
+			filename := filepath.Base(key)
+			extractedText, err := extractDocumentText(cfg, tritonDoclingClient, pdfBytes, filename)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Document extraction failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			text = extractedText
+			log.Printf("Extracted %d chars from %s", len(text), filename)
+
+			// If Triton Docling extracted tables, upload to S3 and trigger webhook
+			if cfg.TritonDoclingEnabled && tritonDoclingClient != nil {
+				doclingResult, err := tritonDoclingClient.ExtractFromPDF(pdfBytes)
+				if err == nil && len(doclingResult.Tables) > 0 {
+					// Extract task ID and project ID from task data
+					taskID, _ := task["id"].(float64)
+					var projectID float64
+					if proj, ok := task["project"].(float64); ok {
+						projectID = proj
+					} else if projMap, ok := task["project"].(map[string]interface{}); ok {
+						if pid, ok := projMap["id"].(float64); ok {
+							projectID = pid
+						}
+					}
+
+					if taskID > 0 && projectID > 0 {
+						s3Keys, err := uploadDoclingTablesToS3(r.Context(), s3Client, bucket, int64(projectID), int64(taskID), doclingResult.Tables)
+						if err != nil {
+							log.Printf("Failed to upload Docling tables: %v", err)
+						} else {
+							// Trigger CSV worker webhook
+							if err := triggerCSVWorkerWebhook(cfg, int64(taskID), int64(projectID), s3Keys); err != nil {
+								log.Printf("Failed to trigger CSV worker webhook: %v", err)
+							}
+						}
+					}
+				}
+			}
+		} else if !hasText {
+			http.Error(w, "No text or file_upload field in task", http.StatusBadRequest)
 			return
 		}
 
@@ -972,6 +1098,25 @@ func main() {
 	// Initialize document extraction client
 	if err := initDocumentExtraction(cfg); err != nil {
 		log.Fatalf("Document extraction initialization failed: %v", err)
+	}
+
+	// Initialize S3 client if bucket configured
+	if cfg.S3Bucket != "" {
+		awsCfg, err := config.LoadDefaultConfig(context.Background())
+		if err != nil {
+			log.Printf("WARNING: Failed to load AWS config: %v (S3 uploads disabled)", err)
+		} else {
+			s3Client = s3.NewFromConfig(awsCfg)
+			log.Printf("S3 client initialized for bucket: %s", cfg.S3Bucket)
+		}
+	}
+
+	// Initialize Triton Docling client if enabled
+	if cfg.TritonDoclingEnabled {
+		tritonDoclingClient = NewTritonDoclingClient(cfg)
+		log.Printf("Triton Docling client initialized (enabled)")
+	} else {
+		log.Printf("Triton Docling extraction disabled (using HTTP extractor)")
 	}
 
 	mux := http.NewServeMux()

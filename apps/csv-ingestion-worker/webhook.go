@@ -172,10 +172,11 @@ func (w *Worker) extractTaskData(payload WebhookPayload) (*TaskData, error) {
 	fileName := ""
 
 	// Check common field names for CSV file URL
-	for _, field := range []string{"csv", "file", "csv_url", "file_url", "document_url"} {
+	// file_upload is used by triton-docling adapter for extracted tables
+	for _, field := range []string{"csv", "file", "csv_url", "file_url", "file_upload", "document_url"} {
 		if url, ok := data[field].(string); ok && url != "" {
 			fileURL = url
-			// Extract filename from URL
+			// Extract filename from URL (works for both HTTP and S3 URLs)
 			parts := strings.Split(url, "/")
 			if len(parts) > 0 {
 				fileName = parts[len(parts)-1]
