@@ -74,6 +74,11 @@ deploy-calypso:
 smoke:
 	bash scripts/smoke.sh
 
+# NER training + ONNX export smoke
+.PHONY: smoke-ner
+smoke-ner:
+	bash scripts/smoke_ner.sh
+
 # Database (CrunchyBridge or any Postgres)
 .PHONY: db:migrate db:psql db:status
 

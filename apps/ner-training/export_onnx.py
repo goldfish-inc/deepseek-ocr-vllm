@@ -60,19 +60,34 @@ def export_to_onnx(model_path: str, output_path: str, opset_version: int = 14):
 
     onnx_path = output_dir / "model.onnx"
 
-    # Export to ONNX
+    # Export to ONNX (try modern exporter, fallback to legacy if unsupported)
     with torch.no_grad():
-        torch.onnx.export(
-            model,
-            (dummy_input["input_ids"], dummy_input["attention_mask"]),
-            str(onnx_path),
-            input_names=input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-            opset_version=opset_version,
-            do_constant_folding=True,
-            export_params=True
-        )
+        try:
+            torch.onnx.export(
+                model,
+                (dummy_input["input_ids"], dummy_input["attention_mask"]),
+                str(onnx_path),
+                input_names=input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                opset_version=opset_version,
+                do_constant_folding=True,
+                export_params=True,
+                dynamo=True,
+            )
+        except Exception as e:
+            logger.warning(f"Modern ONNX export failed (dynamo=True): {e}. Falling back to legacy exporter.")
+            torch.onnx.export(
+                model,
+                (dummy_input["input_ids"], dummy_input["attention_mask"]),
+                str(onnx_path),
+                input_names=input_names,
+                output_names=output_names,
+                dynamic_axes=dynamic_axes,
+                opset_version=opset_version,
+                do_constant_folding=True,
+                export_params=True,
+            )
 
     # Save tokenizer and config
     tokenizer.save_pretrained(output_dir)

@@ -1,7 +1,4 @@
-# Modern pinned versions (October 2025 audit) - for ONNX export scripts
-transformers==4.56.1
-datasets==3.1.0
-optimum[exporters]==1.21.0
-onnxruntime==1.19.0
-huggingface_hub==0.34.0
-requests==2.32.4
+# Minimal runtime deps for CI scripts that touch HF Hub or light data handling
+# Keep this lean to avoid heavy resolver/runtime cost in non-ML jobs.
+huggingface_hub>=0.34,<1.0
+requests>=2.32,<3

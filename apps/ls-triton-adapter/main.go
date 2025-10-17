@@ -314,7 +314,8 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 
 		// Default model and task
 		if req.Model == "" {
-			req.Model = cfg.DefaultModel
+			// Use the Triton model name by default (actual deployed model repository)
+			req.Model = cfg.TritonModelName
 		}
 		if req.Task == "" {
 			req.Task = "ner"
@@ -833,8 +834,8 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 			},
 		}
 
-		// Call Triton
-		tritonResp, err := makeTritonRequest(cfg, cfg.DefaultModel, inputs)
+		// Call Triton using the configured Triton model repository name
+		tritonResp, err := makeTritonRequest(cfg, cfg.TritonModelName, inputs)
 		if err != nil {
 			log.Printf("Triton inference failed: %v", err)
 			writeError(w, http.StatusBadGateway, "triton_inference_failed", "Triton inference failed; see adapter logs")
@@ -885,8 +886,9 @@ func setupHandler(cfg *Config) http.HandlerFunc {
 			"model_version": "oceanid-ner-v1",
 			"hostname":      "ls-triton-adapter",
 			"status":        "ready",
-			"model_name":    cfg.DefaultModel,
-			"labels":        cfg.NERLabels,
+			// Advertise the Triton model repository name to Label Studio for clarity
+			"model_name": cfg.TritonModelName,
+			"labels":     cfg.NERLabels,
 		}
 		if err := json.NewEncoder(w).Encode(setup); err != nil {
 			log.Printf("Failed to encode setup response: %v", err)

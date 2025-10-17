@@ -2,14 +2,15 @@
 # Previous model (ner-distilbert @ 2025-10-16) trained with: torch 2.x, transformers 4.53.0
 torch==2.8.0
 transformers==4.56.1
+tokenizers>=0.22,<0.24  # Required by Transformers 4.56.x
 datasets==3.1.0
 seqeval==1.2.2
 onnx==1.18.0
 onnxruntime==1.19.0
-onnxruntime-gpu==1.19.0  # For CUDA 12.4 acceleration
+onnxruntime-gpu==1.19.0; platform_system == 'Linux' and platform_machine == 'x86_64'  # CUDA 12.x on Linux
+onnxscript>=0.1.0  # Required by PyTorch ONNX dynamo exporter
 numpy==2.2.6  # Compatible with torch 2.4
 scikit-learn==1.7.2  # Required by seqeval
-accelerate==0.33.0  # For mixed precision training
+accelerate==1.10.1  # NumPy 2.x compatible
 pyyaml==6.0.2  # For field mapping configuration
-huggingface_hub==0.24.3  # Model downloads and caching
-optimum[exporters]==1.21.0  # ONNX export utilities
+huggingface_hub>=0.34,<1.0  # Required by transformers 4.56.x

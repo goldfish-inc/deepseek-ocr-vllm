@@ -1,0 +1,51 @@
+name: Seed Modernization Backlog
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Seed issues from manifest
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const manifestPath = path.join(process.cwd(), '.github/issue-manifest.json');
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+            async function findIssueByTitle(title) {
+              // Search both open and closed (first pages)
+              const open = await github.rest.issues.listForRepo({owner, repo, state: 'open', per_page: 100});
+              const closed = await github.rest.issues.listForRepo({owner, repo, state: 'closed', per_page: 100});
+              return [...open.data, ...closed.data].find(i => i.title === title);
+            }
+
+            async function ensureIssue(title, body, labels) {
+              const existing = await findIssueByTitle(title);
+              if (existing) { core.info(`Exists: #${existing.number} ${title}`); return existing; }
+              const res = await github.rest.issues.create({owner, repo, title, body, labels});
+              core.info(`Created: #${res.data.number} ${title}`);
+              return res.data;
+            }
+
+            for (const epic of manifest.epics) {
+              const epicIssue = await ensureIssue(epic.title, epic.body, epic.labels || []);
+              for (const it of epic.issues || []) {
+                const body = `Epic: #${epicIssue.number}\n\n${it.body || ''}`;
+                await ensureIssue(it.title, body, (it.labels || []).concat(['modernization']));
+              }
+            }
+
+            core.notice('Backlog seeding complete.');

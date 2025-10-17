@@ -107,7 +107,7 @@ def main():
         per_device_eval_batch_size=8,
         learning_rate=5e-5,
         num_train_epochs=args.epochs,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_steps=50,
         report_to=[],

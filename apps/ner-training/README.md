@@ -41,16 +41,29 @@ python train_ner.py --train data/synthetic_train.jsonl --val data/synthetic_val.
 
 **Field Mapping**: See `field_mapping.yaml` for vessel field → entity label mapping
 
-## Setup
+## Setup (Conda/Mamba)
+
+Use a dedicated Python 3.11 environment with conda/mamba and install pinned deps via pip.
 
 ```bash
-# Create conda environment
-conda create -n ner-training python=3.10
-conda activate ner-training
+# Recommended (fast): mamba
+mamba env create -f environment.yml  # name: oceanid-ner-py311
+conda activate oceanid-ner-py311
 
-# Install dependencies
-pip install -r requirements.txt
+# Or with conda
+conda env create -f environment.yml
+conda activate oceanid-ner-py311
+
+# Verify package versions
+python - <<'PY'
+from transformers import TrainingArguments
+print('Transformers TrainingArguments OK:', TrainingArguments(output_dir='tmp', evaluation_strategy='no'))
+PY
 ```
+
+Notes:
+- Environment is managed by conda; packages are pinned and installed via pip from `requirements.txt`.
+- If you prefer micromamba, run: `micromamba create -f environment.yml`.
 
 ## Training from Real Annotations
 

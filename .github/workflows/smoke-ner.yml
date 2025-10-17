@@ -1,0 +1,69 @@
+name: NER Smoke Tests
+
+on:
+  pull_request:
+    paths:
+      - 'apps/ner-training/**'
+      - 'scripts/smoke_ner.sh'
+      - 'Makefile'
+  push:
+    branches: [ main ]
+    paths:
+      - 'apps/ner-training/**'
+      - 'scripts/smoke_ner.sh'
+      - 'Makefile'
+  workflow_dispatch: {}
+
+jobs:
+  cpu:
+    name: CPU smoke (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: 'latest'
+          init-shell: bash
+          cache-downloads: true
+          cache-environment: false
+
+      - name: Run smoke
+        env:
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          bash scripts/smoke_ner.sh
+
+  # GPU smoke is optional and gated. Provide a self-hosted GPU runner
+  # with labels: [self-hosted, linux, x64, gpu] and set repository
+  # variable ENABLE_GPU_SMOKE=true to enable this job.
+  gpu:
+    if: ${{ vars.ENABLE_GPU_SMOKE == 'true' }}
+    name: GPU smoke (Self-hosted)
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: 'latest'
+          init-shell: bash
+          cache-downloads: true
+          cache-environment: false
+
+      - name: Verify GPU
+        run: |
+          nvidia-smi || (echo 'nvidia-smi not found' && exit 1)
+
+      - name: Run smoke
+        env:
+          TOKENIZERS_PARALLELISM: 'false'
+          CUDA_VISIBLE_DEVICES: '0'
+        run: |
+          bash scripts/smoke_ner.sh

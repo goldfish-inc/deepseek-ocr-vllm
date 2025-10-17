@@ -92,7 +92,17 @@
       "Bash(git reset:*)",
       "Bash(docker buildx:*)",
       "Bash(gh run view:*)",
-      "Bash(pulumi stack:*)"
+      "Bash(pulumi stack:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh label:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(docker run:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(git pull:*)",
+      "Bash(gh workflow run:*)"
     ],
     "deny": [],
     "ask": []

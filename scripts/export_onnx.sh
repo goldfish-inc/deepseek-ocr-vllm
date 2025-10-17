@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 3 ]; then
-  echo "Usage: $0 <hf-or-local-model-dir> <out-dir> <num-labels>"
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <hf-or-local-model-dir> <out-dir> [opset=14]"
   exit 1
 fi
 
 MODEL_DIR="$1"
 OUT_DIR="$2"
-NUM_LABELS="$3"
-
-python -m pip install --upgrade pip >/dev/null 2>&1 || true
-python -m pip install "optimum[exporters]" onnxruntime >/dev/null 2>&1 || true
+OPSET="${3:-14}"
 
 mkdir -p "$OUT_DIR"
-optimum-cli export onnx --model "$MODEL_DIR" \
-  --task token-classification \
-  --num_labels "$NUM_LABELS" \
-  "$OUT_DIR"
 
-echo "ONNX exported to $OUT_DIR"
+# Prefer project export script (torch.onnx) over Optimum
+if [ -f "apps/ner-training/export_onnx.py" ]; then
+  python apps/ner-training/export_onnx.py \
+    --model "$MODEL_DIR" \
+    --output "$OUT_DIR" \
+    --opset "$OPSET"
+  echo "ONNX exported to $OUT_DIR"
+  exit 0
+fi
+
+echo "Project exporter not found at apps/ner-training/export_onnx.py" >&2
+echo "Please run from repository root or call the exporter directly." >&2
+exit 1

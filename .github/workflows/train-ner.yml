@@ -24,11 +24,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v1
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          micromamba-version: 'latest'
+          init-shell: bash
+          cache-downloads: true
+          cache-environment: false
 
       - name: Authenticate to Pulumi Cloud (OIDC)
         uses: pulumi/auth-actions@v1
@@ -64,17 +66,17 @@ jobs:
           echo "HF_DATASET_REPO=$HF_DATASET_REPO" >> "$GITHUB_ENV"
           echo "HF_MODEL_REPO=$HF_MODEL_REPO" >> "$GITHUB_ENV"
 
-      - name: Install deps
+      - name: Create env
         run: |
-          python -m pip install --upgrade pip
-          pip install -r scripts/requirements-ner.txt
+          micromamba env create -f apps/ner-training/environment.yml -y
+          micromamba run -n oceanid-ner-py311 python -c "import transformers, torch; print('TF', transformers.__version__, 'Torch', torch.__version__)"
 
       - name: Fetch HF dataset annotations
         env:
           HF_TOKEN: ${{ env.HF_TOKEN }}
           HF_DATASET_REPO: ${{ env.HF_DATASET_REPO }}
         run: |
-          python - << 'PY'
+          micromamba run -n oceanid-ner-py311 python - << 'PY'
           import os, json, pathlib
           from huggingface_hub import HfApi, hf_hub_download, list_repo_files
           HF_TOKEN=os.environ['HF_TOKEN']
@@ -137,12 +139,19 @@ jobs:
           PY
 
       - name: Train NER
+        env:
+          TOKENIZERS_PARALLELISM: 'false'
         run: |
-          python scripts/ner_train.py --labels labels.json --data-dir ./local_annotations --out ./models/ner-distilbert
+          micromamba run -n oceanid-ner-py311 python scripts/ner_train.py --labels labels.json --data-dir ./local_annotations --out ./models/ner-distilbert
 
-      - name: Export ONNX
+      - name: Export ONNX (opset 14)
+        env:
+          TOKENIZERS_PARALLELISM: 'false'
         run: |
-          bash scripts/export_onnx.sh ./models/ner-distilbert distilbert_onnx 63
+          micromamba run -n oceanid-ner-py311 python apps/ner-training/export_onnx.py \
+            --model ./models/ner-distilbert \
+            --output ./distilbert_onnx \
+            --opset 14
 
       - name: Check ONNX size and report
         run: |
@@ -177,7 +186,7 @@ jobs:
           ONNX_BYTES: ${{ env.ONNX_BYTES }}
           METRICS_PATH: ${{ env.METRICS_PATH }}
         run: |
-          python - << 'PY'
+          micromamba run -n oceanid-ner-py311 python - << 'PY'
           import os, io, json
           from datetime import datetime
           from huggingface_hub import HfApi, CommitOperationAdd
@@ -202,7 +211,7 @@ jobs:
           HF_TOKEN: ${{ env.HF_TOKEN }}
           HF_MODEL_REPO: ${{ env.HF_MODEL_REPO }}
         run: |
-          python - << 'PY'
+          micromamba run -n oceanid-ner-py311 python - << 'PY'
           import os, io
           from datetime import datetime
           from huggingface_hub import HfApi, CommitOperationAdd

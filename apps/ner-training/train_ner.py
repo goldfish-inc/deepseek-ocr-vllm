@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from transformers import (
     DistilBertForTokenClassification,
     DistilBertTokenizerFast,
@@ -23,7 +23,6 @@ from transformers import (
     TrainingArguments,
     DataCollatorForTokenClassification,
 )
-from datasets import load_dataset
 import numpy as np
 from seqeval.metrics import classification_report, f1_score
 
