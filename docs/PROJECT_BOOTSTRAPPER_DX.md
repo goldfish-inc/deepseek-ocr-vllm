@@ -74,6 +74,19 @@ slog.SetDefault(logger)
 ```
 
 **Benefit**: Logs are now machine-parseable, show actual API responses, and can be filtered by level.
+They also emit per-project status (`project webhooks configured`) and poll summaries with counts of configured / already-configured / failed projects, making it obvious when new hooks are added.
+
+### 4. Automated image publishing
+
+We now ship the image push + ESC update directly from CI. The workflow in `.github/workflows/build-project-bootstrapper.yml` runs on every push that touches `apps/project-bootstrapper/**` and:
+
+1. Builds `ghcr.io/goldfish-inc/oceanid/project-bootstrapper:${GITHUB_SHA}` (linux/amd64).
+2. Pushes it to GHCR.
+3. Authenticates to Pulumi ESC via OIDC.
+4. Updates `pulumiConfig.oceanid-cluster:bootstrapperImage` so Pulumi picks up the new tag on the next deploy.
+
+Deployment remains manual (`pnpm --filter @oceanid/cluster deploy` when you are ready), but nobody has to copy/paste image tags into ESC anymore.
+
 
 ## Usage
 
