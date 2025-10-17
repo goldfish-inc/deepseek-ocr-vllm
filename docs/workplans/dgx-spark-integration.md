@@ -1,7 +1,7 @@
 # DGX Spark Integration Plan
 
 **Equipment:** NVIDIA DGX Spark (multi-GPU, 4 TB RAM)
-**Purpose:** Establish a reproducible path to bring the DGX online for Oceanid training and batch inference workloads.
+**Purpose:** Capture everything we need so when the DGX shows up we can rack it, join the tailnet, and fold it into Oceanid without guesswork. for Oceanid training and batch inference workloads.
 **Audience:** ML Platform • DevOps • Data Engineering
 **Last updated:** 2025‑10‑16
 
@@ -20,7 +20,7 @@
 
 | Phase | Goal | Key Outcomes |
 |-------|------|--------------|
-| Week 0 | Arrival & rack-ready | Rack space, power, networking validated |
+| Prep | Before hardware arrives | Rack space, power, networking validated |
 | Week 1 | Base OS & drivers | DGX OS/Ubuntu, NVIDIA DGX stack, CUDA, Triton-compatible driver |
 | Week 2 | Tailscale + storage | DGX joined to tailnet, S3/CrunchyBridge access tested, dataset cache provisioned |
 | Week 3 | Container toolchain | Buildx/podman/conda alternatives established, image registry access confirmed |
