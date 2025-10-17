@@ -75,6 +75,26 @@ Workflows:
 - `database-migrations.yml` pulls DB URL from ESC and applies SQL migrations V3–V6; ensures extensions `pgcrypto`, `postgis`, `btree_gist`. Skips gracefully if DB URL not set.
 - Check connector health in Cloudflare Zero Trust → Tunnels.
 
+### Hugging Face cache on Calypso
+
+Calypso’s 2 TB NVMe is mounted at `/mnt/nvme`. Run the helper script once to point Hugging Face tooling at the fast cache and silence the deprecated `TRANSFORMERS_CACHE` warning:
+
+```bash
+ssh calypso
+./scripts/configure-hf-cache.sh /mnt/nvme/hf-cache
+source /etc/profile.d/huggingface.sh
+```
+
+This writes `/etc/profile.d/huggingface.sh` with:
+
+```bash
+export HF_HOME=/mnt/nvme/hf-cache
+export HF_HUB_CACHE=${HF_HOME}/hub
+export HUGGINGFACE_HUB_CACHE=${HF_HOME}/hub
+```
+
+From now on, every shell and service on Calypso uses the NVMe cache automatically.
+
 ## Access Controls
 
 - GPU endpoint `gpu.<base>` is protected by a Cloudflare Zero Trust Access application that only allows a service token issued to the in-cluster adapter. The adapter is provisioned with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` automatically.
