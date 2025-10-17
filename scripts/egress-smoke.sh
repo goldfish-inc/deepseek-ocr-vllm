@@ -27,8 +27,9 @@ echo "== Project Bootstrapper env check (proxy vars present) =="
 kubectl -n apps exec deploy/project-bootstrapper -- env | grep -E 'HTTP_PROXY|NO_PROXY' || true
 
 echo "== CSV Worker DB connectivity via proxy (optional) =="
-if kubectl -n apps get pod -l app=csv-ingestion-worker -o name >/dev/null 2>&1; then
-  kubectl -n apps exec deploy/csv-ingestion-worker -- sh -lc 'apk add -q busybox-extras || true; nc -vz egress-db-proxy.apps.svc.cluster.local 5432'
+CSV_DEPLOY=$(kubectl -n apps get deploy -l app=csv-ingestion-worker -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [[ -n "${CSV_DEPLOY}" ]]; then
+  kubectl -n apps exec "deploy/${CSV_DEPLOY}" -- sh -lc 'apk add -q busybox-extras || true; nc -vz egress-db-proxy.apps.svc.cluster.local 5432'
 fi
 
 echo "== Gateway logs tail (5 lines) =="

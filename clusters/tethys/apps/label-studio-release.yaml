@@ -49,6 +49,7 @@ spec:
         DJANGO_ALLOWED_HOSTS: "label.boathou.se"
         LABEL_STUDIO_HOST: "https://label.boathou.se"
         APP_HOST: "127.0.0.1"  # Force nginx to use IPv4 upstream
+        DISABLE_SIGNUP_WITH_EMAIL: "true"
       persistence:
         enabled: true
         type: s3

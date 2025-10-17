@@ -3,9 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -41,6 +41,13 @@ type Webhook struct {
 	URL         string   `json:"url"`
 	Events      []string `json:"events"`
 	SendPayload bool     `json:"send_payload"`
+}
+
+type ProjectSyncStats struct {
+	Total             int
+	Configured        int
+	AlreadyConfigured int
+	Failed            int
 }
 
 var (
@@ -161,7 +168,14 @@ func doRequest(method, url string, headers map[string]string, body []byte) (int,
 			lastErr = err
 			if attempt < maxAttempts {
 				delay := time.Duration(1<<uint(attempt-1)) * time.Second
-				log.Printf("⚠️  HTTP %s %s failed (attempt %d/%d): %v – retrying in %s", method, url, attempt, maxAttempts, err, delay)
+				slog.Warn("http request attempt failed",
+					"method", method,
+					"url", url,
+					"attempt", attempt,
+					"max_attempts", maxAttempts,
+					"error", err,
+					"retry_in", delay,
+				)
 				time.Sleep(delay)
 				continue
 			}
@@ -184,7 +198,14 @@ func doRequest(method, url string, headers map[string]string, body []byte) (int,
 
 		if attempt < maxAttempts {
 			delay := time.Duration(1<<uint(attempt-1)) * time.Second
-			log.Printf("⚠️  HTTP %s %s attempt %d/%d failed: %v – retrying in %s", method, url, attempt, maxAttempts, lastErr, delay)
+			slog.Warn("http request retry scheduled",
+				"method", method,
+				"url", url,
+				"attempt", attempt,
+				"max_attempts", maxAttempts,
+				"error", lastErr,
+				"retry_in", delay,
+			)
 			time.Sleep(delay)
 		}
 	}
@@ -285,11 +306,11 @@ func hasWebhookURL(webhooks []Webhook, targetURL string) bool {
 }
 
 // configureProjectWebhooks registers TASK and ANNOTATION webhooks for a project
-func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
+func configureProjectWebhooks(cfg *Config, token string, projectID int) (bool, error) {
 	// Fetch existing webhooks
 	webhooks, err := fetchProjectWebhooks(cfg, token, projectID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch webhooks: %v", err)
+		return false, fmt.Errorf("failed to fetch webhooks: %v", err)
 	}
 
 	headers := map[string]string{
@@ -299,6 +320,8 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 
 	// Label Studio creates webhooks at /api/webhooks/ with project in body
 	webhookURL := fmt.Sprintf("%s/api/webhooks/", strings.TrimSuffix(cfg.LabelStudioURL, "/"))
+
+	registered := false
 
 	// Register TASK webhook if missing
 	if cfg.SinkIngestURL != "" && !hasWebhookURL(webhooks, cfg.SinkIngestURL) {
@@ -311,7 +334,12 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 		body, _ := json.Marshal(payload)
 		status, respBody, err := doRequest("POST", webhookURL, headers, body)
 		if err == nil && (status == 200 || status == 201) {
-			log.Printf("✅ Project %d: Registered TASK webhook → %s", projectID, cfg.SinkIngestURL)
+			registered = true
+			slog.Info("task webhook registered",
+				"project_id", projectID,
+				"target_url", cfg.SinkIngestURL,
+				"status", status,
+			)
 		} else {
 			slog.Error("TASK webhook registration failed",
 				"project_id", projectID,
@@ -321,7 +349,7 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 				"response_body", string(respBody),
 				"error", err,
 			)
-			return fmt.Errorf("TASK webhook registration failed: %d", status)
+			return false, fmt.Errorf("TASK webhook registration failed: %d", status)
 		}
 	}
 
@@ -336,7 +364,12 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 		body, _ := json.Marshal(payload)
 		status, respBody, err := doRequest("POST", webhookURL, headers, body)
 		if err == nil && (status == 200 || status == 201) {
-			log.Printf("✅ Project %d: Registered ANNOTATION webhook → %s", projectID, cfg.SinkWebhookURL)
+			registered = true
+			slog.Info("annotation webhook registered",
+				"project_id", projectID,
+				"target_url", cfg.SinkWebhookURL,
+				"status", status,
+			)
 		} else {
 			slog.Error("ANNOTATION webhook registration failed",
 				"project_id", projectID,
@@ -346,31 +379,66 @@ func configureProjectWebhooks(cfg *Config, token string, projectID int) error {
 				"response_body", string(respBody),
 				"error", err,
 			)
-			return fmt.Errorf("ANNOTATION webhook registration failed: %d", status)
+			return false, fmt.Errorf("ANNOTATION webhook registration failed: %d", status)
 		}
 	}
 
-	return nil
+	return registered, nil
 }
 
-// configureAllProjects configures webhooks for all existing projects
-func configureAllProjects(cfg *Config, token string) error {
+// configureAllProjects configures webhooks for all existing projects and returns sync statistics.
+func configureAllProjects(cfg *Config, token string) (ProjectSyncStats, error) {
+	var stats ProjectSyncStats
+	var errs []error
+
 	projects, err := fetchProjects(cfg, token)
 	if err != nil {
-		return fmt.Errorf("failed to fetch projects: %v", err)
+		return stats, fmt.Errorf("failed to fetch projects: %v", err)
 	}
+	stats.Total = len(projects)
 
-	log.Printf("📋 Found %d projects to configure", len(projects))
+	slog.Debug("project scan started", "projects_total", stats.Total)
 
 	for _, project := range projects {
-		if err := configureProjectWebhooks(cfg, token, project.ID); err != nil {
-			log.Printf("⚠️  Project %d (%s): Configuration failed: %v", project.ID, project.Title, err)
+		changed, cfgErr := configureProjectWebhooks(cfg, token, project.ID)
+		if cfgErr != nil {
+			stats.Failed++
+			errs = append(errs, fmt.Errorf("project %d: %w", project.ID, cfgErr))
+			slog.Warn("project configuration failed",
+				"project_id", project.ID,
+				"project_title", project.Title,
+				"error", cfgErr,
+			)
 			continue
 		}
-		log.Printf("✅ Project %d (%s): Configuration complete", project.ID, project.Title)
+		if changed {
+			stats.Configured++
+			slog.Info("project webhooks configured",
+				"project_id", project.ID,
+				"project_title", project.Title,
+			)
+		} else {
+			stats.AlreadyConfigured++
+		}
 	}
 
-	return nil
+	if stats.Configured == 0 && stats.Failed == 0 {
+		slog.Debug("project scan summary",
+			"projects_total", stats.Total,
+			"projects_configured", stats.Configured,
+			"projects_already_configured", stats.AlreadyConfigured,
+			"projects_failed", stats.Failed,
+		)
+	} else {
+		slog.Info("project scan summary",
+			"projects_total", stats.Total,
+			"projects_configured", stats.Configured,
+			"projects_already_configured", stats.AlreadyConfigured,
+			"projects_failed", stats.Failed,
+		)
+	}
+
+	return stats, errors.Join(errs...)
 }
 
 // WebhookEvent represents a Label Studio webhook event (kept for backward compatibility)
@@ -497,8 +565,11 @@ func createProjectHandler(cfg *Config) http.HandlerFunc {
 		}
 
 		// Configure webhooks for the new project
-		if err := configureProjectWebhooks(cfg, token, projectID); err != nil {
-			log.Printf("⚠️  Failed to configure webhooks for project %d: %v", projectID, err)
+		if _, err := configureProjectWebhooks(cfg, token, projectID); err != nil {
+			slog.Warn("post-create webhook configuration failed",
+				"project_id", projectID,
+				"error", err,
+			)
 		}
 
 		// Return response
@@ -564,13 +635,14 @@ func main() {
 
 	// Validate required configuration
 	if cfg.LabelStudioURL == "" {
-		log.Fatal("❌ FATAL: LS_URL environment variable is required")
+		slog.Error("missing required environment variable", "var", "LS_URL")
+		os.Exit(1)
 	}
 	if cfg.LabelStudioPAT == "" {
-		log.Fatal("❌ FATAL: LS_PAT environment variable is required")
+		slog.Error("missing required environment variable", "var", "LS_PAT")
+		os.Exit(1)
 	}
-	// S3 credentials are optional for initial startup (may not be configured until Label Studio is set up)
-	log.Printf("✅ Configuration validated: LS_URL=%s", cfg.LabelStudioURL)
+	slog.Info("configuration validated", "label_studio_url", cfg.LabelStudioURL)
 
 	// Configure webhooks on startup with retry logic
 	go func() {
@@ -584,7 +656,10 @@ func main() {
 			attempt++
 			token, err := getAccessToken(cfg)
 			if err != nil {
-				log.Printf("⚠️  Startup config attempt %d: Failed to get access token: %v", attempt, err)
+				slog.Warn("startup configuration attempt failed to get access token",
+					"attempt", attempt,
+					"error", err,
+				)
 				backoff := time.Duration(attempt) * retryDelay
 				if backoff > maxBackoff {
 					backoff = maxBackoff
@@ -593,8 +668,12 @@ func main() {
 				continue
 			}
 
-			if err := configureAllProjects(cfg, token); err != nil {
-				log.Printf("⚠️  Startup config attempt %d: Failed to configure projects: %v", attempt, err)
+			if stats, err := configureAllProjects(cfg, token); err != nil {
+				slog.Warn("startup configuration attempt failed",
+					"attempt", attempt,
+					"error", err,
+					"stats", stats,
+				)
 				backoff := time.Duration(attempt) * retryDelay
 				if backoff > maxBackoff {
 					backoff = maxBackoff
@@ -603,28 +682,31 @@ func main() {
 				continue
 			}
 
-			log.Printf("✅ Startup configuration complete on attempt %d", attempt)
+			slog.Info("startup configuration complete", "attempt", attempt)
 			break // Exit retry loop, continue to polling
 		}
 
 		// Start polling loop for new projects
-		log.Printf("🔄 Starting polling loop (interval: %s)", cfg.PollInterval)
+		slog.Info("polling loop started", "interval", cfg.PollInterval)
 		ticker := time.NewTicker(cfg.PollInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			token, err := getAccessToken(cfg)
 			if err != nil {
-				log.Printf("⚠️  Poll: Failed to get access token: %v", err)
+				slog.Warn("poll: failed to get access token", "error", err)
 				continue
 			}
 
-			if err := configureAllProjects(cfg, token); err != nil {
-				log.Printf("⚠️  Poll: Failed to configure projects: %v", err)
+			if stats, err := configureAllProjects(cfg, token); err != nil {
+				slog.Warn("poll: project configuration completed with errors",
+					"error", err,
+					"stats", stats,
+				)
 				continue
 			}
 
-			log.Printf("🔄 Poll complete")
+			slog.Debug("poll cycle complete")
 		}
 	}()
 
@@ -644,8 +726,9 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 	}
 
-	log.Printf("Starting project-bootstrapper on %s", cfg.ListenAddr)
+	slog.Info("project-bootstrapper starting", "listen_addr", cfg.ListenAddr)
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		slog.Error("server exited", "error", err)
+		os.Exit(1)
 	}
 }
