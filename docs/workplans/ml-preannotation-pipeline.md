@@ -69,13 +69,13 @@ flowchart LR
 
 ## 4. Critical Questions (Phase 0 – Discovery)
 
-| Area | Question | Owner | Notes |
-|------|----------|-------|-------|
-| Adapter | Does `ls-triton-adapter` already support pre-annotation endpoints? | ML Platform | Review repo & deployment configuration |
-| Label Studio | Which API is best for bulk task creation with predictions? | Platform | LS `/api/tasks/bulk/` with `predictions` payload? |
-| Data schema | How do we represent model predictions vs SME edits in Cleandata? | Data Eng | Need consistent lineage (prediction_id, annotated_by, etc.) |
-| PDFs | Do we always run Docling first, or only when certain formats detected? | ML Platform | Determine heuristics for PDF vs image |
-| Infra | Where should new worker run? (existing namespace, new deployment) | DevOps | Possibly reuse apps namespace |
+| Area | Key question | Notes |
+|------|---------------|-------|
+| Adapter | Does `ls-triton-adapter` already support pre-annotation endpoints? | Review repo & deployment configuration. |
+| Label Studio | Which API is best for bulk task creation with predictions? | Likely `/api/tasks/bulk/` with `predictions` payload. |
+| Data schema | How do we represent model predictions vs SME edits in Cleandata? | Need consistent lineage (prediction_id, annotated_by, etc.). |
+| PDFs | Do we always run Docling first, or only when certain formats detected? | Determine heuristics for PDF vs image. |
+| Infra | Where should new worker run? | Reuse existing namespace unless isolation required. |
 
 Deliverable: discovery notes + updated requirements before implementation starts.
 
@@ -117,18 +117,6 @@ Deliverable: discovery notes + updated requirements before implementation starts
 - Canary deploys for new models (subset of projects).
 - Confidence thresholds to skip pre-annotation when model uncertain.
 - Alerting when SME override rate spikes (model drift).
-
----
-
-## 6. Deliverables & Owners
-
-| Deliverable | Description | Owner | Due |
-|-------------|-------------|-------|-----|
-| Discovery report | Answers to Phase 0 questions | ML Platform | TBD |
-| CSV pre-annotation MVP | Worker, schema updates, LS integration | ML Platform + Data Eng | TBD |
-| SME comms | Update documentation/training | Ops Enablement | TBD |
-| PDF pre-annotation | Docling integration + predictions | ML Platform | TBD |
-| Retraining pipeline | Automated fine-tuning + deployment | ML Platform | TBD |
 
 ---
 
