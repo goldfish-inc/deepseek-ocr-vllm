@@ -81,7 +81,7 @@ if [ -f "$NER_DIR/data/synthetic_train.jsonl" ] && [ -f "$NER_DIR/data/synthetic
   head -n 40 "$NER_DIR/data/synthetic_val.jsonl" > "$VAL_JSONL"
 else
   # Generate minimal inline fixtures for CI
-  $PY - <<'PYGEN'
+  $PY - <<PYGEN
 import json
 import random
 
