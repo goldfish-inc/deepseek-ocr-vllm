@@ -153,12 +153,13 @@ jobs:
           IMAGE="ghcr.io/goldfish-inc/oceanid/csv-ingestion-worker:${{ github.sha }}"
           echo "🧪 Running smoke test for: $IMAGE"
 
-          # Run container with dummy environment
+          # Run container with dummy environment (SKIP_DB_CHECK=true for smoke tests)
           docker run --rm -d \
             --name csv-worker-test \
             -e DATABASE_URL="postgresql://test:test@localhost:5432/test" \
             -e S3_BUCKET="test-bucket" \
             -e LABEL_STUDIO_URL="http://test" \
+            -e SKIP_DB_CHECK="true" \
             "$IMAGE" || {
             echo "❌ Container failed to start"
             exit 1

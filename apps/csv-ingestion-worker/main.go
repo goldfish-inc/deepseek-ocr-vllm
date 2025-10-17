@@ -236,6 +236,12 @@ func initDatabase(dbURL string) (*sql.DB, error) {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
+	// Skip database connectivity checks if SKIP_DB_CHECK=true (for smoke tests)
+	if os.Getenv("SKIP_DB_CHECK") == "true" {
+		log.Println("⚠️  Skipping database connectivity checks (SKIP_DB_CHECK=true)")
+		return db, nil
+	}
+
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
