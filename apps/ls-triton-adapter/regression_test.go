@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,25 +12,30 @@ import (
 // TestTritonReturnsEmptyText tests that the adapter correctly handles
 // Docling extraction returning empty text (should return 424 error).
 func TestTritonReturnsEmptyText(t *testing.T) {
-	// Mock Triton server that returns valid structure but empty text
+	// Mock Triton server that returns valid Docling structure but empty text
 	mockTriton := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v2/models/docling_granite_python/infer" {
-			// Return valid Docling response with empty text
-			response := map[string]interface{}{
-				"model_name":    "docling_granite_python",
-				"model_version": "1",
-				"outputs": []map[string]interface{}{
+			// Create DoclingResult with empty text
+			doclingResult := DoclingResult{
+				Text:      "",
+				Tables:    []DoclingTable{},
+				Pages:     1,
+				WordCount: 0,
+				CharCount: 0,
+			}
+			resultJSON, _ := json.Marshal(doclingResult)
+			resultB64 := base64.StdEncoding.EncodeToString(resultJSON)
+
+			// Return Triton response with base64-encoded DoclingResult
+			response := TritonResponse{
+				ModelName:    "docling_granite_python",
+				ModelVersion: "1",
+				Outputs: []map[string]interface{}{
 					{
-						"name":     "text",
-						"datatype": "STRING",
-						"shape":    []int{1},
-						"data":     []string{""}, // Empty text
-					},
-					{
-						"name":     "tables",
-						"datatype": "STRING",
-						"shape":    []int{0},
-						"data":     []string{},
+						"name":     "result",
+						"datatype": "BYTES",
+						"shape":    []interface{}{float64(1)},
+						"data":     []interface{}{resultB64},
 					},
 				},
 			}
