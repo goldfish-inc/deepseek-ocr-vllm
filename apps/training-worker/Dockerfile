@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/requirements-ner.txt /tmp/requirements-ner.txt
-RUN pip install --upgrade pip \
+RUN pip install --upgrade pip==25.1 \
     && pip install -r /tmp/requirements-ner.txt \
     && pip install pulumi==3.110.0 \
     && rm -rf /root/.cache/pip

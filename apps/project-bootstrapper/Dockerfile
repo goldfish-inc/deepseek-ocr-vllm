@@ -14,10 +14,10 @@ COPY *.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o bootstrapper .
 
 # Runtime stage - alpine for DNS resolver support
-FROM alpine:latest
+FROM alpine:3.21
 
 # Install CA certificates and debugging tools for internal dev velocity
-RUN apk --no-cache add ca-certificates curl jq bash
+RUN apk --no-cache add ca-certificates=20241010-r0 curl=8.11.1-r2 jq=1.7.1-r0 bash=5.2.37-r0
 
 # Copy binary
 COPY --from=builder /build/bootstrapper /bootstrapper

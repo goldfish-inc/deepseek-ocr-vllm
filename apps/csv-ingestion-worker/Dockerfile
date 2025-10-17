@@ -2,7 +2,7 @@
 FROM golang:1.24-alpine AS builder
 
 # Install dependencies
-RUN apk add --no-cache git
+RUN apk add --no-cache git=2.47.3-r0
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 FROM alpine:3.21
 
 # Install ca-certificates for HTTPS and PostgreSQL client for debugging
-RUN apk --no-cache add ca-certificates tzdata postgresql-client
+RUN apk --no-cache add ca-certificates=20241010-r0 tzdata=2025a-r0 postgresql-client=16.7-r0
 
 # Create non-root user
 RUN addgroup -g 1000 -S appuser && \
