@@ -62,7 +62,6 @@ export class LsTritonAdapter extends pulumi.ComponentResource {
 
         const envBase = {
             TRITON_BASE_URL: tritonBaseUrl,
-            DOCUMENT_EXTRACTION_URL: "http://document-extraction.apps.svc.cluster.local:8080",
             DEFAULT_MODEL: "distilbert-base-uncased",
             TRITON_MODEL_NAME: cfgPulumi.get("tritonModelName") ?? "ner-distilbert",
             // Training controls (can be overridden via Pulumi config)

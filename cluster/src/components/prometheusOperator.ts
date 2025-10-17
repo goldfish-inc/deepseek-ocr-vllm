@@ -108,6 +108,64 @@ export class PrometheusOperator extends pulumi.ComponentResource {
       },
     }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
 
+    // ServiceMonitor for ls-triton-adapter
+    new k8s.apiextensions.CustomResource(`${name}-adapter-sm`, {
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "ServiceMonitor",
+      metadata: {
+        name: "ls-triton-adapter",
+        namespace,
+        labels: { release: release.name },
+      },
+      spec: {
+        selector: { matchLabels: { app: "ls-triton-adapter" } },
+        namespaceSelector: { matchNames: ["apps"] },
+        endpoints: [
+          { port: "http", interval: scrapeInterval, path: "/health" },
+        ],
+      },
+    }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
+
+    // Triton adapter health alerts
+    new k8s.apiextensions.CustomResource(`${name}-triton-alerts`, {
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "PrometheusRule",
+      metadata: {
+        name: "triton-adapter-alerts",
+        namespace,
+        labels: { release: release.name },
+      },
+      spec: {
+        groups: [
+          {
+            name: "triton-adapter",
+            rules: [
+              {
+                alert: "TritonAdapterDown",
+                expr: "up{job=\"ls-triton-adapter\"} == 0",
+                for: "2m",
+                labels: { severity: "critical" },
+                annotations: {
+                  summary: "Triton adapter unavailable",
+                  description: "ls-triton-adapter has been down for >2min. PDF predictions will fail.",
+                },
+              },
+              {
+                alert: "TritonAdapterUnhealthy",
+                expr: "probe_http_status_code{job=\"ls-triton-adapter\"} != 200",
+                for: "2m",
+                labels: { severity: "warning" },
+                annotations: {
+                  summary: "Triton adapter health check failing",
+                  description: "Adapter /health endpoint returning non-200 status. Check Triton GPU service connectivity (Calypso 192.168.2.110).",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
+
     // Alert when Flux or Pulumi controllers enter sustained CrashLoopBackOff states
     new k8s.apiextensions.CustomResource(`${name}-controller-restart-alerts`, {
       apiVersion: "monitoring.coreos.com/v1",

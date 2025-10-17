@@ -7,12 +7,11 @@ echo "======================================"
 # Test configuration
 export LISTEN_ADDR="${LISTEN_ADDR:-127.0.0.1:8090}"
 export TRITON_BASE_URL="${TRITON_BASE_URL:-http://192.168.2.110:8000}"  # Direct access to Calypso Triton
-export DOCUMENT_EXTRACTION_URL="${DOCUMENT_EXTRACTION_URL:-http://192.168.2.110:8080}"  # Fallback HTTP extractor
 export DEFAULT_MODEL="${DEFAULT_MODEL:-distilbert}"  # Actual model name on Triton
 export TRITON_MODEL_NAME="${TRITON_MODEL_NAME:-ner-distilbert}"  # NER model name on Triton
 export NER_LABELS="${NER_LABELS:-[\"O\",\"VESSEL\",\"HS_CODE\",\"PORT\",\"SPECIES\",\"IMO\",\"FLAG\",\"RISK_LEVEL\",\"DATE\"]}"
 
-# Triton Docling integration (enabled by default to test the feature)
+# Triton Docling integration (REQUIRED - no fallback extractor)
 export TRITON_DOCLING_ENABLED="${TRITON_DOCLING_ENABLED:-true}"
 
 # Optional: S3 configuration for file_upload testing (not tested in this script)
@@ -28,10 +27,9 @@ echo ""
 echo "📋 Configuration:"
 echo "  Listen: $LISTEN_ADDR"
 echo "  Triton: $TRITON_BASE_URL"
-echo "  Document Extraction: $DOCUMENT_EXTRACTION_URL"
 echo "  Model: $DEFAULT_MODEL"
 echo "  Triton Model: $TRITON_MODEL_NAME"
-echo "  Docling Enabled: $TRITON_DOCLING_ENABLED"
+echo "  Docling Enabled: $TRITON_DOCLING_ENABLED (REQUIRED)"
 echo ""
 
 # Build the service
@@ -140,7 +138,7 @@ else
     echo "❌ Invalid JSON response or error occurred"
     echo "   This may indicate:"
     echo "   - Missing Cloudflare Access credentials"
-    echo "   - Triton endpoint unavailable"
+    echo "   - Triton endpoint unavailable (no fallback extraction)"
     echo "   - Network connectivity issues"
 fi
 

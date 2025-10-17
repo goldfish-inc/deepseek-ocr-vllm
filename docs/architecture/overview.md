@@ -37,7 +37,7 @@ graph TB
         end
 
         subgraph "GPU Node - Calypso"
-            Worker3[k3s Worker<br/>192.168.2.68]
+            Worker3[k3s Worker<br/>192.168.2.80<br/>Triton: 192.168.2.110]
             GPU[RTX 4090]
             MLPods[ML Workloads]
         end

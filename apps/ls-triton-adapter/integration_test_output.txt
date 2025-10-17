@@ -1,0 +1,53 @@
+🧪 Integration Test: ls-triton-adapter
+======================================
+
+📋 Configuration:
+  Listen: 127.0.0.1:8090
+  Triton: http://192.168.2.110:8000
+  Model: distilbert
+
+🔨 Building service...
+✅ Build successful
+
+🚀 Starting service...
+  PID: 43500
+⏳ Waiting for service to initialize...
+2025/10/16 22:31:11 ✅ BERT tokenizer loaded successfully
+2025/10/16 22:31:11 Starting ls-triton-adapter on 127.0.0.1:8090
+2025/10/16 22:31:11 Triton base URL: http://192.168.2.110:8000
+2025/10/16 22:31:11 NER labels: [O VESSEL HS_CODE PORT COMMODITY IMO FLAG RISK_LEVEL DATE]
+2025/10/16 22:31:11 /train async=true dry_run=false k8sJobs=true jobImage=ghcr.io/goldfish-inc/oceanid/training-worker:main
+
+Test 1: Health Check
+--------------------
+Response: {"ok":true}
+✅ Health check passed
+
+Test 2: Setup Endpoint
+----------------------
+Response: {"hostname":"ls-triton-adapter","labels":["O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"],"model_name":"distilbert","model_version":"oceanid-ner-v1","status":"ready"}
+✅ Setup endpoint working
+
+Test 3: Prediction Endpoint
+---------------------------
+Input text: VESSEL: Arctic Explorer IMO: 1234567 FLAG: Norway PORT: Bergen COMMODITY: Fish products
+
+Sending prediction request...
+Response:
+Triton error: triton error 404: {"error":"Request for unknown model: 'ner-distilbert' is not found"}
+❌ Invalid JSON response or error occurred
+   This may indicate:
+   - Missing Cloudflare Access credentials
+   - Triton endpoint unavailable
+   - Network connectivity issues
+
+======================================
+🏁 Integration test completed
+
+Next steps:
+1. Verify Cloudflare Access credentials are configured
+2. Test with live Triton endpoint
+3. Deploy updated image to cluster
+
+🧹 Cleaning up...
+./integration_test.sh: line 41: 43500 Terminated: 15          ./ls-triton-adapter

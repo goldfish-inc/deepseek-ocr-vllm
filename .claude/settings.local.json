@@ -90,7 +90,9 @@
       "Bash(find:*)",
       "Bash(go get:*)",
       "Bash(git reset:*)",
-      "Bash(docker buildx:*)"
+      "Bash(docker buildx:*)",
+      "Bash(gh run view:*)",
+      "Bash(pulumi stack:*)"
     ],
     "deny": [],
     "ask": []

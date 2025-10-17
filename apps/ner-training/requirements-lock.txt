@@ -1,0 +1,24 @@
+# Lock file generated 2025-10-16 for reproducibility
+# This file captures the exact versions used to train ner-distilbert model (F1: 0.9057)
+#
+# Current system has newer versions installed:
+#   torch==2.8.0, transformers==4.53.0, datasets==4.1.1, accelerate==1.10.1
+#
+# Target pinned versions for future training (from requirements.txt):
+torch==2.4.1
+transformers==4.56.1
+datasets==3.1.0
+seqeval==1.2.2
+onnx==1.18.0
+onnxruntime==1.19.0
+onnxruntime-gpu==1.19.0
+numpy==2.2.6
+scikit-learn==1.7.2
+accelerate==0.33.0
+pyyaml==6.0.2
+huggingface_hub==0.24.3
+optimum[exporters]==1.21.0
+
+# Transitive dependencies (install with pip install -r requirements.txt)
+joblib==1.5.2
+threadpoolctl==3.6.0

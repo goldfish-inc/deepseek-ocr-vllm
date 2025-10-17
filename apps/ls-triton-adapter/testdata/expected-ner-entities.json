@@ -1,0 +1,90 @@
+{
+  "_comment": "Expected NER entities for test-vessel-registry.pdf",
+  "_todo": "Generate this file by running /predict_ls against live Triton",
+  "entities": [
+    {
+      "text": "Arctic Explorer",
+      "label": "VESSEL",
+      "start": 45,
+      "end": 60,
+      "confidence": 0.95
+    },
+    {
+      "text": "9999999",
+      "label": "IMO",
+      "start": 75,
+      "end": 82,
+      "confidence": 0.98
+    },
+    {
+      "text": "123456789",
+      "label": "IMO",
+      "start": 90,
+      "end": 99,
+      "confidence": 0.97
+    },
+    {
+      "text": "Norway",
+      "label": "FLAG",
+      "start": 106,
+      "end": 112,
+      "confidence": 0.96
+    },
+    {
+      "text": "Bergen",
+      "label": "PORT",
+      "start": 130,
+      "end": 136,
+      "confidence": 0.94
+    },
+    {
+      "text": "2024-01-15",
+      "label": "DATE",
+      "start": 158,
+      "end": 168,
+      "confidence": 0.99
+    },
+    {
+      "text": "Pacific Star",
+      "label": "VESSEL",
+      "start": 183,
+      "end": 195,
+      "confidence": 0.96
+    },
+    {
+      "text": "8888888",
+      "label": "IMO",
+      "start": 210,
+      "end": 217,
+      "confidence": 0.98
+    },
+    {
+      "text": "987654321",
+      "label": "IMO",
+      "start": 225,
+      "end": 234,
+      "confidence": 0.97
+    },
+    {
+      "text": "Liberia",
+      "label": "FLAG",
+      "start": 241,
+      "end": 248,
+      "confidence": 0.95
+    },
+    {
+      "text": "Monrovia",
+      "label": "PORT",
+      "start": 266,
+      "end": 274,
+      "confidence": 0.93
+    },
+    {
+      "text": "2023-12-01",
+      "label": "DATE",
+      "start": 296,
+      "end": 306,
+      "confidence": 0.99
+    }
+  ]
+}

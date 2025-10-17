@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -30,28 +31,27 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr            string
-	TritonBaseURL         string
-	DocumentExtractionURL string
-	DefaultModel          string
-	NERLabels             []string
-	CFAccessClientID      string
-	CFAccessSecret        string
-	TrainAsync            bool
-	TrainDryRun           bool
-	TrainUseK8sJobs       bool
-	TrainJobImage         string
-	TrainJobNS            string
-	TrainJobTTL           int32
-	TrainNodeSel          string // key=value
-	TrainGPURsrc          string // e.g., nvidia.com/gpu
-	TrainGPUCount         string // e.g., "1"
-	HfToken               string
-	HfDatasetRepo         string
-	HfModelRepo           string
-	HFSecretName          string
-	HFSecretKey           string
-	TritonModelName       string
+	ListenAddr       string
+	TritonBaseURL    string
+	DefaultModel     string
+	NERLabels        []string
+	CFAccessClientID string
+	CFAccessSecret   string
+	TrainAsync       bool
+	TrainDryRun      bool
+	TrainUseK8sJobs  bool
+	TrainJobImage    string
+	TrainJobNS       string
+	TrainJobTTL      int32
+	TrainNodeSel     string // key=value
+	TrainGPURsrc     string // e.g., nvidia.com/gpu
+	TrainGPUCount    string // e.g., "1"
+	HfToken          string
+	HfDatasetRepo    string
+	HfModelRepo      string
+	HFSecretName     string
+	HFSecretKey      string
+	TritonModelName  string
 	// S3 and webhook configuration for Docling integration
 	S3Bucket             string
 	WebhookSecret        string
@@ -62,14 +62,26 @@ type Config struct {
 // Global BERT tokenizer (initialized at startup)
 var bertTokenizer *tokenizer.Tokenizer
 
-// Global document extraction client (initialized at startup)
-var docExtractionClient *DocumentExtractionClient
-
 // Global S3 client for Docling table uploads (initialized if S3_BUCKET configured)
 var s3Client *s3.Client
 
 // Global Triton Docling client (initialized if TRITON_DOCLING_ENABLED=true)
 var tritonDoclingClient *TritonDoclingClient
+
+var (
+	errDoclingUnavailable = errors.New("docling_unavailable")
+	errDoclingNoText      = errors.New("docling_no_text")
+	errInvalidDocument    = errors.New("invalid_document")
+)
+
+type apiErrorResponse struct {
+	Error apiErrorPayload `json:"error"`
+}
+
+type apiErrorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
 
 func initTokenizer() error {
 	bertTokenizer = pretrained.BertBaseUncased()
@@ -77,24 +89,6 @@ func initTokenizer() error {
 		return fmt.Errorf("failed to load BERT tokenizer: tokenizer is nil")
 	}
 	log.Println("✅ BERT tokenizer loaded successfully")
-	return nil
-}
-
-func initDocumentExtraction(cfg *Config) error {
-	if cfg.DocumentExtractionURL == "" {
-		log.Println("⚠️  Document extraction service not configured, PDF/image support disabled")
-		return nil
-	}
-
-	docExtractionClient = NewDocumentExtractionClient(cfg.DocumentExtractionURL)
-
-	// Test connection
-	if err := docExtractionClient.Health(); err != nil {
-		log.Printf("⚠️  Document extraction service health check failed: %v", err)
-		return nil // Don't fail startup, just warn
-	}
-
-	log.Println("✅ Document extraction service connected")
 	return nil
 }
 
@@ -111,28 +105,27 @@ func loadConfig() *Config {
 	}
 
 	return &Config{
-		ListenAddr:            getEnv("LISTEN_ADDR", ":9090"),
-		TritonBaseURL:         getEnv("TRITON_BASE_URL", "http://localhost:8000"),
-		DocumentExtractionURL: getEnv("DOCUMENT_EXTRACTION_URL", "http://document-extraction:8080"),
-		DefaultModel:          getEnv("DEFAULT_MODEL", "bert-base-uncased"),
-		NERLabels:             nerLabels,
-		CFAccessClientID:      os.Getenv("CF_ACCESS_CLIENT_ID"),
-		CFAccessSecret:        os.Getenv("CF_ACCESS_CLIENT_SECRET"),
-		TrainAsync:            getEnvBool("TRAIN_ASYNC", true),
-		TrainDryRun:           getEnvBool("TRAIN_DRY_RUN", false),
-		TrainUseK8sJobs:       getEnvBool("TRAIN_USE_K8S_JOBS", false),
-		TrainJobImage:         getEnv("TRAINING_JOB_IMAGE", "ghcr.io/goldfish-inc/oceanid/training-worker:main"),
-		TrainJobNS:            getEnv("TRAINING_JOB_NAMESPACE", "apps"),
-		TrainJobTTL:           int32(getEnvInt("TRAINING_JOB_TTL_SECONDS", 3600)),
-		TrainNodeSel:          getEnv("TRAIN_NODE_SELECTOR", "node-role.kubernetes.io/gpu=true"),
-		TrainGPURsrc:          getEnv("TRAIN_GPU_RESOURCE", "nvidia.com/gpu"),
-		TrainGPUCount:         getEnv("TRAIN_GPU_COUNT", "1"),
-		HfToken:               os.Getenv("HF_TOKEN"),
-		HfDatasetRepo:         getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
-		HfModelRepo:           getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
-		HFSecretName:          getEnv("TRAIN_HF_SECRET_NAME", ""),
-		HFSecretKey:           getEnv("TRAIN_HF_SECRET_KEY", "token"),
-		TritonModelName:       getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
+		ListenAddr:       getEnv("LISTEN_ADDR", ":9090"),
+		TritonBaseURL:    getEnv("TRITON_BASE_URL", "http://localhost:8000"),
+		DefaultModel:     getEnv("DEFAULT_MODEL", "bert-base-uncased"),
+		NERLabels:        nerLabels,
+		CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
+		CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
+		TrainAsync:       getEnvBool("TRAIN_ASYNC", true),
+		TrainDryRun:      getEnvBool("TRAIN_DRY_RUN", false),
+		TrainUseK8sJobs:  getEnvBool("TRAIN_USE_K8S_JOBS", false),
+		TrainJobImage:    getEnv("TRAINING_JOB_IMAGE", "ghcr.io/goldfish-inc/oceanid/training-worker:main"),
+		TrainJobNS:       getEnv("TRAINING_JOB_NAMESPACE", "apps"),
+		TrainJobTTL:      int32(getEnvInt("TRAINING_JOB_TTL_SECONDS", 3600)),
+		TrainNodeSel:     getEnv("TRAIN_NODE_SELECTOR", "node-role.kubernetes.io/gpu=true"),
+		TrainGPURsrc:     getEnv("TRAIN_GPU_RESOURCE", "nvidia.com/gpu"),
+		TrainGPUCount:    getEnv("TRAIN_GPU_COUNT", "1"),
+		HfToken:          os.Getenv("HF_TOKEN"),
+		HfDatasetRepo:    getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
+		HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
+		HFSecretName:     getEnv("TRAIN_HF_SECRET_NAME", ""),
+		HFSecretKey:      getEnv("TRAIN_HF_SECRET_KEY", "token"),
+		TritonModelName:  getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
 		// S3 and webhook configuration for Docling integration
 		S3Bucket:             getEnv("S3_BUCKET", ""),
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
@@ -285,44 +278,37 @@ func makeTritonRequest(cfg *Config, model string, inputs []TritonTensor) (*Trito
 	return &tritonResp, nil
 }
 
-// extractDocumentText extracts text from PDF/image using Triton Docling or HTTP extractor
-// Returns (text, error) with fallback pattern
-func extractDocumentText(cfg *Config, tritonDoclingClient *TritonDoclingClient, pdfBytes []byte, filename string) (string, error) {
-	// Try Triton Docling first if enabled
-	if cfg.TritonDoclingEnabled && tritonDoclingClient != nil {
-		log.Printf("Attempting Triton Docling extraction for %s", filename)
-		doclingResult, err := tritonDoclingClient.ExtractFromPDF(pdfBytes)
-		if err == nil {
-			log.Printf("Triton Docling extraction successful for %s (%d words)", filename, doclingResult.WordCount)
-			return doclingResult.Text, nil
-		}
-		log.Printf("Triton Docling extraction failed for %s: %v, falling back to HTTP extractor", filename, err)
+// extractDocumentText extracts document content via Triton Docling (no fallback).
+// It returns the full DoclingResult so callers can reuse tables without a second inference call.
+func extractDocumentText(cfg *Config, tritonDoclingClient *TritonDoclingClient, pdfBytes []byte, filename string) (*DoclingResult, error) {
+	if !cfg.TritonDoclingEnabled || tritonDoclingClient == nil {
+		return nil, errDoclingUnavailable
 	}
 
-	// Fallback to HTTP document extraction service
-	if docExtractionClient == nil {
-		return "", fmt.Errorf("no extraction method available (Triton disabled and HTTP client nil)")
-	}
-
-	log.Printf("Using HTTP extractor for %s", filename)
-	result, err := docExtractionClient.ExtractFromBytes(pdfBytes, filename)
+	log.Printf("Extracting text from %s using Triton Docling", filename)
+	doclingResult, err := tritonDoclingClient.ExtractFromPDF(pdfBytes)
 	if err != nil {
-		return "", fmt.Errorf("HTTP extraction failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", errDoclingUnavailable, err)
 	}
 
-	return result.Text, nil
+	if strings.TrimSpace(doclingResult.Text) == "" {
+		return nil, errDoclingNoText
+	}
+
+	log.Printf("Triton Docling extraction successful for %s (%d words)", filename, doclingResult.WordCount)
+	return doclingResult, nil
 }
 
 func predictHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
 			return
 		}
 
 		var req PredictRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid_json", fmt.Sprintf("Failed to decode request body: %v", err))
 			return
 		}
 
@@ -336,11 +322,6 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 
 		// Extract text from documents if needed
 		if req.Text == "" && (req.PDFBase64 != "" || req.ImageBase64 != "") {
-			if docExtractionClient == nil {
-				http.Error(w, "document extraction not configured", http.StatusServiceUnavailable)
-				return
-			}
-
 			var docBytes []byte
 			var filename string
 
@@ -348,7 +329,7 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 				var err error
 				docBytes, err = base64.StdEncoding.DecodeString(req.PDFBase64)
 				if err != nil {
-					http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+					writeError(w, http.StatusBadRequest, "invalid_base64", fmt.Sprintf("Failed to decode pdf_base64: %v", err))
 					return
 				}
 				filename = "document.pdf"
@@ -356,10 +337,9 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 				var err error
 				docBytes, err = base64.StdEncoding.DecodeString(req.ImageBase64)
 				if err != nil {
-					http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+					writeError(w, http.StatusBadRequest, "invalid_base64", fmt.Sprintf("Failed to decode image_base64: %v", err))
 					return
 				}
-				// Use filename hint if provided, otherwise default to .jpg
 				if req.FileName != "" {
 					filename = req.FileName
 				} else {
@@ -367,34 +347,35 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 				}
 			}
 
-			// Extract text from document
-			result, err := docExtractionClient.ExtractFromBytes(docBytes, filename)
+			doclingResult, err := extractDocumentText(cfg, tritonDoclingClient, docBytes, filename)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("document extraction failed: %v", err), http.StatusInternalServerError)
+				status, code, message := classifyExtractionError(err)
+				writeError(w, status, code, message)
 				return
 			}
 
-			req.Text = result.Text
-			log.Printf("Extracted %d chars from %s", result.CharCount, filename)
+			req.Text = doclingResult.Text
+			log.Printf("Extracted %d chars from %s", len(req.Text), filename)
 		}
 
 		// Text is required (either directly provided or extracted from document)
 		if req.Text == "" {
-			http.Error(w, "text field is required (or provide pdf_base64/image_base64)", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "missing_text", "Provide text or pdf_base64/image_base64 in the request")
 			return
 		}
 
 		// BERT tokenization (using sugarme/tokenizer)
 		encoding, err := bertTokenizer.EncodeSingle(req.Text)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
+			log.Printf("Tokenization failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "tokenization_failed", "Tokenization failed; see adapter logs for details")
 			return
 		}
 
 		// Get token IDs and create attention mask
 		tokenIDs := encoding.GetIds()
 		if len(tokenIDs) == 0 {
-			http.Error(w, "empty text after tokenization", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "empty_text", "The extracted text is empty after tokenization")
 			return
 		}
 
@@ -423,7 +404,8 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 		// Call Triton
 		tritonResp, err := makeTritonRequest(cfg, req.Model, inputs)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Triton error: %v", err), http.StatusBadGateway)
+			log.Printf("Triton inference failed: %v", err)
+			writeError(w, http.StatusBadGateway, "triton_inference_failed", "Triton inference failed; see adapter logs")
 			return
 		}
 
@@ -707,13 +689,13 @@ func createLSResult(entity *struct {
 func predictLSHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
 			return
 		}
 
 		var body map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "invalid_json", fmt.Sprintf("Failed to decode Label Studio payload: %v", err))
 			return
 		}
 
@@ -730,7 +712,7 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 		}
 
 		if len(tasks) == 0 {
-			http.Error(w, "No tasks provided", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "no_tasks", "No tasks provided in Label Studio payload")
 			return
 		}
 
@@ -748,91 +730,84 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 		// If no text but file_upload exists, extract from S3
 		if !hasText && hasFileUpload && strings.HasPrefix(fileUpload, "s3://") {
 			if s3Client == nil {
-				http.Error(w, "S3 client not configured", http.StatusServiceUnavailable)
+				writeError(w, http.StatusServiceUnavailable, "s3_unconfigured", "S3 client not configured for Docling extraction")
 				return
 			}
 
-			// Parse S3 URL (s3://bucket/key)
 			s3URL := strings.TrimPrefix(fileUpload, "s3://")
 			parts := strings.SplitN(s3URL, "/", 2)
 			if len(parts) != 2 {
-				http.Error(w, "Invalid S3 URL format", http.StatusBadRequest)
+				writeError(w, http.StatusBadRequest, "invalid_s3_url", "file_upload must be of the form s3://bucket/key")
 				return
 			}
 			bucket, key := parts[0], parts[1]
 
-			// Download PDF from S3
 			log.Printf("Downloading %s from S3 bucket %s", key, bucket)
 			getResp, err := s3Client.GetObject(r.Context(), &s3.GetObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    aws.String(key),
 			})
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to download from S3: %v", err), http.StatusInternalServerError)
+				writeError(w, http.StatusBadGateway, "s3_download_failed", fmt.Sprintf("Failed to download %s from bucket %s: %v", key, bucket, err))
 				return
 			}
 			defer func() { _ = getResp.Body.Close() }()
 
 			pdfBytes, err := io.ReadAll(getResp.Body)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to read S3 object: %v", err), http.StatusInternalServerError)
+				writeError(w, http.StatusInternalServerError, "s3_read_failed", fmt.Sprintf("Failed to read S3 object: %v", err))
 				return
 			}
 
-			// Extract text from PDF using Triton Docling or HTTP extractor
 			filename := filepath.Base(key)
-			extractedText, err := extractDocumentText(cfg, tritonDoclingClient, pdfBytes, filename)
+			doclingResult, err := extractDocumentText(cfg, tritonDoclingClient, pdfBytes, filename)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Document extraction failed: %v", err), http.StatusInternalServerError)
+				status, code, message := classifyExtractionError(err)
+				writeError(w, status, code, message)
 				return
 			}
 
-			text = extractedText
+			text = doclingResult.Text
 			log.Printf("Extracted %d chars from %s", len(text), filename)
 
-			// If Triton Docling extracted tables, upload to S3 and trigger webhook
-			if cfg.TritonDoclingEnabled && tritonDoclingClient != nil {
-				doclingResult, err := tritonDoclingClient.ExtractFromPDF(pdfBytes)
-				if err == nil && len(doclingResult.Tables) > 0 {
-					// Extract task ID and project ID from task data
-					taskID, _ := task["id"].(float64)
-					var projectID float64
-					if proj, ok := task["project"].(float64); ok {
-						projectID = proj
-					} else if projMap, ok := task["project"].(map[string]interface{}); ok {
-						if pid, ok := projMap["id"].(float64); ok {
-							projectID = pid
-						}
+			if len(doclingResult.Tables) > 0 {
+				taskID, _ := task["id"].(float64)
+				var projectID float64
+				if proj, ok := task["project"].(float64); ok {
+					projectID = proj
+				} else if projMap, ok := task["project"].(map[string]interface{}); ok {
+					if pid, ok := projMap["id"].(float64); ok {
+						projectID = pid
 					}
+				}
 
-					if taskID > 0 && projectID > 0 {
-						s3Keys, err := uploadDoclingTablesToS3(r.Context(), s3Client, bucket, int64(projectID), int64(taskID), doclingResult.Tables)
-						if err != nil {
-							log.Printf("Failed to upload Docling tables: %v", err)
-						} else {
-							// Trigger CSV worker webhook
-							if err := triggerCSVWorkerWebhook(cfg, int64(taskID), int64(projectID), s3Keys); err != nil {
-								log.Printf("Failed to trigger CSV worker webhook: %v", err)
-							}
+				if taskID > 0 && projectID > 0 {
+					s3Keys, err := uploadDoclingTablesToS3(r.Context(), s3Client, bucket, int64(projectID), int64(taskID), doclingResult.Tables)
+					if err != nil {
+						log.Printf("Failed to upload Docling tables: %v", err)
+					} else {
+						if err := triggerCSVWorkerWebhook(cfg, int64(taskID), int64(projectID), s3Keys); err != nil {
+							log.Printf("Failed to trigger CSV worker webhook: %v", err)
 						}
 					}
 				}
 			}
 		} else if !hasText {
-			http.Error(w, "No text or file_upload field in task", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "missing_text", "Task payload must include text or file_upload")
 			return
 		}
 
 		// Tokenize text
 		encoding, err := bertTokenizer.EncodeSingle(text)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
+			log.Printf("Tokenization failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "tokenization_failed", "Tokenization failed; see adapter logs for details")
 			return
 		}
 
 		tokenIDs := encoding.GetIds()
 		if len(tokenIDs) == 0 {
-			http.Error(w, "empty text after tokenization", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "empty_text", "The extracted text is empty after tokenization")
 			return
 		}
 
@@ -861,7 +836,8 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 		// Call Triton
 		tritonResp, err := makeTritonRequest(cfg, cfg.DefaultModel, inputs)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Triton error: %v", err), http.StatusBadGateway)
+			log.Printf("Triton inference failed: %v", err)
+			writeError(w, http.StatusBadGateway, "triton_inference_failed", "Triton inference failed; see adapter logs")
 			return
 		}
 
@@ -880,10 +856,24 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 	}
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]bool{"ok": true}); err != nil {
-		log.Printf("Failed to encode health response: %v", err)
+func healthHandler(cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		if cfg.TritonDoclingEnabled {
+			if err := checkTritonReady(ctx, cfg); err != nil {
+				log.Printf("Health probe: Triton not ready: %v", err)
+				writeError(w, http.StatusServiceUnavailable, "triton_unavailable", "Triton Docling model is unavailable; check GPU service")
+				return
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		if err := json.NewEncoder(w).Encode(map[string]any{"ok": true}); err != nil {
+			log.Printf("Failed to encode health response: %v", err)
+		}
 	}
 }
 
@@ -904,6 +894,65 @@ func setupHandler(cfg *Config) http.HandlerFunc {
 	}
 }
 
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(apiErrorResponse{Error: apiErrorPayload{Code: code, Message: message}}); err != nil {
+		log.Printf("Failed to encode error response: %v", err)
+	}
+}
+
+func classifyExtractionError(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, errDoclingUnavailable):
+		return http.StatusServiceUnavailable, "docling_unavailable", "Triton Docling model is unavailable; check GPU service"
+	case errors.Is(err, errDoclingNoText):
+		return http.StatusFailedDependency, "docling_no_text", "Docling returned no text; inspect GPU logs and source document"
+	case errors.Is(err, errInvalidDocument):
+		return http.StatusBadRequest, "invalid_document", err.Error()
+	default:
+		return http.StatusBadGateway, "docling_error", err.Error()
+	}
+}
+
+func checkTritonReady(ctx context.Context, cfg *Config) error {
+	modelName := "docling_granite_python"
+	readyURL := fmt.Sprintf("%s/v2/models/%s/ready", strings.TrimSuffix(cfg.TritonBaseURL, "/"), modelName)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("triton ready endpoint returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var readyPayload struct {
+		Ready bool `json:"ready"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&readyPayload); err != nil {
+		return fmt.Errorf("failed to decode ready response: %w", err)
+	}
+
+	if !readyPayload.Ready {
+		return fmt.Errorf("triton model %s reported not ready", modelName)
+	}
+
+	return nil
+}
+
 func makeOnes(n int) []int64 {
 	ones := make([]int64, n)
 	for i := range ones {
@@ -916,7 +965,7 @@ func makeOnes(n int) []int64 {
 func trainHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
 			return
 		}
 
@@ -1095,16 +1144,11 @@ func main() {
 		log.Fatalf("Tokenizer initialization failed: %v", err)
 	}
 
-	// Initialize document extraction client
-	if err := initDocumentExtraction(cfg); err != nil {
-		log.Fatalf("Document extraction initialization failed: %v", err)
-	}
-
 	// Initialize S3 client if bucket configured
 	if cfg.S3Bucket != "" {
 		awsCfg, err := config.LoadDefaultConfig(context.Background())
 		if err != nil {
-			log.Printf("WARNING: Failed to load AWS config: %v (S3 uploads disabled)", err)
+			log.Printf("WARNING: Failed to load AWS config: %v (Docling table uploads disabled)", err)
 		} else {
 			s3Client = s3.NewFromConfig(awsCfg)
 			log.Printf("S3 client initialized for bucket: %s", cfg.S3Bucket)
@@ -1116,11 +1160,11 @@ func main() {
 		tritonDoclingClient = NewTritonDoclingClient(cfg)
 		log.Printf("Triton Docling client initialized (enabled)")
 	} else {
-		log.Printf("Triton Docling extraction disabled (using HTTP extractor)")
+		log.Printf("Triton Docling extraction disabled; document predictions will fail")
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/health", healthHandler(cfg))
 	mux.HandleFunc("/setup", setupHandler(cfg))
 	mux.HandleFunc("/predict", predictHandler(cfg))
 	mux.HandleFunc("/predict_ls", predictLSHandler(cfg))
@@ -1128,7 +1172,7 @@ func main() {
 
 	log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
 	log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
-	log.Printf("Document extraction URL: %s", cfg.DocumentExtractionURL)
+	log.Printf("Triton Docling enabled: %v", cfg.TritonDoclingEnabled)
 	log.Printf("NER labels: %v", cfg.NERLabels)
 	log.Printf("/train async=%v dry_run=%v k8sJobs=true jobImage=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainJobImage)
 

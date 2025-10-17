@@ -1,0 +1,43 @@
+# Field-to-label mapping for synthetic NER data generation
+# Generated from Label Studio vessel registry structured data
+# Version: 1.0
+# Last updated: 2025-10-17
+
+# Vessel registry fields → NER entity labels
+field_mapping:
+  # Primary vessel identifiers
+  "Name": "VESSEL"
+  "IMO Number": "IMO"
+  "Flag": "FLAG"
+  "Port of Registry": "PORT"
+
+  # Vessel classification & catch
+  "Type": "SPECIES"  # Fishing method/target species (e.g., "Pole and Line", or actual species like "Tuna")
+
+  # Temporal information
+  "Built in Year": "DATE"
+
+  # Fields to skip (not relevant for NER)
+  skip_fields:
+    - "Vessel Length (LOA)"
+    - "Gross Tonnage"
+    - "id"
+    - "data"
+    - "project"
+    - "annotations"
+
+# Template patterns for generating natural language text
+# These create realistic sentence structures for training
+text_templates:
+  - "Vessel {Name} with IMO {IMO Number} is flagged in {Flag} and registered at port {Port of Registry}."
+  - "{Name} (IMO: {IMO Number}) operates under {Flag} flag from {Port of Registry}."
+  - "The {Type} vessel {Name} bears IMO number {IMO Number}, flag {Flag}, and is registered in {Port of Registry}."
+  - "{Name}, a {Type} vessel built in {Built in Year}, has IMO {IMO Number} and flies the {Flag} flag."
+
+# Metadata to include in each synthetic example
+metadata:
+  source: "synth_vessel_registry"
+  version: "1.0"
+
+# Training/validation split
+train_val_split: 0.8  # 80% train, 20% validation
