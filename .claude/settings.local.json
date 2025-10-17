@@ -102,7 +102,18 @@
       "Bash(docker run:*)",
       "Bash(gh pr merge:*)",
       "Bash(git pull:*)",
-      "Bash(gh workflow run:*)"
+      "Bash(gh workflow run:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh variable set:*)",
+      "Bash(gh issue comment 170 --body \"$(cat <<''EOF''\n## Plan: Finalize ORT backend config for Calypso\n\n**Actions:**\n1. Validate ORT backend config for GPU:\n   - Remove TensorRT accelerator block (ORT backend doesn''t use TensorRT)\n   - Keep `instance_group` `KIND_GPU` \n   - Maintain dynamic batching as-is\n2. Load `ner-distilbert` model repository on Calypso\n3. Verify `/v2/models/ner-distilbert/ready` endpoint returns true\n4. Run single inference smoke test\n\n**Acceptance:**\n- ✅ `config.pbtxt` checked into repo\n- ✅ Triton ready endpoint returns `ready=true`\n- ✅ Single inference smoke test passes\n\n**Risk mitigation:**\n- Keep existing config.pbtxt as backup before modifications\n- Test on Calypso isolated from production traffic first\nEOF\n)\")",
+      "Bash(gh issue comment 166 --body \"$(cat <<''EOF''\n## Plan: Enforce consistent label order and add unit test\n\n**Actions:**\n1. Add unit test to assert adapter labels match trainer configuration:\n   - Verify adapter labels == trainer `LABELS` \n   - Confirm `id2label` mapping used correctly in predictions\n2. Create test fixtures:\n   - Add `golden-labels.json` with expected label configuration\n   - Include tiny logits fixture for deterministic testing\n3. CI integration:\n   - Test must fail on label mismatch\n   - Add to existing test suite\n\n**Acceptance:**\n- ✅ Unit test fails when labels are out of sync\n- ✅ CI passes with current label configuration\n- ✅ Test coverage for id2label mapping\n\n**Context:**\nEnsures Label Studio predictions maintain consistent label order with the trained model, preventing silent misclassification bugs.\nEOF\n)\")",
+      "Bash(gh issue comment:*)",
+      "Bash(gh variable:*)",
+      "Bash(bash:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(gh issue close 170 --comment \"$(cat <<''EOF''\n✅ **Complete - All acceptance criteria met**\n\n**Deployed ner-distilbert to Calypso Triton:**\n- Model: `/models/ner-distilbert/1/model.onnx` (254M)\n- Config: ORT backend, CUDAExecutionProvider, KIND_GPU\n- Supporting files: tokenizer, labels.json, vocab\n\n**Verification results:**\n```bash\n# Ready endpoint\ncurl http://localhost:8000/v2/models/ner-distilbert/ready\n# → HTTP 200 OK\n\n# Inference test\n# → ✅ Shape: [1, 16, 9], Datatype: FP32, Output: logits\n```\n\n**Triton logs confirm:**\n- `successfully loaded ''ner-distilbert''`\n- `TRITONBACKEND_ModelInstanceInitialize: ner-distilbert_0_0 (GPU device 0)`\n- `CUDAExecutionProvider` active on RTX 4090\n\n**Config committed:**\n- `apps/ner-training/config.pbtxt.template` in repo\n- No TensorRT accelerator (ORT incompatible)\n- Dynamic batching: preferred_batch_size [4, 8]\n\n**Next:** SME can now use Label Studio → adapter auto-connects → Triton inference on 4090\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
