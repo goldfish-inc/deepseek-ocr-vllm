@@ -49,18 +49,18 @@ def export_to_onnx(model_path: str, output_path: str, opset_version: int = 14):
         truncation=True
     )
 
-    # Define input/output names and dynamic axes
+    # Define input/output names
     input_names = ["input_ids", "attention_mask"]
     output_names = ["logits"]
-    dynamic_axes = {
+    # New exporter prefers dynamic_shapes (used when dynamo=True). Legacy exporter uses dynamic_axes.
+    dynamic_shapes = {
         "input_ids": {0: "batch_size", 1: "sequence_length"},
         "attention_mask": {0: "batch_size", 1: "sequence_length"},
-        "logits": {0: "batch_size", 1: "sequence_length"}
     }
 
     onnx_path = output_dir / "model.onnx"
 
-    # Export to ONNX (try modern exporter, fallback to legacy if unsupported)
+    # Export to ONNX (try modern exporter with dynamo + dynamic_shapes, fallback to legacy if unsupported)
     with torch.no_grad():
         try:
             torch.onnx.export(
@@ -69,12 +69,13 @@ def export_to_onnx(model_path: str, output_path: str, opset_version: int = 14):
                 str(onnx_path),
                 input_names=input_names,
                 output_names=output_names,
-                dynamic_axes=dynamic_axes,
+                dynamic_shapes=dynamic_shapes,
                 opset_version=opset_version,
                 do_constant_folding=True,
                 export_params=True,
                 dynamo=True,
             )
+            logger.info("ONNX export used modern exporter (dynamo=True, dynamic_shapes)")
         except Exception as e:
             logger.warning(f"Modern ONNX export failed (dynamo=True): {e}. Falling back to legacy exporter.")
             torch.onnx.export(
@@ -83,7 +84,11 @@ def export_to_onnx(model_path: str, output_path: str, opset_version: int = 14):
                 str(onnx_path),
                 input_names=input_names,
                 output_names=output_names,
-                dynamic_axes=dynamic_axes,
+                dynamic_axes={
+                    "input_ids": {0: "batch_size", 1: "sequence_length"},
+                    "attention_mask": {0: "batch_size", 1: "sequence_length"},
+                    "logits": {0: "batch_size", 1: "sequence_length"},
+                },
                 opset_version=opset_version,
                 do_constant_folding=True,
                 export_params=True,

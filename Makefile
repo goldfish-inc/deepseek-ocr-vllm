@@ -79,6 +79,35 @@ smoke:
 smoke-ner:
 	bash scripts/smoke_ner.sh
 
+# Spark NER preproc (CPU local submit)
+.PHONY: spark-preproc
+spark-preproc:
+	@if ! command -v spark-submit >/dev/null 2>&1; then \
+		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
+	fi
+	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
+		echo "Usage: make spark-preproc INPUT=<path.jsonl> OUTPUT=</tmp/out>"; exit 1; \
+	fi
+	spark-submit --master local[*] \
+	  apps/spark-jobs/ner-preproc/job.py \
+	  --input "$(INPUT)" \
+	  --output "$(OUTPUT)"
+
+# Spark NER inference via adapter (per-row HTTP, simple scaffold)
+.PHONY: spark-infer
+spark-infer:
+	@if ! command -v spark-submit >/dev/null 2>&1; then \
+		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
+	fi
+	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
+		echo "Usage: make spark-infer INPUT=</tmp/preproc> OUTPUT=</tmp/infer> [ADAPTER_URL=http://ls-triton-adapter.apps.svc.cluster.local:9090]"; exit 1; \
+	fi
+	spark-submit --master local[*] \
+	  apps/spark-jobs/ner-inference/job.py \
+	  --input "$(INPUT)" \
+	  --output "$(OUTPUT)" \
+	  --adapter-url "$(ADAPTER_URL)"
+
 # Database (CrunchyBridge or any Postgres)
 .PHONY: db:migrate db:psql db:status
 
