@@ -75,8 +75,69 @@ OUT_DIR="$WORK/model"
 ONNX_DIR="$WORK/onnx"
 
 echo "🧪 Preparing tiny dataset subsets"
-head -n 120 "$NER_DIR/data/synthetic_train.jsonl" > "$TRAIN_JSONL"
-head -n 40 "$NER_DIR/data/synthetic_val.jsonl" > "$VAL_JSONL"
+# Generate minimal synthetic data if files don't exist
+if [ -f "$NER_DIR/data/synthetic_train.jsonl" ] && [ -f "$NER_DIR/data/synthetic_val.jsonl" ]; then
+  head -n 120 "$NER_DIR/data/synthetic_train.jsonl" > "$TRAIN_JSONL"
+  head -n 40 "$NER_DIR/data/synthetic_val.jsonl" > "$VAL_JSONL"
+else
+  # Generate minimal inline fixtures for CI
+  $PY - <<'PYGEN'
+import json
+import random
+
+labels = ["O", "VESSEL", "HS_CODE", "PORT", "SPECIES", "IMO", "FLAG", "RISK_LEVEL", "DATE"]
+
+# Minimal synthetic examples
+templates = [
+    ("VESSEL Oceanic Voyager IMO 1234567 departed PORT Santos on DATE 2025-10-15 with SPECIES Tuna under FLAG Panama",
+     [(0,6,"VESSEL"), (7,23,"VESSEL"), (24,27,"O"), (28,35,"IMO"), (36,44,"O"), (45,49,"PORT"), (50,56,"PORT"),
+      (57,59,"O"), (60,64,"DATE"), (65,75,"DATE"), (76,80,"O"), (81,88,"SPECIES"), (89,93,"SPECIES"), (94,99,"O"),
+      (100,104,"FLAG"), (105,111,"FLAG")]),
+    ("FLAG Chinese vessel VESSEL Star Harbor transported SPECIES Mackerel HS_CODE 030354 to PORT Tokyo",
+     [(0,4,"FLAG"), (5,12,"FLAG"), (13,19,"O"), (20,26,"VESSEL"), (27,38,"VESSEL"), (39,50,"O"),
+      (51,58,"SPECIES"), (59,67,"SPECIES"), (68,75,"HS_CODE"), (76,82,"HS_CODE"), (83,85,"O"), (86,90,"PORT"), (91,96,"PORT")]),
+]
+
+def generate_task(text, entities):
+    tokens = text.split()
+    token_labels = []
+    char_pos = 0
+    for tok in tokens:
+        tok_start = text.find(tok, char_pos)
+        tok_end = tok_start + len(tok)
+        label = "O"
+        for start, end, lbl in entities:
+            if start <= tok_start < end or start < tok_end <= end:
+                label = lbl
+                break
+        token_labels.append(label)
+        char_pos = tok_end
+    return {"data": {"text": text}, "annotations": [{"result": [
+        {"value": {"start": s, "end": e, "text": text[s:e], "labels": [l]}, "from_name": "label", "to_name": "text", "type": "labels"}
+        for s, e, l in entities
+    ]}]}
+
+train_data = []
+for _ in range(120):
+    text, entities = random.choice(templates)
+    train_data.append(generate_task(text, entities))
+
+val_data = []
+for _ in range(40):
+    text, entities = random.choice(templates)
+    val_data.append(generate_task(text, entities))
+
+with open("$WORK/train.jsonl", "w") as f:
+    for task in train_data:
+        f.write(json.dumps(task) + "\n")
+
+with open("$WORK/val.jsonl", "w") as f:
+    for task in val_data:
+        f.write(json.dumps(task) + "\n")
+
+print(f"  Generated {len(train_data)} train + {len(val_data)} val samples")
+PYGEN
+fi
 
 echo "🏋️  Training 1 epoch (tiny subset)"
 $PY "$NER_DIR/train_ner.py" \
