@@ -3,8 +3,11 @@
 
 FROM python:3.13-slim as base
 
-# Install system dependencies
+# Install system dependencies including build tools
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    g++ \
     tesseract-ocr \
     tesseract-ocr-eng \
     libtesseract-dev \
