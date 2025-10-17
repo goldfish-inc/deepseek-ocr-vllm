@@ -1,0 +1,27 @@
+# Document Extraction Service Dependencies
+# Python 3.13+ compatible
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20  # For file uploads
+
+# Document processing
+docling==2.17.1
+docling-core==2.7.1
+docling-ibm-models==2.2.2
+mlx==0.24.0  # Apple Silicon acceleration
+mlx-vlm==0.1.0
+
+# PDF processing
+pypdfium2==4.30.1
+
+# Image processing
+pillow==11.1.0
+
+# Excel/CSV
+pandas==2.2.3
+openpyxl==3.1.5
+
+# Utilities
+pydantic==2.10.5

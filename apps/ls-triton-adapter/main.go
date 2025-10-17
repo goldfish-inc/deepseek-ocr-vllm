@@ -3,15 +3,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/sugarme/tokenizer"
+	"github.com/sugarme/tokenizer/pretrained"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -22,27 +26,61 @@ import (
 
 // Config holds all environment variables
 type Config struct {
-	ListenAddr       string
-	TritonBaseURL    string
-	DefaultModel     string
-	NERLabels        []string
-	CFAccessClientID string
-	CFAccessSecret   string
-	TrainAsync       bool
-	TrainDryRun      bool
-	TrainUseK8sJobs  bool
-	TrainJobImage    string
-	TrainJobNS       string
-	TrainJobTTL      int32
-	TrainNodeSel     string // key=value
-	TrainGPURsrc     string // e.g., nvidia.com/gpu
-	TrainGPUCount    string // e.g., "1"
-	HfToken          string
-	HfDatasetRepo    string
-	HfModelRepo      string
-	HFSecretName     string
-	HFSecretKey      string
-	TritonModelName  string
+	ListenAddr            string
+	TritonBaseURL         string
+	DocumentExtractionURL string
+	DefaultModel          string
+	NERLabels             []string
+	CFAccessClientID      string
+	CFAccessSecret        string
+	TrainAsync            bool
+	TrainDryRun           bool
+	TrainUseK8sJobs       bool
+	TrainJobImage         string
+	TrainJobNS            string
+	TrainJobTTL           int32
+	TrainNodeSel          string // key=value
+	TrainGPURsrc          string // e.g., nvidia.com/gpu
+	TrainGPUCount         string // e.g., "1"
+	HfToken               string
+	HfDatasetRepo         string
+	HfModelRepo           string
+	HFSecretName          string
+	HFSecretKey           string
+	TritonModelName       string
+}
+
+// Global BERT tokenizer (initialized at startup)
+var bertTokenizer *tokenizer.Tokenizer
+
+// Global document extraction client (initialized at startup)
+var docExtractionClient *DocumentExtractionClient
+
+func initTokenizer() error {
+	bertTokenizer = pretrained.BertBaseUncased()
+	if bertTokenizer == nil {
+		return fmt.Errorf("failed to load BERT tokenizer: tokenizer is nil")
+	}
+	log.Println("✅ BERT tokenizer loaded successfully")
+	return nil
+}
+
+func initDocumentExtraction(cfg *Config) error {
+	if cfg.DocumentExtractionURL == "" {
+		log.Println("⚠️  Document extraction service not configured, PDF/image support disabled")
+		return nil
+	}
+
+	docExtractionClient = NewDocumentExtractionClient(cfg.DocumentExtractionURL)
+
+	// Test connection
+	if err := docExtractionClient.Health(); err != nil {
+		log.Printf("⚠️  Document extraction service health check failed: %v", err)
+		return nil // Don't fail startup, just warn
+	}
+
+	log.Println("✅ Document extraction service connected")
+	return nil
 }
 
 func loadConfig() *Config {
@@ -58,27 +96,28 @@ func loadConfig() *Config {
 	}
 
 	return &Config{
-		ListenAddr:       getEnv("LISTEN_ADDR", ":9090"),
-		TritonBaseURL:    getEnv("TRITON_BASE_URL", "http://localhost:8000"),
-		DefaultModel:     getEnv("DEFAULT_MODEL", "bert-base-uncased"),
-		NERLabels:        nerLabels,
-		CFAccessClientID: os.Getenv("CF_ACCESS_CLIENT_ID"),
-		CFAccessSecret:   os.Getenv("CF_ACCESS_CLIENT_SECRET"),
-		TrainAsync:       getEnvBool("TRAIN_ASYNC", true),
-		TrainDryRun:      getEnvBool("TRAIN_DRY_RUN", false),
-		TrainUseK8sJobs:  getEnvBool("TRAIN_USE_K8S_JOBS", false),
-		TrainJobImage:    getEnv("TRAINING_JOB_IMAGE", "ghcr.io/goldfish-inc/oceanid/training-worker:main"),
-		TrainJobNS:       getEnv("TRAINING_JOB_NAMESPACE", "apps"),
-		TrainJobTTL:      int32(getEnvInt("TRAINING_JOB_TTL_SECONDS", 3600)),
-		TrainNodeSel:     getEnv("TRAIN_NODE_SELECTOR", "node-role.kubernetes.io/gpu=true"),
-		TrainGPURsrc:     getEnv("TRAIN_GPU_RESOURCE", "nvidia.com/gpu"),
-		TrainGPUCount:    getEnv("TRAIN_GPU_COUNT", "1"),
-		HfToken:          os.Getenv("HF_TOKEN"),
-		HfDatasetRepo:    getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
-		HfModelRepo:      getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
-		HFSecretName:     getEnv("TRAIN_HF_SECRET_NAME", ""),
-		HFSecretKey:      getEnv("TRAIN_HF_SECRET_KEY", "token"),
-		TritonModelName:  getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
+		ListenAddr:            getEnv("LISTEN_ADDR", ":9090"),
+		TritonBaseURL:         getEnv("TRITON_BASE_URL", "http://localhost:8000"),
+		DocumentExtractionURL: getEnv("DOCUMENT_EXTRACTION_URL", "http://document-extraction:8080"),
+		DefaultModel:          getEnv("DEFAULT_MODEL", "bert-base-uncased"),
+		NERLabels:             nerLabels,
+		CFAccessClientID:      os.Getenv("CF_ACCESS_CLIENT_ID"),
+		CFAccessSecret:        os.Getenv("CF_ACCESS_CLIENT_SECRET"),
+		TrainAsync:            getEnvBool("TRAIN_ASYNC", true),
+		TrainDryRun:           getEnvBool("TRAIN_DRY_RUN", false),
+		TrainUseK8sJobs:       getEnvBool("TRAIN_USE_K8S_JOBS", false),
+		TrainJobImage:         getEnv("TRAINING_JOB_IMAGE", "ghcr.io/goldfish-inc/oceanid/training-worker:main"),
+		TrainJobNS:            getEnv("TRAINING_JOB_NAMESPACE", "apps"),
+		TrainJobTTL:           int32(getEnvInt("TRAINING_JOB_TTL_SECONDS", 3600)),
+		TrainNodeSel:          getEnv("TRAIN_NODE_SELECTOR", "node-role.kubernetes.io/gpu=true"),
+		TrainGPURsrc:          getEnv("TRAIN_GPU_RESOURCE", "nvidia.com/gpu"),
+		TrainGPUCount:         getEnv("TRAIN_GPU_COUNT", "1"),
+		HfToken:               os.Getenv("HF_TOKEN"),
+		HfDatasetRepo:         getEnv("HF_DATASET_REPO", "goldfish-inc/oceanid-annotations"),
+		HfModelRepo:           getEnv("HF_MODEL_REPO", "goldfish-inc/oceanid-ner-distilbert"),
+		HFSecretName:          getEnv("TRAIN_HF_SECRET_NAME", ""),
+		HFSecretKey:           getEnv("TRAIN_HF_SECRET_KEY", "token"),
+		TritonModelName:       getEnv("TRITON_MODEL_NAME", "ner-distilbert"),
 	}
 }
 
@@ -110,12 +149,15 @@ func getEnvInt(key string, fallback int) int {
 
 // PredictRequest represents the prediction request
 type PredictRequest struct {
-	Text      string                 `json:"text,omitempty"`
-	PDFBase64 string                 `json:"pdf_base64,omitempty"`
-	Prompt    string                 `json:"prompt,omitempty"`
-	Model     string                 `json:"model,omitempty"`
-	Task      string                 `json:"task,omitempty"`
-	Inputs    map[string]interface{} `json:"inputs,omitempty"`
+	Text        string                 `json:"text,omitempty"`
+	PDFBase64   string                 `json:"pdf_base64,omitempty"`
+	ImageBase64 string                 `json:"image_base64,omitempty"`
+	DocType     string                 `json:"doc_type,omitempty"` // pdf, image, csv, xlsx, etc.
+	FileName    string                 `json:"file_name,omitempty"`
+	Prompt      string                 `json:"prompt,omitempty"`
+	Model       string                 `json:"model,omitempty"`
+	Task        string                 `json:"task,omitempty"`
+	Inputs      map[string]interface{} `json:"inputs,omitempty"`
 }
 
 // TritonRequest represents the request to Triton
@@ -241,39 +283,89 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 			req.Task = "ner"
 		}
 
-		// For now, we only handle text input
+		// Extract text from documents if needed
+		if req.Text == "" && (req.PDFBase64 != "" || req.ImageBase64 != "") {
+			if docExtractionClient == nil {
+				http.Error(w, "document extraction not configured", http.StatusServiceUnavailable)
+				return
+			}
+
+			var docBytes []byte
+			var filename string
+
+			if req.PDFBase64 != "" {
+				var err error
+				docBytes, err = base64.StdEncoding.DecodeString(req.PDFBase64)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+					return
+				}
+				filename = "document.pdf"
+			} else if req.ImageBase64 != "" {
+				var err error
+				docBytes, err = base64.StdEncoding.DecodeString(req.ImageBase64)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("invalid base64: %v", err), http.StatusBadRequest)
+					return
+				}
+				// Use filename hint if provided, otherwise default to .jpg
+				if req.FileName != "" {
+					filename = req.FileName
+				} else {
+					filename = "image.jpg"
+				}
+			}
+
+			// Extract text from document
+			result, err := docExtractionClient.ExtractFromBytes(docBytes, filename)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("document extraction failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			req.Text = result.Text
+			log.Printf("Extracted %d chars from %s", result.CharCount, filename)
+		}
+
+		// Text is required (either directly provided or extracted from document)
 		if req.Text == "" {
-			http.Error(w, "text field is required", http.StatusBadRequest)
+			http.Error(w, "text field is required (or provide pdf_base64/image_base64)", http.StatusBadRequest)
 			return
 		}
 
-		// Simple tokenization (word-based for demo)
-		// In production, you'd use proper BERT tokenizer
-		words := strings.Fields(req.Text)
-		if len(words) == 0 {
-			http.Error(w, "empty text", http.StatusBadRequest)
+		// BERT tokenization (using sugarme/tokenizer)
+		encoding, err := bertTokenizer.EncodeSingle(req.Text)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		// Create token IDs (simplified - real BERT tokenization needed)
-		tokenIDs := make([]int64, len(words))
-		for i := range words {
-			tokenIDs[i] = int64(100 + i) // Dummy token IDs
+		// Get token IDs and create attention mask
+		tokenIDs := encoding.GetIds()
+		if len(tokenIDs) == 0 {
+			http.Error(w, "empty text after tokenization", http.StatusBadRequest)
+			return
+		}
+
+		// Convert uint32 token IDs to int64 for Triton
+		tokenIDsInt64 := make([]int64, len(tokenIDs))
+		for i, id := range tokenIDs {
+			tokenIDsInt64[i] = int64(id)
 		}
 
 		// Create Triton input tensors
 		inputs := []TritonTensor{
 			{
 				Name:     "input_ids",
-				Shape:    []int{1, len(tokenIDs)},
+				Shape:    []int{1, len(tokenIDsInt64)},
 				DataType: "INT64",
-				Data:     tokenIDs,
+				Data:     tokenIDsInt64,
 			},
 			{
 				Name:     "attention_mask",
-				Shape:    []int{1, len(tokenIDs)},
+				Shape:    []int{1, len(tokenIDsInt64)},
 				DataType: "INT64",
-				Data:     makeOnes(len(tokenIDs)),
+				Data:     makeOnes(len(tokenIDsInt64)),
 			},
 		}
 
@@ -286,7 +378,7 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 
 		// Process NER results
 		if req.Task == "ner" {
-			result := processNEROutput(cfg, tritonResp, words, req.Text)
+			result := processNEROutput(cfg, tritonResp, encoding, req.Text)
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(result); err != nil {
 				log.Printf("Failed to encode NER result: %v", err)
@@ -301,49 +393,264 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 	}
 }
 
-func processNEROutput(cfg *Config, resp *TritonResponse, words []string, originalText string) LSPrediction {
+func processNEROutput(cfg *Config, resp *TritonResponse, encoding *tokenizer.Encoding, originalText string) LSPrediction {
 	// Extract logits from Triton response
-	// This is simplified - actual processing depends on model output format
+	if len(resp.Outputs) == 0 {
+		log.Println("Warning: No outputs in Triton response")
+		return emptyPrediction(cfg)
+	}
+
+	output := resp.Outputs[0]
+	logitsFlat, ok := output["data"].([]interface{})
+	if !ok {
+		log.Println("Warning: Invalid data format in Triton response")
+		return emptyPrediction(cfg)
+	}
+
+	// Extract shape [batch_size, sequence_length, num_labels]
+	shape, ok := output["shape"].([]interface{})
+	if !ok || len(shape) != 3 {
+		log.Printf("Warning: Invalid shape in Triton response: %v", output["shape"])
+		return emptyPrediction(cfg)
+	}
+
+	// Safe type conversion for shape values
+	seqLenFloat, ok := shape[1].(float64)
+	if !ok {
+		log.Printf("Warning: Invalid sequence length type in shape: %T", shape[1])
+		return emptyPrediction(cfg)
+	}
+	numLabelsFloat, ok := shape[2].(float64)
+	if !ok {
+		log.Printf("Warning: Invalid num_labels type in shape: %T", shape[2])
+		return emptyPrediction(cfg)
+	}
+	seqLen := int(seqLenFloat)
+	numLabels := int(numLabelsFloat)
+
+	if len(logitsFlat) != seqLen*numLabels {
+		log.Printf("Warning: Logits size mismatch. Expected %d, got %d", seqLen*numLabels, len(logitsFlat))
+		return emptyPrediction(cfg)
+	}
+
+	// Reshape logits to [sequence_length, num_labels]
+	logits := make([][]float32, seqLen)
+	for i := 0; i < seqLen; i++ {
+		logits[i] = make([]float32, numLabels)
+		for j := 0; j < numLabels; j++ {
+			idx := i*numLabels + j
+			val, ok := logitsFlat[idx].(float64)
+			if !ok {
+				log.Printf("Warning: Invalid logit value type at [%d,%d]: %T", i, j, logitsFlat[idx])
+				return emptyPrediction(cfg)
+			}
+			logits[i][j] = float32(val)
+		}
+	}
+
+	// Apply argmax to get predicted label indices
+	predictions := make([]int, seqLen)
+	confidences := make([]float32, seqLen)
+	for i := 0; i < seqLen; i++ {
+		maxIdx := 0
+		maxVal := logits[i][0]
+		for j := 1; j < numLabels; j++ {
+			if logits[i][j] > maxVal {
+				maxVal = logits[i][j]
+				maxIdx = j
+			}
+		}
+		predictions[i] = maxIdx
+		// Calculate confidence using softmax
+		softmaxProbs := softmax(logits[i])
+		confidences[i] = softmaxProbs[maxIdx]
+	}
+
+	// Convert token predictions to character spans
+	return alignToCharacters(predictions, confidences, encoding, originalText, cfg.NERLabels, cfg)
+}
+
+// emptyPrediction returns a prediction with no entities
+func emptyPrediction(cfg *Config) LSPrediction {
+	return LSPrediction{
+		Model:    cfg.DefaultModel,
+		ModelRun: fmt.Sprintf("oceanid-%d", time.Now().Unix()),
+		Result:   []LSResult{},
+		Score:    0.0,
+	}
+}
+
+// softmax converts logits to probabilities (numerically stable version)
+func softmax(logits []float32) []float32 {
+	if len(logits) == 0 {
+		return []float32{}
+	}
+
+	// Find max for numerical stability
+	maxLogit := logits[0]
+	for _, v := range logits[1:] {
+		if v > maxLogit {
+			maxLogit = v
+		}
+	}
+
+	// Compute exp(logit - max) and sum
+	expSum := float32(0.0)
+	exp := make([]float32, len(logits))
+	for i, v := range logits {
+		exp[i] = float32(math.Exp(float64(v - maxLogit)))
+		expSum += exp[i]
+	}
+
+	// Normalize
+	if expSum > 0 {
+		for i := range exp {
+			exp[i] /= expSum
+		}
+	}
+	return exp
+}
+
+// alignToCharacters converts token-level predictions to character-level spans
+func alignToCharacters(
+	predictions []int,
+	confidences []float32,
+	encoding *tokenizer.Encoding,
+	originalText string,
+	labels []string,
+	cfg *Config,
+) LSPrediction {
+	offsets := encoding.GetOffsets()
+	tokens := encoding.GetTokens()
 
 	result := LSPrediction{
 		Model:    cfg.DefaultModel,
 		ModelRun: fmt.Sprintf("oceanid-%d", time.Now().Unix()),
 		Result:   []LSResult{},
-		Score:    0.9, // Dummy confidence
+		Score:    0.0,
 	}
 
-	// Find entities (simplified - just demo)
-	currentPos := 0
-	for i, word := range words {
-		startPos := strings.Index(originalText[currentPos:], word)
-		if startPos == -1 {
+	// Validate array lengths match
+	if len(predictions) != len(offsets) || len(predictions) != len(tokens) {
+		log.Printf("Warning: Length mismatch - predictions:%d, offsets:%d, tokens:%d",
+			len(predictions), len(offsets), len(tokens))
+		return result
+	}
+
+	// Track current entity being built
+	var currentEntity *struct {
+		label      string
+		start, end int
+		tokens     []string
+		confidence float32
+	}
+
+	// Merge consecutive tokens with same label
+	for i := 0; i < len(predictions); i++ {
+		labelIdx := predictions[i]
+		if labelIdx >= len(labels) {
+			log.Printf("Warning: Label index %d out of range (max %d)", labelIdx, len(labels)-1)
 			continue
 		}
-		startPos += currentPos
-		endPos := startPos + len(word)
-		currentPos = endPos
+		label := labels[labelIdx]
 
-		// Dummy entity detection - in reality, use model output
-		if i%3 == 0 && i > 0 { // Every 3rd word is an "entity"
-			labelIdx := i % len(cfg.NERLabels)
-			if labelIdx > 0 { // Skip "O" label
-				result.Result = append(result.Result, LSResult{
-					Value: map[string]interface{}{
-						"start":  startPos,
-						"end":    endPos,
-						"text":   word,
-						"labels": []string{cfg.NERLabels[labelIdx]},
-					},
-					From:  "label",
-					To:    "text",
-					Type:  "labels",
-					Score: 0.85,
-				})
+		// Skip "O" (non-entity) and special tokens
+		if label == "O" || tokens[i] == "[CLS]" || tokens[i] == "[SEP]" || tokens[i] == "[PAD]" {
+			if currentEntity != nil {
+				// Flush current entity
+				result.Result = append(result.Result, createLSResult(currentEntity, originalText))
+				currentEntity = nil
 			}
+			continue
 		}
+
+		// Start new entity or continue current
+		if currentEntity == nil || currentEntity.label != label {
+			if currentEntity != nil {
+				// Flush previous entity
+				result.Result = append(result.Result, createLSResult(currentEntity, originalText))
+			}
+			// Start new entity
+			currentEntity = &struct {
+				label      string
+				start, end int
+				tokens     []string
+				confidence float32
+			}{
+				label:      label,
+				start:      int(offsets[i][0]),
+				end:        int(offsets[i][1]),
+				tokens:     []string{tokens[i]},
+				confidence: confidences[i],
+			}
+		} else {
+			// Extend current entity
+			currentEntity.end = int(offsets[i][1])
+			currentEntity.tokens = append(currentEntity.tokens, tokens[i])
+			// Average confidence
+			currentEntity.confidence = (currentEntity.confidence + confidences[i]) / 2
+		}
+	}
+
+	// Flush last entity
+	if currentEntity != nil {
+		result.Result = append(result.Result, createLSResult(currentEntity, originalText))
+	}
+
+	// Calculate overall score (average confidence of all entities)
+	if len(result.Result) > 0 {
+		totalScore := 0.0
+		for _, res := range result.Result {
+			totalScore += res.Score
+		}
+		result.Score = totalScore / float64(len(result.Result))
 	}
 
 	return result
+}
+
+// createLSResult converts an entity to Label Studio result format
+func createLSResult(entity *struct {
+	label      string
+	start, end int
+	tokens     []string
+	confidence float32
+}, originalText string) LSResult {
+	// Ensure offsets are valid
+	if entity.start < 0 {
+		entity.start = 0
+	}
+	if entity.end > len(originalText) {
+		entity.end = len(originalText)
+	}
+	if entity.start >= entity.end {
+		// Fix invalid span - use minimum valid range
+		if entity.start < len(originalText) {
+			entity.end = entity.start + 1
+		} else {
+			// Start is at end of text, reset to valid range
+			entity.start = len(originalText) - 1
+			entity.end = len(originalText)
+		}
+	}
+	// Final safety check
+	if entity.start >= len(originalText) {
+		entity.start = 0
+		entity.end = 1
+	}
+
+	return LSResult{
+		Value: map[string]interface{}{
+			"start":  entity.start,
+			"end":    entity.end,
+			"text":   originalText[entity.start:entity.end],
+			"labels": []string{entity.label},
+		},
+		From:  "label",
+		To:    "text",
+		Type:  "labels",
+		Score: float64(entity.confidence),
+	}
 }
 
 func predictLSHandler(cfg *Config) http.HandlerFunc {
@@ -390,27 +697,58 @@ func predictLSHandler(cfg *Config) http.HandlerFunc {
 			return
 		}
 
-		// Process as regular predict request
-		req := PredictRequest{
-			Text:  text,
-			Model: cfg.DefaultModel,
-			Task:  "ner",
-		}
-
-		// Reuse predict logic
-		// For simplicity, we'll call the predict endpoint internally
-		// In production, extract this to a shared function
-		words := strings.Fields(req.Text)
-		if len(words) == 0 {
-			http.Error(w, "empty text", http.StatusBadRequest)
+		// Tokenize text
+		encoding, err := bertTokenizer.EncodeSingle(text)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Tokenization failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		// Dummy processing for demo
-		result := processNEROutput(cfg, &TritonResponse{}, words, text)
+		tokenIDs := encoding.GetIds()
+		if len(tokenIDs) == 0 {
+			http.Error(w, "empty text after tokenization", http.StatusBadRequest)
+			return
+		}
+
+		// Convert uint32 token IDs to int64 for Triton
+		tokenIDsInt64 := make([]int64, len(tokenIDs))
+		for i, id := range tokenIDs {
+			tokenIDsInt64[i] = int64(id)
+		}
+
+		// Build Triton request
+		inputs := []TritonTensor{
+			{
+				Name:     "input_ids",
+				Shape:    []int{1, len(tokenIDsInt64)},
+				DataType: "INT64",
+				Data:     tokenIDsInt64,
+			},
+			{
+				Name:     "attention_mask",
+				Shape:    []int{1, len(tokenIDsInt64)},
+				DataType: "INT64",
+				Data:     makeOnes(len(tokenIDsInt64)),
+			},
+		}
+
+		// Call Triton
+		tritonResp, err := makeTritonRequest(cfg, cfg.DefaultModel, inputs)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Triton error: %v", err), http.StatusBadGateway)
+			return
+		}
+
+		// Process NER results
+		result := processNEROutput(cfg, tritonResp, encoding, text)
+
+		// Return predictions in Label Studio format
+		response := map[string]interface{}{
+			"results": []LSPrediction{result},
+		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(result); err != nil {
+		if err := json.NewEncoder(w).Encode(response); err != nil {
 			log.Printf("Failed to encode prediction result: %v", err)
 		}
 	}
@@ -626,6 +964,16 @@ func triggerK8sJob(cfg *Config, requestID string, annCount int) error {
 func main() {
 	cfg := loadConfig()
 
+	// Initialize BERT tokenizer
+	if err := initTokenizer(); err != nil {
+		log.Fatalf("Tokenizer initialization failed: %v", err)
+	}
+
+	// Initialize document extraction client
+	if err := initDocumentExtraction(cfg); err != nil {
+		log.Fatalf("Document extraction initialization failed: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/setup", setupHandler(cfg))
@@ -635,6 +983,7 @@ func main() {
 
 	log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
 	log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
+	log.Printf("Document extraction URL: %s", cfg.DocumentExtractionURL)
 	log.Printf("NER labels: %v", cfg.NERLabels)
 	log.Printf("/train async=%v dry_run=%v k8sJobs=true jobImage=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainJobImage)
 

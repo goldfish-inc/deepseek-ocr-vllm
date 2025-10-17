@@ -9,6 +9,7 @@ on:
       - 'apps/project-bootstrapper/**'
       - 'apps/training-worker/**'
       - 'apps/csv-ingestion-worker/**'
+      - 'apps/document-extraction-service/**'
 
 permissions:
   contents: read
@@ -183,5 +184,73 @@ jobs:
 
           # Cleanup
           docker stop csv-worker-test || true
+
+          echo "✅ Smoke test passed"
+
+  build-document-extraction:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push document-extraction image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/document-extraction-service
+          push: true
+          tags: |
+            ghcr.io/goldfish-inc/oceanid/document-extraction:${{ github.sha }}
+            ghcr.io/goldfish-inc/oceanid/document-extraction:main
+          cache-from: type=registry,ref=ghcr.io/goldfish-inc/oceanid/document-extraction:buildcache
+          cache-to: type=registry,ref=ghcr.io/goldfish-inc/oceanid/document-extraction:buildcache,mode=max
+
+      - name: Smoke test document-extraction image
+        run: |
+          set -euo pipefail
+
+          IMAGE="ghcr.io/goldfish-inc/oceanid/document-extraction:${{ github.sha }}"
+          echo "🧪 Running smoke test for: $IMAGE"
+
+          # Run container
+          docker run --rm -d \
+            --name doc-extract-test \
+            -p 8080:8080 \
+            "$IMAGE" || {
+            echo "❌ Container failed to start"
+            exit 1
+          }
+
+          # Wait for startup (max 30 seconds, docling models load)
+          echo "⏳ Waiting for container to initialize..."
+          for i in {1..30}; do
+            if ! docker ps | grep -q doc-extract-test; then
+              echo "❌ Container crashed during startup!"
+              docker logs doc-extract-test 2>&1 || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Check health endpoint
+          if docker exec doc-extract-test wget --spider -q http://localhost:8080/health; then
+            echo "✅ Health endpoint responding"
+          else
+            echo "❌ Health endpoint not responding"
+            docker logs doc-extract-test 2>&1
+            docker stop doc-extract-test || true
+            exit 1
+          fi
+
+          # Cleanup
+          docker stop doc-extract-test || true
 
           echo "✅ Smoke test passed"

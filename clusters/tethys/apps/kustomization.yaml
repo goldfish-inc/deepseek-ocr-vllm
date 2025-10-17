@@ -4,3 +4,4 @@ kind: Kustomization
 
 resources:
   - label-studio-release.yaml
+  - document-extraction.yaml
