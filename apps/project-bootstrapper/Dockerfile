@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflag
 FROM alpine:3.21
 
 # Install CA certificates and debugging tools for internal dev velocity
-RUN apk --no-cache add ca-certificates=20241010-r0 curl=8.11.1-r2 jq=1.7.1-r0 bash=5.2.37-r0
+RUN apk --no-cache add ca-certificates=20250911-r0 curl=8.14.1-r2 jq=1.7.1-r0 bash=5.2.37-r0
 
 # Copy binary
 COPY --from=builder /build/bootstrapper /bootstrapper

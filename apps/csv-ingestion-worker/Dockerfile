@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 FROM alpine:3.21
 
 # Install ca-certificates for HTTPS and PostgreSQL client for debugging
-RUN apk --no-cache add ca-certificates=20241010-r0 tzdata=2025a-r0 postgresql-client=16.7-r0
+RUN apk --no-cache add ca-certificates=20250911-r0 tzdata=2025b-r0 postgresql16-client=16.10-r0
 
 # Create non-root user
 RUN addgroup -g 1000 -S appuser && \
