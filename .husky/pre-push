@@ -1,10 +1,13 @@
-# Pre-push hook to run Go tests for CSV ingestion worker
+# Pre-push hook to run Go tests and Docker image builds
 # This prevents pushing broken code that would cause deploy failures
 
 echo "🧪 Running pre-push checks..."
 
-# Check if CSV worker code changed
-CSV_WORKER_CHANGED=$(git diff --name-only @{upstream}...HEAD 2>/dev/null | grep '^apps/csv-ingestion-worker/' || true)
+# Detect changed apps with Dockerfiles
+CHANGED_APPS=$(git diff --name-only @{upstream}...HEAD 2>/dev/null | grep '^apps/' | cut -d'/' -f1-2 | sort -u || true)
+
+# Check if CSV worker code changed (for Go tests)
+CSV_WORKER_CHANGED=$(echo "$CHANGED_APPS" | grep 'apps/csv-ingestion-worker' || true)
 
 if [ -n "$CSV_WORKER_CHANGED" ]; then
     echo "📦 CSV ingestion worker code changed, running tests..."
@@ -15,31 +18,69 @@ if [ -n "$CSV_WORKER_CHANGED" ]; then
     if ! command -v go >/dev/null 2>&1; then
         echo "⚠️  Go not installed, skipping tests"
         cd ../..
-        exit 0
-    fi
+    else
+        # Run go test
+        echo "  → Running go test..."
+        if ! go test ./...; then
+            echo "❌ CSV worker tests failed!"
+            echo "Fix the tests before pushing, or use --no-verify to skip this check."
+            cd ../..
+            exit 1
+        fi
 
-    # Run go test
-    echo "  → Running go test..."
-    if ! go test ./...; then
-        echo "❌ CSV worker tests failed!"
-        echo "Fix the tests before pushing, or use --no-verify to skip this check."
+        # Check if code compiles
+        echo "  → Checking if code compiles..."
+        if ! go build -o /dev/null .; then
+            echo "❌ CSV worker build failed!"
+            echo "Fix the build errors before pushing, or use --no-verify to skip this check."
+            cd ../..
+            exit 1
+        fi
+
         cd ../..
-        exit 1
+        echo "✅ CSV worker tests passed"
     fi
-
-    # Check if code compiles
-    echo "  → Checking if code compiles..."
-    if ! go build -o /dev/null .; then
-        echo "❌ CSV worker build failed!"
-        echo "Fix the build errors before pushing, or use --no-verify to skip this check."
-        cd ../..
-        exit 1
-    fi
-
-    cd ../..
-    echo "✅ CSV worker tests passed"
 else
     echo "  CSV worker unchanged, skipping tests"
+fi
+
+# Build Docker images for changed apps
+if [ -n "$CHANGED_APPS" ]; then
+    echo "🐳 Building Docker images for changed apps..."
+
+    # Check if Docker is installed
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "⚠️  Docker not installed, skipping image builds"
+    else
+        BUILD_FAILED=0
+
+        for app_path in $CHANGED_APPS; do
+            if [ -f "$app_path/Dockerfile" ]; then
+                app_name=$(basename "$app_path")
+                echo "  → Building $app_name..."
+
+                # Build using buildx (uses cloud builder if available)
+                if ! docker buildx build --load -t "$app_name:pre-push-check" -f "$app_path/Dockerfile" "$app_path" >/dev/null 2>&1; then
+                    echo "❌ Docker build failed for $app_name!"
+                    BUILD_FAILED=1
+                else
+                    echo "    ✅ $app_name built successfully"
+                    # Clean up test image
+                    docker rmi "$app_name:pre-push-check" >/dev/null 2>&1 || true
+                fi
+            fi
+        done
+
+        if [ $BUILD_FAILED -eq 1 ]; then
+            echo "❌ Docker image build(s) failed!"
+            echo "Fix the Dockerfiles before pushing, or use --no-verify to skip this check."
+            exit 1
+        fi
+
+        echo "✅ All Docker images built successfully"
+    fi
+else
+    echo "  No app changes detected, skipping Docker builds"
 fi
 
 echo "✅ Pre-push checks complete"
