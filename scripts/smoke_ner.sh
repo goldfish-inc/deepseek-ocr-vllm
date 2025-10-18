@@ -77,10 +77,12 @@ ONNX_DIR="$WORK/onnx"
 echo "🧪 Preparing tiny dataset subsets"
 # Generate minimal synthetic data if files don't exist
 if [ -f "$NER_DIR/data/synthetic_train.jsonl" ] && [ -f "$NER_DIR/data/synthetic_val.jsonl" ]; then
+  echo "  → using existing data files"
   head -n 120 "$NER_DIR/data/synthetic_train.jsonl" > "$TRAIN_JSONL"
   head -n 40 "$NER_DIR/data/synthetic_val.jsonl" > "$VAL_JSONL"
 else
   # Generate minimal inline fixtures for CI
+  echo "  → generating synthetic data to $WORK/"
   WORK="$WORK" $PY - <<'PYGEN'
 import json
 import os
@@ -139,6 +141,8 @@ with open(f"{work_dir}/val.jsonl", "w") as f:
 
 print(f"  Generated {len(train_data)} train + {len(val_data)} val samples")
 PYGEN
+  echo "  → verifying generated files:"
+  ls -lh "$TRAIN_JSONL" "$VAL_JSONL" || echo "ERROR: files not created!"
 fi
 
 echo "🏋️  Training 1 epoch (tiny subset)"
