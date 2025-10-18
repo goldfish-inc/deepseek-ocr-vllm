@@ -14,6 +14,10 @@ on:
       - 'Makefile'
   workflow_dispatch: {}
 
+concurrency:
+  group: gpu-smoke
+  cancel-in-progress: true
+
 jobs:
   cpu:
     name: CPU smoke (Ubuntu)
@@ -66,4 +70,6 @@ jobs:
           TOKENIZERS_PARALLELISM: 'false'
           CUDA_VISIBLE_DEVICES: '0'
         run: |
+          echo "Checking ORT providers..."
+          python scripts/check-ort-gpu.py
           bash scripts/smoke_ner.sh

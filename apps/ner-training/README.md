@@ -196,3 +196,13 @@ Common issues:
 4. **Deploy**: Export to ONNX and deploy to Triton
 5. **Monitor**: Track prediction quality in production
 6. **Iterate**: Collect hard examples and retrain
+
+## Exporter Modes and VERSION.json
+
+- The exporter tries the modern path first: torch.onnx.export with `dynamo=True` and `dynamic_shapes`.
+- If the modern path fails (known with DistilBERT attention in torch 2.8), it falls back to the legacy exporter and logs a warning.
+- After export, the output directory contains:
+  - `exporter_mode.txt` with either `modern` or `legacy_fallback`.
+  - `VERSION.json` with exporter mode, opset, labels, and library versions.
+
+CI surfaces the exporter mode in logs so failures are obvious (no silent masking). When torch.export adds support for DistilBERT attention, the mode will flip to `modern` automatically in GPU smokes.

@@ -221,6 +221,46 @@ def main():
 
     out_df = spark.createDataFrame(rdd, schema=schema)
     out_df.write.mode("overwrite").parquet(args.output)
+
+    # Optional: produce structured spans when using adapter mode
+    if (not args.batch_mode):
+        def parse_spans(js: str):
+            try:
+                obj = json.loads(js)
+            except Exception:
+                return []
+            results = []
+            # LSPrediction with 'Result' list of LS-style entries
+            if isinstance(obj, dict) and 'Result' in obj:
+                res_list = obj.get('Result') or []
+                for r in res_list:
+                    v = (r or {}).get('value') or {}
+                    lbls = v.get('labels') or []
+                    label = lbls[0] if lbls else 'O'
+                    results.append({
+                        'label': label,
+                        'start': int(v.get('start', 0) or 0),
+                        'end': int(v.get('end', 0) or 0),
+                        'text': v.get('text', ''),
+                        'score': float((r or {}).get('score', 0.0) or 0.0),
+                    })
+            return results
+
+        parse_spans_udf = F.udf(lambda s: parse_spans(s), 'array<struct<label:string,start:int,end:int,text:string,score:double>>')
+        spans_df = out_df.select(
+            F.col('id'),
+            F.explode_outer(parse_spans_udf(F.col('prediction_json'))).alias('span')
+        ).select(
+            'id',
+            F.col('span.label').alias('label'),
+            F.col('span.start').alias('start'),
+            F.col('span.end').alias('end'),
+            F.col('span.text').alias('entity_text'),
+            F.col('span.score').alias('score'),
+        )
+        spans_out = args.output.rstrip('/') + "-structured"
+        spans_df.write.mode('overwrite').parquet(spans_out)
+
     spark.stop()
 
 

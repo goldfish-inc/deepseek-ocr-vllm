@@ -149,4 +149,10 @@ for o in m.graph.output:
     print(" -", o.name, o.type.tensor_type.elem_type, [d.dim_param or d.dim_value for d in o.type.tensor_type.shape.dim])
 PY
 
+if [ -f "$ONNX_DIR/exporter_mode.txt" ]; then
+  echo "Exporter mode: $(cat "$ONNX_DIR/exporter_mode.txt")"
+else
+  echo "Exporter mode: unknown (marker not found)"
+fi
+
 echo "✅ Smoke NER: train + ONNX export completed"

@@ -100,13 +100,14 @@ spark-infer:
 		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
 	fi
 	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
-		echo "Usage: make spark-infer INPUT=</tmp/preproc> OUTPUT=</tmp/infer> [ADAPTER_URL=http://ls-triton-adapter.apps.svc.cluster.local:9090]"; exit 1; \
+		echo "Usage: make spark-infer INPUT=</tmp/preproc> OUTPUT=</tmp/infer> [ADAPTER_URL=http://ls-triton-adapter.apps.svc.cluster.local:9090] [STRUCTURED=true]"; exit 1; \
 	fi
 	spark-submit --master local[*] \
 	  apps/spark-jobs/ner-inference/job.py \
 	  --input "$(INPUT)" \
 	  --output "$(OUTPUT)" \
-	  --adapter-url "$(ADAPTER_URL)"
+	  --adapter-url "$(ADAPTER_URL)" \
+	  $(if $(STRUCTURED),--structured-output,)
 
 # Spark NER batch inference via Triton (micro-batched, GPU-optimized)
 .PHONY: spark-infer-batch

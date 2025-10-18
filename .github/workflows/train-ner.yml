@@ -153,6 +153,53 @@ jobs:
             --output ./distilbert_onnx \
             --opset 14
 
+      - name: Write VERSION.json
+        run: |
+          micromamba run -n oceanid-ner-py311 python - << 'PY'
+          import json, time, os
+          import onnx
+          import transformers, torch, onnxruntime
+          out_dir = 'distilbert_onnx'
+          mode = 'unknown'
+          try:
+              mode = open(os.path.join(out_dir,'exporter_mode.txt'),'r').read().strip()
+          except Exception:
+              pass
+          opset = None
+          try:
+              m = onnx.load(os.path.join(out_dir,'model.onnx'))
+              if m.opset_import:
+                  opset = int(m.opset_import[0].version)
+          except Exception:
+              pass
+          labels = []
+          try:
+              lm = json.load(open(os.path.join(out_dir,'labels.json'),'r'))
+              id2 = {int(k):v for k,v in lm.get('id2label', {}).items()}
+              labels = [id2[i] for i in sorted(id2.keys())]
+          except Exception:
+              pass
+          ver = {
+              'exporter_mode': mode,
+              'versions': {
+                  'transformers': transformers.__version__,
+                  'torch': torch.__version__,
+                  'onnxruntime': onnxruntime.__version__,
+                  'onnx': onnx.__version__,
+              },
+              'opset': opset,
+              'labels': labels,
+              'timestamp_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+          }
+          with open(os.path.join(out_dir,'VERSION.json'),'w') as f:
+              json.dump(ver, f, indent=2)
+          print('Wrote', os.path.join(out_dir,'VERSION.json'))
+          PY
+
+      - name: Add Triton config
+        run: |
+          cp apps/ner-training/config.pbtxt.template distilbert_onnx/config.pbtxt
+
       - name: Check ONNX size and report
         run: |
           set -euo pipefail
@@ -220,6 +267,10 @@ jobs:
           api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
           bin=open('distilbert_onnx/model.onnx','rb').read()
           op=CommitOperationAdd(path_in_repo='onnx/model.onnx', path_or_fileobj=io.BytesIO(bin))
-          api.create_commit(repo_id=repo, repo_type='model', operations=[op], commit_message=f"Update ONNX {datetime.utcnow().isoformat()}Z")
+          cfg=open('distilbert_onnx/config.pbtxt','rb').read()
+          op_cfg=CommitOperationAdd(path_in_repo='onnx/config.pbtxt', path_or_fileobj=io.BytesIO(cfg))
+          ver=open('distilbert_onnx/VERSION.json','rb').read()
+          op_ver=CommitOperationAdd(path_in_repo='onnx/VERSION.json', path_or_fileobj=io.BytesIO(ver))
+          api.create_commit(repo_id=repo, repo_type='model', operations=[op, op_cfg, op_ver], commit_message=f"Update ONNX {datetime.utcnow().isoformat()}Z")
           print('published ONNX to', repo)
           PY

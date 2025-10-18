@@ -76,8 +76,20 @@ def export_to_onnx(model_path: str, output_path: str, opset_version: int = 14):
                 dynamo=True,
             )
             logger.info("ONNX export used modern exporter (dynamo=True, dynamic_shapes)")
+            # Write exporter mode marker for CI/reporting
+            try:
+                with open(output_dir / "exporter_mode.txt", "w") as mf:
+                    mf.write("modern\n")
+            except Exception:
+                pass
         except Exception as e:
             logger.warning(f"Modern ONNX export failed (dynamo=True): {e}. Falling back to legacy exporter.")
+            # Mark fallback mode for CI/reporting before attempting legacy export
+            try:
+                with open(output_dir / "exporter_mode.txt", "w") as mf:
+                    mf.write("legacy_fallback\n")
+            except Exception:
+                pass
             torch.onnx.export(
                 model,
                 (dummy_input["input_ids"], dummy_input["attention_mask"]),

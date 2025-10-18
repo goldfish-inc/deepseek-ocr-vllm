@@ -24,6 +24,23 @@ master=local[*] \
     --output "$OUTPUT"
 ```
 
+Batch Inference (Triton)
+```bash
+# CPU local
+make spark-infer-batch \
+  INPUT=/tmp/ner-preproc-parquet \
+  OUTPUT=/tmp/ner-infer-batch \
+  TRITON_URL=http://calypso.tail4a0e5.ts.net:8000 \
+  MODEL_PATH=./models/ner-distilbert \
+  BATCH_SIZE=8
+
+# Adapter mode (per-row HTTP) with structured spans
+make spark-infer \
+  INPUT=/tmp/ner-preproc-parquet \
+  OUTPUT=/tmp/ner-infer-adapter \
+  STRUCTURED=true
+```
+
 Run (cluster)
 - Use your Spark cluster submit command, replacing `--master` and adding any resource configs (e.g., executor memory, cores).
 
@@ -32,6 +49,7 @@ Extending
 - When enabling RAPIDS:
   - Add plugin config: `spark.plugins=com.nvidia.spark.SQLPlugin` and relevant `spark.executor.resource.gpu.*` settings.
   - Match CUDA and RAPIDS versions to your GPU driver and Spark version.
+  - Use `apps/spark-jobs/conf/rapids.conf` as a starting properties file.
 
 Notes
 - This scaffold avoids heavy ML deps and focuses on ETL. Tokenization/inference should remain in dedicated services or follow-up jobs.

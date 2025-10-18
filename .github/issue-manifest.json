@@ -1,6 +1,43 @@
 {
   "epics": [
     {
+      "title": "Epic: Unified Prelabel + Intelligence DB",
+      "labels": ["epic", "priority:p0", "modernization", "area:product"],
+      "body": "Route all docs (CSV/XLSX/PDF/Image/Text) through the adapter for prelabel inside Label Studio; capture SME corrections via webhooks; persist versioned, auditable records in Postgres; close the loop with nightly retraining and Triton reload.",
+      "issues": [
+        {
+          "title": "Adapter: integrate CSV/XLSX prelabel (row normalize → batch Triton → LS predictions)",
+          "labels": ["type:feat", "area:ml", "area:product"],
+          "body": "Detect CSV/XLSX by content-type or file extension. Parse rows (encoding/csv; .xlsx later), normalize to deterministic row text (key=value pairs), batch to Triton (8–16), decode logits → LS spans, and inject predictions via LS Import/Predictions APIs. Chunk imports (100 rows) to keep UI responsive. Include lineage (file sha256 + row index) in task data."
+        },
+        {
+          "title": "Docling tables → CSV normalization path",
+          "labels": ["type:feat", "area:ml"],
+          "body": "From PDF/Image: use Docling table extraction, convert to row text with provenance (page, table, cell indices), then batch NER and attach LS prelabels to generated row tasks."
+        },
+        {
+          "title": "Annotation sink: LS webhooks to Postgres (versioned records)",
+          "labels": ["type:feat", "area:data", "area:infra"],
+          "body": "New service (Go) with /webhook for ANNOTATION_CREATED/UPDATED. Normalize spans to canonical fields (maritime/seafood), upsert documents/records/record_versions with lineage: s3_key, sha256, doc_type, record_index, model_version, ls ids, user id, timestamps. Provide Helm/Pulumi deployment and health checks."
+        },
+        {
+          "title": "SQL: intelligence DB migrations",
+          "labels": ["type:feat", "area:data"],
+          "body": "Add documents, records, record_versions, annotations tables; keys and indexes for fast lineage/time-travel; optional field-provenance mapping."
+        },
+        {
+          "title": "Training job: read Postgres gold; publish with VERSION.json",
+          "labels": ["type:feat", "area:ml", "area:ci"],
+          "body": "Nightly job extracts latest gold records from Postgres to HF dataset or local JSONL; trains; exports ONNX; publishes model.onnx + config.pbtxt + VERSION.json; triggers Triton reload."
+        },
+        {
+          "title": "Label Studio: webhook config + import patterns",
+          "labels": ["type:docs", "area:product"],
+          "body": "Document enabling ANNOTATION_CREATED/UPDATED webhooks to annotation-sink and CSV import patterns (row task batching, field mapping). Optionally add a Pulumi helper to configure LS webhooks."
+        }
+      ]
+    },
+    {
       "title": "Epic: Transformers 4.56.x + Exporter Stability",
       "labels": ["area:ml", "priority:p1", "epic", "modernization"],
       "body": "Modernize Python ML stack to Transformers 4.56.x, NumPy 2.x, PyTorch 2.8; robust ONNX export; CI smokes on CPU/GPU; remove Optimum coupling.",
@@ -9,6 +46,11 @@
           "title": "Exporter: adopt dynamic_shapes for dynamo and drop legacy fallback",
           "labels": ["type:feat", "area:ml"],
           "body": "Implement dynamic_shapes path for torch.onnx.export(dynamo=true) and validate on Ubuntu CPU + self-hosted GPU."
+        },
+        {
+          "title": "E2E parity: adapter vs batch Triton",
+          "labels": ["type:test", "area:ml"],
+          "body": "Run same sample through ls-triton-adapter and batch Triton paths; assert label parity in CI (CPU)."
         },
         {
           "title": "CI: enable GPU smoke on self-hosted runner",
@@ -32,6 +74,11 @@
       "labels": ["area:product", "priority:p0", "epic", "modernization"],
       "body": "SMEs get real-time NER in Label Studio via ls-triton-adapter; correct model routing and label mapping.",
       "issues": [
+        {
+          "title": "Adapter: metrics + warmup + num_labels guardrails",
+          "labels": ["type:feat", "area:product", "area:ml"],
+          "body": "Expose /metrics (requests, errors, latency, tokens). Warmup dummy inference on start. Warn if Triton num_labels != len(NER_LABELS) and clamp indices if needed."
+        },
         {
           "title": "Adapter: enforce consistent label order and add unit test",
           "labels": ["type:test", "area:ml"],
@@ -97,6 +144,16 @@
           "body": "Implement mapPartitions client batching to Triton; results to Parquet."
         },
         {
+          "title": "Spark batch: add char-level spans output",
+          "labels": ["type:feat", "area:data"],
+          "body": "Map token predictions to char spans using tokenizer offsets and write Parquet (id,label,start,end,text,score) for batch mode."
+        },
+        {
+          "title": "Spark adapter: pooled HTTP client + optional gRPC path",
+          "labels": ["type:feat", "area:data"],
+          "body": "Switch adapter mode to pooled HTTP client (httpx); consider gRPC path for batch mode via tritonclient[grpc]."
+        },
+        {
           "title": "Security: Spark↔Triton networking and secrets",
           "labels": ["type:sec", "area:data"],
           "body": "Keep Triton private; manage HF/S3 creds via ESC/roles; document."
@@ -117,6 +174,16 @@
           "title": "Docs: Training/export end-to-end guide (2025)",
           "labels": ["type:docs", "area:ml"],
           "body": "Create concise guide covering env, train, export, Triton deploy, LS connect."
+        },
+        {
+          "title": "Model artifacts: add VERSION.json and release tags",
+          "labels": ["type:feat", "area:ci"],
+          "body": "Publish VERSION.json with exporter mode, opset, labels, and versions; tag model releases (ner-distilbert-v1.*)."
+        },
+        {
+          "title": "GPU runner: maintenance + health checks",
+          "labels": ["type:docs", "area:ci"],
+          "body": "Pin runner version; scripted upgrades; ORT CUDA provider health check; note GPU job concurrency to prevent backlog."
         },
         {
           "title": "Security: dependency review + gitleaks sweep",

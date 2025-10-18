@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"sync"
 )
 
 // Config holds all environment variables
@@ -73,6 +74,32 @@ var (
 	errDoclingNoText      = errors.New("docling_no_text")
 	errInvalidDocument    = errors.New("invalid_document")
 )
+
+// Simple in-process metrics
+type metricsStore struct {
+	mu       sync.Mutex
+	reqTotal map[string]int64
+	errTotal map[string]int64
+	latSumMs map[string]int64
+	tokens   int64
+}
+
+var metrics = &metricsStore{
+	reqTotal: map[string]int64{},
+	errTotal: map[string]int64{},
+	latSumMs: map[string]int64{},
+}
+
+func (m *metricsStore) observe(endpoint string, hadErr bool, dur time.Duration, tok int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reqTotal[endpoint]++
+	if hadErr {
+		m.errTotal[endpoint]++
+	}
+	m.latSumMs[endpoint] += dur.Milliseconds()
+	m.tokens += int64(tok)
+}
 
 type apiErrorResponse struct {
 	Error apiErrorPayload `json:"error"`
@@ -301,14 +328,17 @@ func extractDocumentText(cfg *Config, tritonDoclingClient *TritonDoclingClient, 
 
 func predictHandler(cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		t0 := time.Now()
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported")
+			metrics.observe("/predict", true, time.Since(t0), 0)
 			return
 		}
 
 		var req PredictRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_json", fmt.Sprintf("Failed to decode request body: %v", err))
+			metrics.observe("/predict", true, time.Since(t0), 0)
 			return
 		}
 
@@ -362,6 +392,7 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 		// Text is required (either directly provided or extracted from document)
 		if req.Text == "" {
 			writeError(w, http.StatusBadRequest, "missing_text", "Provide text or pdf_base64/image_base64 in the request")
+			metrics.observe("/predict", true, time.Since(t0), 0)
 			return
 		}
 
@@ -407,6 +438,7 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 		if err != nil {
 			log.Printf("Triton inference failed: %v", err)
 			writeError(w, http.StatusBadGateway, "triton_inference_failed", "Triton inference failed; see adapter logs")
+			metrics.observe("/predict", true, time.Since(t0), len(tokenIDs))
 			return
 		}
 
@@ -417,12 +449,14 @@ func predictHandler(cfg *Config) http.HandlerFunc {
 			if err := json.NewEncoder(w).Encode(result); err != nil {
 				log.Printf("Failed to encode NER result: %v", err)
 			}
+			metrics.observe("/predict", false, time.Since(t0), len(tokenIDs))
 		} else {
 			// Return raw Triton response for other tasks
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(tritonResp); err != nil {
 				log.Printf("Failed to encode Triton response: %v", err)
 			}
+			metrics.observe("/predict", false, time.Since(t0), len(tokenIDs))
 		}
 	}
 }
@@ -461,6 +495,9 @@ func processNEROutput(cfg *Config, resp *TritonResponse, encoding *tokenizer.Enc
 	}
 	seqLen := int(seqLenFloat)
 	numLabels := int(numLabelsFloat)
+	if numLabels != len(cfg.NERLabels) {
+		log.Printf("Warning: Triton num_labels=%d != configured NER_LABELS=%d", numLabels, len(cfg.NERLabels))
+	}
 
 	if len(logitsFlat) != seqLen*numLabels {
 		log.Printf("Warning: Logits size mismatch. Expected %d, got %d", seqLen*numLabels, len(logitsFlat))
@@ -1171,12 +1208,50 @@ func main() {
 	mux.HandleFunc("/predict", predictHandler(cfg))
 	mux.HandleFunc("/predict_ls", predictLSHandler(cfg))
 	mux.HandleFunc("/train", trainHandler(cfg))
+	// Minimal metrics endpoint (Prometheus text format)
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		metrics.mu.Lock()
+		defer metrics.mu.Unlock()
+		for ep, v := range metrics.reqTotal {
+			_, _ = fmt.Fprintf(w, "oceanid_requests_total{endpoint=\"%s\"} %d\n", ep, v)
+		}
+		for ep, v := range metrics.errTotal {
+			_, _ = fmt.Fprintf(w, "oceanid_errors_total{endpoint=\"%s\"} %d\n", ep, v)
+		}
+		for ep, v := range metrics.latSumMs {
+			_, _ = fmt.Fprintf(w, "oceanid_latency_ms_sum{endpoint=\"%s\"} %d\n", ep, v)
+		}
+		_, _ = fmt.Fprintf(w, "oceanid_tokens_total %d\n", metrics.tokens)
+	})
 
 	log.Printf("Starting ls-triton-adapter on %s", cfg.ListenAddr)
 	log.Printf("Triton base URL: %s", cfg.TritonBaseURL)
 	log.Printf("Triton Docling enabled: %v", cfg.TritonDoclingEnabled)
 	log.Printf("NER labels: %v", cfg.NERLabels)
 	log.Printf("/train async=%v dry_run=%v k8sJobs=true jobImage=%s", cfg.TrainAsync, cfg.TrainDryRun, cfg.TrainJobImage)
+
+	// Warmup: best-effort small inference to pre-load model
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		enc, e := bertTokenizer.EncodeSingle("warmup")
+		if e == nil {
+			ids := enc.GetIds()
+			ids64 := make([]int64, len(ids))
+			for i, id := range ids {
+				ids64[i] = int64(id)
+			}
+			inputs := []TritonTensor{
+				{Name: "input_ids", Shape: []int{1, len(ids64)}, DataType: "INT64", Data: ids64},
+				{Name: "attention_mask", Shape: []int{1, len(ids64)}, DataType: "INT64", Data: makeOnes(len(ids64))},
+			}
+			if _, e2 := makeTritonRequest(cfg, cfg.TritonModelName, inputs); e2 != nil {
+				log.Printf("Warmup inference failed: %v", e2)
+			} else {
+				log.Printf("Warmup inference succeeded")
+			}
+		}
+	}()
 
 	if err := http.ListenAndServe(cfg.ListenAddr, mux); err != nil {
 		log.Fatal(err)
