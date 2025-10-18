@@ -132,7 +132,11 @@ def compute_metrics(pred):
 
     # Compute F1 score
     f1 = f1_score(true_labels, true_predictions)
-    logger.info(f"\n{classification_report(true_labels, true_predictions)}")
+    try:
+        logger.info(f"\n{classification_report(true_labels, true_predictions)}")
+    except ValueError as e:
+        # seqeval fails on sparse validation sets (e.g., smoke tests with synthetic data)
+        logger.warning(f"Skipping classification report (sparse labels): {e}")
 
     return {"f1": f1}
 
