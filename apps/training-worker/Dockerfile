@@ -9,7 +9,10 @@ WORKDIR $WORKDIR
 
 # System deps (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates bash \
+    git=1:2.47.3-0+deb13u1 \
+    curl=8.14.1-2 \
+    ca-certificates=20250419 \
+    bash=5.2.37-2+b5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/requirements-ner.txt /tmp/requirements-ner.txt
