@@ -1,0 +1,77 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: training-worker
+  namespace: apps
+spec:
+  # Run every 6 hours to check for new annotations and retrain if needed
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid  # Prevent overlapping runs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600  # Clean up completed jobs after 1 hour
+      template:
+        spec:
+          restartPolicy: OnFailure
+          # Run on GPU node for training acceleration
+          nodeSelector:
+            kubernetes.io/hostname: calypso
+          containers:
+          - name: training-worker
+            image: ghcr.io/goldfish-inc/oceanid/training-worker:latest
+            imagePullPolicy: Always
+            resources:
+              requests:
+                memory: "8Gi"
+                cpu: "4"
+                nvidia.com/gpu: "1"
+              limits:
+                memory: "16Gi"
+                cpu: "8"
+                nvidia.com/gpu: "1"
+            env:
+            # HuggingFace configuration
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-credentials
+                  key: token
+            - name: HF_DATASET_REPO
+              value: "goldfish-inc/oceanid-annotations"
+            - name: HF_DATASET_REPO_NER
+              value: "goldfish-inc/oceanid-annotations"
+            - name: HF_MODEL_REPO
+              value: "goldfish-inc/oceanid-ner-distilbert"
+
+            # Triton configuration for model reload
+            - name: TRITON_URL
+              value: "https://gpu.boathou.se"
+            - name: TRITON_MODEL_NAME
+              value: "ner-distilbert"
+
+            # Training configuration
+            - name: ANNOTATION_COUNT
+              value: "100"  # Minimum annotations needed to trigger training
+
+            # Cloudflare Access for Triton API
+            - name: CF_ACCESS_CLIENT_ID
+              value: "bb3a04fc48e1d87d2c34001342765195.access"
+            - name: CF_ACCESS_CLIENT_SECRET
+              value: "635b36f99aaea163b035c3611afcfc697f94faa87b5edc226f92f2e871559944"
+
+            # Python environment
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+
+            # Sentry monitoring
+            - name: SENTRY_ENVIRONMENT
+              value: "prod"
+
+          # Image pull secret for private GitHub Container Registry
+          imagePullSecrets:
+          - name: ghcr-pull-secret

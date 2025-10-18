@@ -1,12 +1,20 @@
 # Applications configuration for automated image updates
 # This file contains application deployments with image policy markers
 
-apiVersion: v1
-kind: ConfigMap
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
 metadata:
-  name: app-image-markers
+  name: apps
   namespace: flux-system
-data:
-  # Application images can be added here with proper policy markers
-  # Example: app-name: "registry/image:tag" # {"$imagepolicy": "flux-system:policy-name"}
-  placeholder: "enabled"
+spec:
+  interval: 10m
+  targetNamespace: apps
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./clusters/tethys/apps
+  prune: true
+  wait: true
+  postBuild:
+    substitute:
+      cluster_name: "tethys"
