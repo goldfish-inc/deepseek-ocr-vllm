@@ -81,10 +81,12 @@ if [ -f "$NER_DIR/data/synthetic_train.jsonl" ] && [ -f "$NER_DIR/data/synthetic
   head -n 40 "$NER_DIR/data/synthetic_val.jsonl" > "$VAL_JSONL"
 else
   # Generate minimal inline fixtures for CI
-  $PY - <<PYGEN
+  WORK="$WORK" $PY - <<'PYGEN'
 import json
+import os
 import random
 
+work_dir = os.environ["WORK"]
 labels = ["O", "VESSEL", "HS_CODE", "PORT", "SPECIES", "IMO", "FLAG", "RISK_LEVEL", "DATE"]
 
 # Minimal synthetic examples
@@ -127,11 +129,11 @@ for _ in range(40):
     text, entities = random.choice(templates)
     val_data.append(generate_task(text, entities))
 
-with open("$WORK/train.jsonl", "w") as f:
+with open(f"{work_dir}/train.jsonl", "w") as f:
     for task in train_data:
         f.write(json.dumps(task) + "\n")
 
-with open("$WORK/val.jsonl", "w") as f:
+with open(f"{work_dir}/val.jsonl", "w") as f:
     for task in val_data:
         f.write(json.dumps(task) + "\n")
 
