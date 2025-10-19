@@ -121,7 +121,7 @@ export class PrometheusOperator extends pulumi.ComponentResource {
         selector: { matchLabels: { app: "ls-triton-adapter" } },
         namespaceSelector: { matchNames: ["apps"] },
         endpoints: [
-          { port: "http", interval: scrapeInterval, path: "/health" },
+          { port: "http", interval: scrapeInterval, path: "/metrics" },
         ],
       },
     }, { provider: k8sProvider, parent: ns, dependsOn: [release] });
@@ -152,12 +152,13 @@ export class PrometheusOperator extends pulumi.ComponentResource {
               },
               {
                 alert: "TritonAdapterUnhealthy",
-                expr: "probe_http_status_code{job=\"ls-triton-adapter\"} != 200",
-                for: "2m",
+                // Use native target availability since we scrape /health directly
+                expr: "up{job=\"ls-triton-adapter\"} == 0",
+                for: "1m",
                 labels: { severity: "warning" },
                 annotations: {
                   summary: "Triton adapter health check failing",
-                  description: "Adapter /health endpoint returning non-200 status. Check Triton GPU service connectivity (Calypso 192.168.2.110).",
+                  description: "Prometheus scrape/health check is failing for ls-triton-adapter. Verify adapter pods and Triton GPU service connectivity (Calypso 192.168.2.110).",
                 },
               },
             ],
