@@ -28,7 +28,7 @@ This file inventories current SQL, highlights mismatches, and records decisions 
 - Keep consolidated initializer only for dev/bootstrap; versioned migrations are the authoritative path forward.
 - Staging schema adds worker-safe scalar columns via `V7__stage_contract_alignment.sql`; ad-hoc patch slated for removal once mirrors confirmed.
 - Maintain canonical vessel tables with typed hot fields (`curated.vessel_info_typed`) and long-tail assertions (`V11`) for temporal history.
-- Provide a denormalized `curated.vessels_enrichment_view` as the tenant-facing contract (tracked by `V9`, pending implementation once Phase 2 completes).
+- Provide a denormalized `curated.vessels_enrichment_view` as the tenant-facing contract (delivered as part of `V12__stage_to_curated_promotions.sql`).
 
 ## Next Actions
 
@@ -37,5 +37,5 @@ This file inventories current SQL, highlights mismatches, and records decisions 
 - [x] Author `V10__dataset_registry.sql` to establish dataset versions + ingestions and link stage/curated tables.
 - [x] Author `V11__temporal_assertions.sql` to introduce long-tail assertions and watchlist events.
 - [x] Author `V12__stage_to_curated_promotions.sql` with deterministic promotion function, audit log, and enrichment view.
-- [ ] Author `V9__enrichment_view.sql` exposing `curated.vessels_enrichment_view` (**covered by V12 view**, confirm if standalone migration still required or mark obsolete).
+- [x] Author `V9__enrichment_view.sql` exposing `curated.vessels_enrichment_view` (**fulfilled via V12; no additional migration required**).
 - [ ] Remove/park `label.*` from the initializer; leave TODO to reintroduce post‑stabilization.

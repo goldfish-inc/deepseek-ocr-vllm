@@ -1,10 +1,10 @@
 # Oceanid Database Roadmap
 
-Status: planning focus. Drop Label Studio UX work for now and finalize the global data model and pipelines.
+Status (2025-11-01): Phases 0–2 complete on `main`. Label Studio UX remains paused; focus shifts to validating migrations in deployed environments and integrating enrichment with @ocean.
 
 This roadmap turns the current staging-focused pipeline into a stable, versioned global database that downstream tenants (@ocean on Neon) can consume for enrichment.
 
-## Phase 0 — Stabilize What Exists (Stopgap)
+## Phase 0 — Stabilize What Exists (Stopgap) ✅
 
 - Freeze Label Studio work and any label.* schema changes (keep integration disabled).
 - Lock down a stable contract for `stage.*` used by Go workers:
@@ -17,7 +17,7 @@ Acceptance
 - Go workers (csv/pdf) run without schema errors against the database.
 - A single representative source flows to curated tables with audit trail intact.
 
-## Phase 1 — Global Schema (Curated) First
+## Phase 1 — Global Schema (Curated) First ✅
 
 Design and implement the production data model for maritime intelligence.
 
@@ -42,7 +42,7 @@ Acceptance
 - Materialized or standard views expose the minimal enrichment surface for tenants:
   - `curated.vessels_enrichment_view` with essential denormalized fields.
 
-## Phase 2 — Pipeline Alignment (Workers → Stage → Curated)
+## Phase 2 — Pipeline Alignment (Workers → Stage → Curated) ✅
 
 - Align Go workers to the finalized `stage.*` contract and add tests.
 - Write deterministic promotions from `stage.*` to `curated.*` (idempotent upserts; conflict handling; data provenance captured).
@@ -55,16 +55,20 @@ Acceptance
 
 ## Deliverables & Tracking
 
-- Convert consolidated SQL into versioned migrations (no ad‑hoc patches).
-- Add `SCHEMA_STATUS.md` tracked under `sql/` to capture decisions, drift, and open items.
-- Create GitHub issues (milestones per phase) in `goldfish-inc/oceanid` for Phases 0–2 (schema/pipeline).
+- ✅ Convert consolidated SQL into versioned migrations (no ad‑hoc patches).
+- ✅ Add `SCHEMA_STATUS.md` tracked under `sql/` to capture decisions, drift, and open items.
+- ✅ Create GitHub issues (milestones per phase) in `goldfish-inc/oceanid` for Phases 0–2 (schema/pipeline).
+- ⏳ Track post-merge validation tasks:
+  - goldfish-inc/oceanid#242 — Deploy V7–V12 migrations to staging/prod and run promotion smoke tests.
+  - goldfish-inc/oceanid#243 — Document promotion workflow (DB_ROADMAP, operations guide) and keep SCHEMA_STATUS.md current.
 
 ## Out of Scope (tracked elsewhere)
 
 - Tenant enrichment orchestration (workers, per-tenant upserts) is tracked in the `goldfish-inc/ocean` platform repo. Oceanid provides the curated data and views; Ocean performs tenant writes.
 - Label Studio/SME and Active Learning are paused. Reintroduction will be planned later and should not block Phases 0–2.
 
-## Open Questions
+## Open Questions / Next Focus
 
-- Exact split between typed vs EAV for `vessel_info`—target a short, explicit typed list and keep EAV for the rest.
-- Replication vs service push for tenant enrichment—start with service push for simplicity.
+- Exact split between typed vs EAV for `vessel_info`—continue to monitor high-usage attributes; promote to typed columns as needed.
+- Replication vs service push for tenant enrichment—initial plan is service push driven by @ocean integration (issue goldfish-inc/ocean#4).
+- Scheduling and automation for `curated.promote_ingestion()` (hourly/ nightly batch) once tenant integration is live.
