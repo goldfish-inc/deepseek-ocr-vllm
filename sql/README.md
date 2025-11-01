@@ -10,8 +10,8 @@ Usage
 - Set DB_URL (or export DATABASE_URL) to your CrunchyBridge/Postgres URI, then:
 
 ```
-make db:migrate               # apply all migrations in sql/migrations
-make db:psql                  # open psql against DB_URL
+make db-migrate               # apply all migrations in sql/migrations
+make db-psql                  # open psql against DB_URL
 ```
 
 Notes

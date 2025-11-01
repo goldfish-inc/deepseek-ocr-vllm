@@ -18,6 +18,19 @@ test:
 	# Requires opa in PATH
 	pnpm --filter @oceanid/policy test
 
+# CI helpers
+# Note: targets with colons (ci:*, db:*, ner:*) cannot be marked .PHONY in GNU Make < 4.0
+
+ci-opa:
+	@echo "Running OPA tests..."
+	pnpm --filter @oceanid/policy test
+
+ci-go:
+	@echo "Running Go tests for all apps/* with go.mod..."
+	@sh -c 'set -e; for m in apps/*; do if [ -f "$$m/go.mod" ]; then echo "==> $$m"; (cd "$$m" && go test ./...); fi; done'
+
+ci-all: ci-opa ci-go
+
 format:
 	pnpm --filter @oceanid/policy fmt
 
@@ -47,6 +60,16 @@ pre-commit:
 	@command -v pre-commit >/dev/null 2>&1 || { echo "Installing pre-commit..."; python3 -m pip install --user pre-commit || pipx install pre-commit; }
 	pre-commit install
 	@echo "pre-commit installed. Hooks configured from .pre-commit-config.yaml"
+
+
+# Focus utilities
+.PHONY: focus
+
+focus:
+	@echo "Focus is DB stabilization & tenant enrichment. See FOCUS.md, docs/DB_ROADMAP.md, sql/SCHEMA_STATUS.md."
+
+db-guard:
+	bash scripts/ci/guard_paused_modules.sh
 
 
 # Minimal deploy for current architecture (no SSH provisioning or LB)
@@ -128,61 +151,78 @@ spark-infer-batch:
 	  --batch-size "$(BATCH_SIZE)"
 
 # Database (CrunchyBridge or any Postgres)
-.PHONY: db:migrate db:psql db:status
 
 MIG_DIR ?= sql/migrations
 DB_URL ?= $(DATABASE_URL)
 
-db:migrate:
+db-migrate:
 	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
 	@command -v psql >/dev/null 2>&1 || { echo "psql is required"; exit 1; }
-	@for f in $(MIG_DIR)/*.sql; do \
+	@for f in $$(ls -1 $(MIG_DIR)/*.sql 2>/dev/null | sort -V); do \
 		echo "==> applying $$f"; \
 		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f "$$f"; \
 	done
 
-db:psql:
+# CI-safe migration runner: only apply versioned migrations (V*.sql) in numerical order
+.PHONY: db-migrate-ci
+db-migrate-ci:
+	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
+	@command -v psql >/dev/null 2>&1 || { echo "psql is required"; exit 1; }
+	@for f in $$(ls -1 $(MIG_DIR)/V*.sql 2>/dev/null | sort -V); do \
+		echo "==> applying $$f"; \
+		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f "$$f"; \
+	done
+
+db-psql:
 	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
 	psql "$(DB_URL)"
 
-db:status:
+db-status:
 	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
 	psql "$(DB_URL)" -c "select now() as connected_at, current_user, current_database();" -c "select * from control.schema_versions order by applied_at desc limit 10;" || true
 
 # NER training helpers (requires Python with transformers & datasets)
-.PHONY: ner:train ner:export
 
 NER_LABELS ?= labels.json
 NER_DATA_DIR ?= ./local_annotations
 NER_OUT ?= ./models/ner-distilbert
 
-ner:train:
+ner-train:
 	python3 scripts/ner_train.py --labels $(NER_LABELS) --data-dir $(NER_DATA_DIR) --out $(NER_OUT)
 
-ner:export:
+ner-export:
 	bash scripts/export_onnx.sh $(NER_OUT) distilbert_onnx 63
 
 # NER labels config helpers
-.PHONY: ner:labels-array ner:labels-sync
 
-ner:labels-array:
+ner-labels-array:
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 	python3 scripts/ner_labels_from_labels_json.py > ner_labels.json
 	@echo "Wrote ner_labels.json (ordered label names)"
 
-ner:labels-sync: ner:labels-array
+ner-labels-sync: ner-labels-array
 	@cd cluster && pulumi stack select $(STACK)
 	@pulumi -C cluster config set oceanid-cluster:nerLabels "$(shell cat ner_labels.json)" --secret
 	@echo "Updated oceanid-cluster:nerLabels from ner_labels.json"
 
 # Restart the LS adapter to pick up label changes
-.PHONY: ner:adapter-restart ner:labels-apply
 
-ner:adapter-restart:
+ner-adapter-restart:
 	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required"; exit 1; }
 	kubectl -n apps rollout restart deploy/ls-triton-adapter
 	kubectl -n apps rollout status deploy/ls-triton-adapter --timeout=180s
 
 # Full workflow: sync labels to Pulumi + restart adapter
-ner:labels-apply: ner:labels-sync ner:adapter-restart
+ner-labels-apply: ner-labels-sync ner-adapter-restart
 	@echo "✅ NER labels synced and adapter restarted"
+
+# PDF extraction helpers
+.PHONY: extract
+
+EXTRACT_PDF ?=
+EXTRACT_OUT ?=
+
+extract:
+	@if [ -z "$(EXTRACT_PDF)" ]; then echo "Usage: make extract EXTRACT_PDF=./in.pdf [EXTRACT_OUT=./out.json]"; exit 1; fi
+	@if ! command -v python3 >/dev/null 2>&1; then echo "python3 is required"; exit 1; fi
+	python3 scripts/pdf_extract.py --input "$(EXTRACT_PDF)" $(if $(EXTRACT_OUT),--out "$(EXTRACT_OUT)",)

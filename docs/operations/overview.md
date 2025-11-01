@@ -186,9 +186,9 @@ curl -sk https://gpu.<base>/v2/health/ready
   - `make up`
 - Apply schema migrations locally:
   - `export DATABASE_URL='postgresql://<user>:<pass>@<host>:5432/<db>'`
-  - `make db:migrate`
+  - `make db-migrate`
 - Quick checks:
-  - `make db:psql`
+  - `make db-psql`
   - `psql "$DATABASE_URL" -c "select * from stage.v_documents_freshness;"`
 
 ### Label Studio database (labelfish)

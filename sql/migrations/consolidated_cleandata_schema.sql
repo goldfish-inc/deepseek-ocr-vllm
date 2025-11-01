@@ -5,6 +5,9 @@
 -- database in one go, rather than using incremental migrations.
 -- Used for initial database setup on CrunchyBridge.
 -- ============================================================================
+-- NOTE: Legacy bootstrap script. Prefer applying versioned migrations
+--       (sql/migrations/V*.sql) for new environments to stay aligned with
+--       the current Oceanid schema.
 
 -- Create PostgreSQL extensions (may fail on CrunchyBridge, that's OK)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

@@ -3,6 +3,9 @@
 -- Depends on: V1__staging_baseline.sql
 -- Purpose: Add reference/code tables required by ebisu_ner_schema_mapping.json
 
+-- Enable PostGIS for geometry types
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- =============================================================================
 -- COUNTRY & FLAG STATE REFERENCES
 -- =============================================================================

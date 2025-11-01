@@ -92,3 +92,12 @@ repos:
         types_or: [ts, tsx]
         pass_filenames: false
         files: ^cloud/.*\.ts$
+
+  # Guard paused modules (Label Studio etc.)
+  - repo: local
+    hooks:
+      - id: guard-paused-modules
+        name: Guard Paused Modules
+        entry: bash scripts/ci/guard_paused_modules.sh
+        language: system
+        pass_filenames: false

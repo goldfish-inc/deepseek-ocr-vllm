@@ -370,9 +370,9 @@ Steps
   - `make up`
 - Apply schema migrations from your workstation:
   - `export DATABASE_URL='postgresql://<user>:<pass>@<host>:5432/<db>'`
-  - `make db:migrate`
+  - `make db-migrate`
 - Check connectivity:
-  - `make db:psql`
+  - `make db-psql`
 
 Notes
 

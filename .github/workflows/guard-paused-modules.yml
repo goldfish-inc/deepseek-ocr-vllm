@@ -1,0 +1,22 @@
+name: Guard Paused Modules
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**/*.sql'
+      - 'clusters/**'
+      - 'apps/**'
+      - 'docs/**'
+      - 'scripts/**'
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run guard script
+        run: |
+          bash scripts/ci/guard_paused_modules.sh

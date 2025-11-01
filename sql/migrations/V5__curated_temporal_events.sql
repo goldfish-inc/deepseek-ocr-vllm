@@ -3,6 +3,9 @@
 -- Depends on: V1__staging_baseline.sql, V4__curated_reference_tables.sql
 -- Purpose: Add temporal/evented tables for maritime intelligence with valid_from/valid_to
 
+-- Enable btree_gist for exclusion constraints with scalar types
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 -- =============================================================================
 -- UPGRADE VESSELS TABLE (Add FKs and Missing Fields)
 -- =============================================================================

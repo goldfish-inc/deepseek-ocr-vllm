@@ -1,0 +1,3 @@
+-- V9: Vessels enrichment view (tenant contract)
+-- Purpose: Denormalized view of common enrichment fields for tenants.
+-- NOTE: Placeholder; implement after V8 schema solidified.
