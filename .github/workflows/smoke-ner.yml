@@ -1,18 +1,21 @@
 name: NER Smoke Tests
 
+# PAUSED: AI/ML pipeline on hold per FOCUS.md
+# These smoke tests are disabled from automatic PR/push triggers to avoid
+# burning CI time on paused work. Re-enable when AI/ML development resumes.
 on:
-  pull_request:
-    paths:
-      - 'apps/ner-training/**'
-      - 'scripts/smoke_ner.sh'
-      - 'Makefile'
-  push:
-    branches: [ main ]
-    paths:
-      - 'apps/ner-training/**'
-      - 'scripts/smoke_ner.sh'
-      - 'Makefile'
   workflow_dispatch: {}
+  # pull_request:
+  #   paths:
+  #     - 'apps/ner-training/**'
+  #     - 'scripts/smoke_ner.sh'
+  #     - 'Makefile'
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'apps/ner-training/**'
+  #     - 'scripts/smoke_ner.sh'
+  #     - 'Makefile'
 
 concurrency:
   group: gpu-smoke
