@@ -4,6 +4,10 @@
 **Duration:** ~2 hours (including troubleshooting)
 **Status:** ✅ Complete - Pipeline outputs and diff reports generated
 
+> Update (2025-11-03): See `tests/reconciliation/PHASE_C_SUMMARY.md` for final Phase B verification outcomes.
+> IATTC, NPFC, and NEAFC each reach ≥99% match after fixes (export disambiguation, header canonicalization, aliasing,
+> case-insensitive FLAG, XLSX metadata skip).
+
 ## Processing Results
 
 | RFMO   | Rows Processed | Pipeline Output | Baseline Size | Status |

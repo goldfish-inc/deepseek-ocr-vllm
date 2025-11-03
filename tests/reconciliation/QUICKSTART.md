@@ -4,10 +4,21 @@
 - CSV worker stack running locally (Postgres + MinIO + worker service)
 - RFMO raw files present in `data/raw/vessels/RFMO/raw/`
 - Golden baselines generated (see `baseline/vessels/RFMO/cleaned/`)
+ - Optional: rebuild worker with version stamp
+   ```bash
+   scripts/reconciliation/rebuild_worker_image.sh
+   ```
 
 ## Run Phase B
 ```bash
+# All RFMOs
 scripts/reconciliation/run_phase_b.sh
+
+# Single RFMO (e.g., IATTC only)
+ONLY=IATTC scripts/reconciliation/run_phase_b.sh
+
+# Prefer a specific export when both CSV and XLSX exist
+PREFER_EXT=xlsx scripts/reconciliation/run_phase_b.sh
 ```
 
 This will:
@@ -16,10 +27,16 @@ This will:
 3. Generate diff reports under `tests/reconciliation/diffs/`
 
 ## Inspect Results
-- Summary statistics: `tests/reconciliation/diffs/*.summary.txt`
-- Detailed mismatches: `tests/reconciliation/diffs/*.diff.csv`
+- Summary CSV: `tests/reconciliation/diffs/_summary.csv`
+- Per‑RFMO summaries: `tests/reconciliation/diffs/*_summary.txt`
+- Detailed mismatches: `tests/reconciliation/diffs/*_diff.csv`
 
 ## Next Steps
-- Update `stage.cleaning_rules` or thresholds for mismatches
-- Re-run Phase B until output matches expected behavior
-- Document findings in issue #244 (Phase C)
+- Update `stage.cleaning_rules` or thresholds for true mismatches.
+- Re-run Phase B until outputs match expected behavior.
+- Document findings and decisions in per‑RFMO issues and umbrella #247.
+
+### Notes on Normalization
+- The diff harness canonicalizes headers (uppercase + underscore) and aliases common columns (e.g., IMO vs IMO_NUMBER).
+- `FLAG` is compared case‑insensitively to treat uppercase normalization as equivalent.
+- Known benign transformations (date formatting, float precision) can be tolerated as expected diffs.

@@ -34,7 +34,7 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
   - Column aliasing via `ALIAS_MAP` in diff harness
 - After: 99.80% match (36,588/36,663)
   - 75 residual mismatches: placeholder normalization `NONE` → empty (69), trailing quote removal (6)
-- Issue: #248 (pending close)
+- Issue: #248 (closed ✅)
 
 ## NEAFC
 - Before: 83.32% match (close to target)
@@ -43,7 +43,7 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
   - Column aliasing via `ALIAS_MAP` in diff harness
 - After: 99.58% match (31,173/31,304)
   - 131 residual mismatches: country code normalization `GBR` → `GB` (ISO 3166-1 alpha-3 → alpha-2)
-- Issue: #249 (pending close)
+- Issue: #249 (closed ✅)
 
 ## Others (CCSBT, FFA, IOTC, NAFO, PNA, SPRFMO, WCPFC)
 - Pattern: symmetric baseline-only vs pipeline-only cells (structural)
@@ -51,4 +51,4 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
 
 ---
 
-Last updated: 2025-11-03T06:15:00Z
+Last updated: 2025-11-03T17:42:04Z
