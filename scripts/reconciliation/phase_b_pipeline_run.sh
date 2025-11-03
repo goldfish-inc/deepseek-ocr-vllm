@@ -52,7 +52,25 @@ wait_for_document() {
 export_extractions() {
   local document_id=$1
   local output_path=$2
-  docker exec "$DB_CONTAINER" psql -U postgres -d oceanid_test -c "\COPY (SELECT document_id, row_index, column_name, raw_value, cleaned_value, confidence, needs_review, similarity, rule_chain FROM stage.csv_extractions WHERE document_id=${document_id} ORDER BY row_index, column_name) TO STDOUT WITH CSV HEADER" > "$output_path"
+  local tmp_log="/tmp/phase_b_export_${document_id}.log"
+  set +e
+  docker exec "$DB_CONTAINER" psql -v ON_ERROR_STOP=1 -U postgres -d oceanid_test \
+    -c "\COPY (SELECT document_id, row_index, column_name, raw_value, cleaned_value, confidence, needs_review, similarity, rule_chain FROM stage.csv_extractions WHERE document_id=${document_id} ORDER BY row_index, column_name) TO STDOUT WITH CSV HEADER" \
+    1>"$output_path" 2>"$tmp_log"
+  local status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "  !! export failed for document_id=${document_id} (psql exit ${status})"
+    echo "  !! stderr (first 120 lines):"
+    sed -n '1,120p' "$tmp_log" || true
+    return $status
+  fi
+  local lines
+  lines=$(wc -l < "$output_path" || echo 0)
+  if [[ "$lines" -lt 2 ]]; then
+    echo "  !! export appears empty for document_id=${document_id} (lines=$lines). See: $tmp_log"
+    return 1
+  fi
 }
 
 for file_path in "${files[@]}"; do
@@ -98,12 +116,15 @@ JSON
   echo "  -> waiting up to ${max_wait}s for processing"
   document_id=$(wait_for_document "$file_name" "$max_wait" || true)
   if [[ -z "$document_id" ]]; then
-    echo "  !! timeout waiting for document for $file_name" >&2
+    echo "  !! timeout waiting for document for $file_name after ${max_wait}s" >&2
     continue
   fi
   echo "  -> document_id $document_id"
 
-  output_file="$OUTPUT_DIR/${file_name%.*}_stage.csv"
+  # Disambiguate export filename by source extension to avoid overwrites (csv vs xlsx)
+  ext="${file_name##*.}"
+  ext_lc=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+  output_file="$OUTPUT_DIR/${file_name%.*}_${ext_lc}_stage.csv"
   export_extractions "$document_id" "$output_file"
   echo "  -> exported to $output_file"
 

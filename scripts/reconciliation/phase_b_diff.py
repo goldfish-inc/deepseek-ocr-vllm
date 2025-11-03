@@ -180,10 +180,6 @@ def compare_files(baseline_path: Path):
 
     merged['pipeline_value'] = merged['cleaned_value'].fillna('')
 
-    only_baseline = merged[merged['_merge'] == 'left_only']
-    only_pipeline = merged[merged['_merge'] == 'right_only']
-    both = merged[merged['_merge'] == 'both']
-
     # Build comparison columns with normalization per config/env
     merged['cmp_baseline'] = merged['baseline_value'].astype(str)
     merged['cmp_pipeline'] = merged['pipeline_value'].astype(str)
@@ -205,7 +201,7 @@ def compare_files(baseline_path: Path):
             dt = pd.to_datetime(series, errors='coerce', infer_datetime_format=True)
             out = series.copy()
             mask = dt.notna()
-            out.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
+            out.loc[mask] = dt[mask].dt.strftime('%Y-%m-%d')
             return out
         merged['cmp_baseline'] = _norm_date(merged['cmp_baseline'])
         merged['cmp_pipeline'] = _norm_date(merged['cmp_pipeline'])
@@ -223,6 +219,11 @@ def compare_files(baseline_path: Path):
             return s.map(_try_round)
         merged['cmp_baseline'] = _round_float(merged['cmp_baseline'])
         merged['cmp_pipeline'] = _round_float(merged['cmp_pipeline'])
+
+    # Create subsets AFTER building cmp_* so they include normalized columns
+    only_baseline = merged[merged['_merge'] == 'left_only']
+    only_pipeline = merged[merged['_merge'] == 'right_only']
+    both = merged[merged['_merge'] == 'both']
 
     mismatched = both[both['cmp_baseline'] != both['cmp_pipeline']]
     matched = both.shape[0] - mismatched.shape[0]
