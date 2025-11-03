@@ -17,6 +17,15 @@ IFS="," read -r -a RFMOS <<< "${RFMO_LIST:-$DEFAULT_LIST}"
 
 echo "Running Phase B for: ${RFMOS[*]}"
 
+# Dependency preflight for final summary regeneration
+if ! python3 - <<'PY' >/dev/null 2>&1
+import pandas, numpy  # noqa: F401
+print('ok')
+PY
+then
+  echo "(warn) python3 with pandas/numpy not available; final summary refresh may be skipped."
+fi
+
 # Ensure summary exists/fresh
 SUMMARY="$ROOT_DIR/tests/reconciliation/diffs/_summary.csv"
 if [[ -f "$SUMMARY" ]]; then
@@ -42,6 +51,14 @@ done
 set -e
 
 # Final diff generation to refresh summary if earlier runs aborted prematurely
-"$SCRIPT_DIR/phase_b_diff.py" || true
+if python3 - <<'PY' >/dev/null 2>&1
+import pandas, numpy  # noqa: F401
+print('ok')
+PY
+then
+  "$SCRIPT_DIR/phase_b_diff.py" || true
+else
+  echo "(warn) Skipping final summary refresh: install pandas and numpy (e.g., pip install pandas numpy)"
+fi
 
 echo "\nBatch Phase B complete. See $SUMMARY and tests/reconciliation/diffs/*."

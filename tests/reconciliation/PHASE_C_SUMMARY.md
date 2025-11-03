@@ -54,6 +54,10 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
 ### Stage 5 Rollout Status
 - Framework: config‑driven diff harness with aliases, case‑insensitive columns, and optional date/float/whitespace normalization
 - Batch runner: `scripts/reconciliation/run_phase_b_batch.sh`
-- Open item: export function can silently fail for some RFMOs (tracking: docs/issues/phaseb-export-silent-failure.md)
+- Export race: fixed (wait for extractions to stabilize); verified with full CCSBT export (36,387 lines)
+- Date normalization: enabled; dual‑scheme comparison (month‑first/day‑first) reduces IATTC mismatches from 289 → 1
+- 2025‑11‑03T17:50Z batch (dates normalized): CCSBT, FFA, IATTC, ICCAT, IOTC, NAFO, NEAFC, NPFC, PNA
+- 2025‑11‑03T17:33Z batch (dates not normalized): SPRFMO, WCPFC (temporary; to be re‑run with dates)
+- Final summary regeneration may be skipped when local pandas/numpy are unavailable; batch script now warns and attempts a final refresh.
 
-Last updated: 2025-11-03T18:10:00Z
+Last updated: 2025-11-03T17:55:00Z
