@@ -44,6 +44,15 @@ diffs/       # Diff reports produced by the comparison harness (Phase B)
   - Aliases common columns (e.g., `IMO_NUMBER` ⇄ `IMO`).
   - Case-insensitive compare for `FLAG` to treat intentional uppercasing as equivalent.
   - Prefers XLSX export when both CSV and XLSX exist; override with `PREFER_EXT=csv|xlsx`.
+  - Optional config at `tests/reconciliation/diff_config.yaml` to control:
+    - `aliases` map (column name equivalences)
+    - `case_insensitive_columns` (e.g., FLAG)
+    - `ignore_transformations` (date formats, float precision, whitespace)
+  - Env toggles override config:
+    - `CASE_INSENSITIVE_COLUMNS=FLAG,COUNTRY`
+    - `IGNORE_DATE_FORMATS=1`
+    - `ROUND_FLOATS=4`
+    - `IGNORE_WHITESPACE=1`
 
 - `scripts/reconciliation/run_phase_b.sh`
   - One-shot orchestrator (pipeline run + diff generation).

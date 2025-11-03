@@ -1,0 +1,12 @@
+aliases:
+  IMO_NUMBER: IMO
+  IMO_NO: IMO
+  IMO_NO_: IMO
+
+case_insensitive_columns:
+  - FLAG
+
+ignore_transformations:
+  date_formats: true
+  float_precision: 4
+  whitespace: true

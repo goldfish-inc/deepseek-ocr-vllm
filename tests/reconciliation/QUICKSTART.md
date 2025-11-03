@@ -19,6 +19,12 @@ ONLY=IATTC scripts/reconciliation/run_phase_b.sh
 
 # Prefer a specific export when both CSV and XLSX exist
 PREFER_EXT=xlsx scripts/reconciliation/run_phase_b.sh
+
+# Override diff behavior via environment
+CASE_INSENSITIVE_COLUMNS=FLAG,COUNTRY \
+IGNORE_DATE_FORMATS=1 \
+ROUND_FLOATS=4 \
+scripts/reconciliation/run_phase_b.sh
 ```
 
 This will:
@@ -39,4 +45,5 @@ This will:
 ### Notes on Normalization
 - The diff harness canonicalizes headers (uppercase + underscore) and aliases common columns (e.g., IMO vs IMO_NUMBER).
 - `FLAG` is compared case‑insensitively to treat uppercase normalization as equivalent.
-- Known benign transformations (date formatting, float precision) can be tolerated as expected diffs.
+- Known benign transformations (date formatting, float precision) can be ignored via config/env toggles.
+- Optional config file: `tests/reconciliation/diff_config.yaml` (aliases, case-insensitive columns, ignore rules).
