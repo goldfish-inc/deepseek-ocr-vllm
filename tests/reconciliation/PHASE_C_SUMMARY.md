@@ -51,4 +51,9 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
 
 ---
 
-Last updated: 2025-11-03T17:42:04Z
+### Stage 5 Rollout Status
+- Framework: config‑driven diff harness with aliases, case‑insensitive columns, and optional date/float/whitespace normalization
+- Batch runner: `scripts/reconciliation/run_phase_b_batch.sh`
+- Open item: export function can silently fail for some RFMOs (tracking: docs/issues/phaseb-export-silent-failure.md)
+
+Last updated: 2025-11-03T18:10:00Z
