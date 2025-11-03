@@ -197,14 +197,30 @@ def compare_files(baseline_path: Path):
 
     # Date normalization
     if CONFIG["ignore_transformations"].get("date_formats", False):
-        def _norm_date(series: pd.Series) -> pd.Series:
-            dt = pd.to_datetime(series, errors='coerce', infer_datetime_format=True)
-            out = series.copy()
+        def _iso_date(series: pd.Series, dayfirst: bool) -> pd.Series:
+            dt = pd.to_datetime(series, errors='coerce', dayfirst=dayfirst)
+            iso = pd.Series(pd.NA, index=series.index, dtype='object')
             mask = dt.notna()
-            out.loc[mask] = dt[mask].dt.strftime('%Y-%m-%d')
-            return out
-        merged['cmp_baseline'] = _norm_date(merged['cmp_baseline'])
-        merged['cmp_pipeline'] = _norm_date(merged['cmp_pipeline'])
+            if mask.any():
+                iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
+            return iso
+
+        # Try month-first, then day-first; adopt normalization only when both
+        # sides resolve to the same ISO string under one scheme
+        b_md = _iso_date(merged['cmp_baseline'], dayfirst=False)
+        p_md = _iso_date(merged['cmp_pipeline'], dayfirst=False)
+        eq_md = b_md.notna() & p_md.notna() & (b_md == p_md)
+
+        b_dm = _iso_date(merged['cmp_baseline'], dayfirst=True)
+        p_dm = _iso_date(merged['cmp_pipeline'], dayfirst=True)
+        eq_dm = b_dm.notna() & p_dm.notna() & (b_dm == p_dm)
+
+        merged['cmp_baseline'] = np.where(eq_md, b_md, merged['cmp_baseline'])
+        merged['cmp_pipeline'] = np.where(eq_md, p_md, merged['cmp_pipeline'])
+
+        still_unmatched = ~eq_md
+        merged['cmp_baseline'] = np.where(still_unmatched & eq_dm, b_dm, merged['cmp_baseline'])
+        merged['cmp_pipeline'] = np.where(still_unmatched & eq_dm, p_dm, merged['cmp_pipeline'])
 
     # Float precision rounding
     fp = CONFIG["ignore_transformations"].get("float_precision")
