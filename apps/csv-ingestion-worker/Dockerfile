@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24.9-alpine AS builder
 
 # Install dependencies
 # hadolint ignore=DL3018
