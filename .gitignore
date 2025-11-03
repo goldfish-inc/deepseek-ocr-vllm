@@ -84,3 +84,13 @@ ansible/inventory/hostsner_labels.json
 
 # ignore local go binaries
 apps/**/annotations-sink
+
+# Reconciliation test outputs (too large for git)
+tests/reconciliation/current/*.csv
+tests/reconciliation/diffs/*.csv
+
+# Reconciliation test data (not in version control)
+data/raw/vessels/
+tests/reconciliation/baseline/
+tests/reconciliation/current/
+tests/reconciliation/diffs/

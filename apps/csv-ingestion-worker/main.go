@@ -20,6 +20,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// BuildVersion is injected at build time via -ldflags.
+// Default to "dev" for local runs.
+var BuildVersion = "dev"
+
 // Config holds application configuration
 type Config struct {
 	DatabaseURL      string
@@ -94,6 +98,7 @@ type Metrics struct {
 func main() {
 	// Early debug markers to stderr for hang detection
 	fmt.Fprintln(os.Stderr, "DEBUG: main start")
+	fmt.Fprintf(os.Stderr, "DEBUG: build=%s\n", BuildVersion)
 
 	// Load configuration
 	cfg := loadConfig()

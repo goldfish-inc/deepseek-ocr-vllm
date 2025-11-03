@@ -2,7 +2,8 @@
 FROM golang:1.24-alpine AS builder
 
 # Install dependencies
-RUN apk add --no-cache git=2.47.3-r0
+# hadolint ignore=DL3018
+RUN apk add --no-cache git
 
 WORKDIR /app
 
@@ -15,9 +16,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
+# Build args for version stamping (pass with --build-arg)
+ARG BUILD_SHA=unknown
+ARG BUILD_DATE=unknown
+
+# Build the binary with version info
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X main.BuildVersion=${BUILD_SHA}-${BUILD_DATE}" \
     -o csv-ingestion-worker \
     .
 

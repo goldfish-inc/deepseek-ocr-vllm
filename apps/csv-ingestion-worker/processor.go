@@ -165,6 +165,17 @@ func (w *Worker) processCell(
 	// Calculate similarity between raw and cleaned values
 	extraction.Similarity = w.calculateSimilarity(rawValue, extraction.CleanedValue)
 
+	// Normalize placeholder values to empty strings for pandas baseline compatibility
+	// This ensures empty cells are consistently represented as "" not "nan"/"NaN"/"None"/etc
+	val := strings.TrimSpace(extraction.CleanedValue)
+	lower := strings.ToLower(val)
+	if lower == "nan" || lower == "none" || lower == "null" || lower == "n/a" || lower == "na" {
+		extraction.CleanedValue = ""
+	} else {
+		// Remove trailing whitespace for non-empty values
+		extraction.CleanedValue = val
+	}
+
 	// Adjust confidence based on similarity
 	if extraction.Similarity > 0.95 {
 		extraction.Confidence = math.Min(extraction.Confidence+0.05, 1.0)

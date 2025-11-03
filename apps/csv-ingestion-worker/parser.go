@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 
 	"net/http"
@@ -19,12 +20,15 @@ import (
 // parseFile parses CSV or Excel files and returns rows and headers
 func (w *Worker) parseFile(filename string, content []byte) ([][]string, []string, error) {
 	lower := strings.ToLower(filename)
+	log.Printf("DEBUG parseFile: filename=%s, lower=%s, size=%d bytes", filename, lower, len(content))
 
 	if strings.HasSuffix(lower, ".csv") || strings.HasSuffix(lower, ".tsv") {
+		log.Printf("DEBUG parseFile: Routing to parseCSV (isTSV=%v)", strings.HasSuffix(lower, ".tsv"))
 		return w.parseCSV(content, strings.HasSuffix(lower, ".tsv"))
 	}
 
 	if strings.HasSuffix(lower, ".xlsx") || strings.HasSuffix(lower, ".xls") {
+		log.Printf("DEBUG parseFile: Routing to parseExcel")
 		return w.parseExcel(content)
 	}
 
@@ -86,15 +90,41 @@ func (w *Worker) parseExcel(content []byte) ([][]string, []string, error) {
 	}
 	defer f.Close()
 
-	// Get first sheet name
-	sheetName := f.GetSheetName(0)
-	if sheetName == "" {
-		sheets := f.GetSheetList()
-		if len(sheets) == 0 {
-			return nil, nil, fmt.Errorf("no sheets in Excel file")
-		}
-		sheetName = sheets[0]
+	// Get all sheets
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, nil, fmt.Errorf("no sheets in Excel file")
 	}
+
+	log.Printf("DEBUG: Found %d sheets: %v", len(sheets), sheets)
+
+	// Skip metadata sheets and find the data sheet
+	// Common metadata sheet names to skip
+	skipSheets := map[string]bool{
+		"info":     true,
+		"metadata": true,
+		"about":    true,
+		"readme":   true,
+		"notes":    true,
+	}
+
+	var sheetName string
+	for _, sheet := range sheets {
+		lowerName := strings.ToLower(sheet)
+		log.Printf("DEBUG: Checking sheet '%s' (lower: '%s'), skip=%v", sheet, lowerName, skipSheets[lowerName])
+		if !skipSheets[lowerName] {
+			sheetName = sheet
+			break
+		}
+	}
+
+	// If all sheets are metadata, use the last one (likely has data)
+	if sheetName == "" {
+		sheetName = sheets[len(sheets)-1]
+		log.Printf("DEBUG: All sheets were metadata, using last: %s", sheetName)
+	}
+
+	log.Printf("DEBUG: Selected sheet: %s", sheetName)
 
 	// Get all rows from the sheet
 	allRows, err := f.GetRows(sheetName)
