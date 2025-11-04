@@ -1,10 +1,44 @@
 aliases:
+  # Column name aliases (all normalized to uppercase with underscores)
   IMO_NUMBER: IMO
   IMO_NO: IMO
   IMO_NO_: IMO
 
+  # NAFO-specific mappings (pipeline → baseline schema)
+  VESSEL_NAME: NAME
+  FLAG: COUNTRYID
+  RADIO: IRCS
+  "IMO_*": IMO
+  EXTERNAL_REFERENCE_NUMBER: EXTERNAL_REFERENCE_NUMBER  # Keep as-is (not in baseline)
+
 case_insensitive_columns:
+  # Columns where case should be ignored during comparison
   - FLAG
+
+# Date normalization configuration
+date_columns:
+  # Restrict date parsing to known date columns to avoid false positives
+  # Uncomment and add specific columns to limit date normalization scope
+  # - CONFIRMATION_DATE
+  # - LAST_MODIFICATION
+  # - REGISTRATION_DATE
+  # - AUTHORIZATION_START
+  # - AUTHORIZATION_END
+
+# Value normalization mappings
+value_mappings:
+  # Country code mappings (ISO 3166-1 alpha-3 → alpha-2)
+  # Uncomment and extend as needed per RFMO requirements
+  # GBR: GB
+  # USA: US
+  # CAN: CA
+  # AUS: AU
+  # NZL: NZ
+
+  # Placeholder normalization (already handled in worker processor.go)
+  # NONE: ""
+  # N/A: ""
+  # NULL: ""
 
 ignore_transformations:
   date_formats: true

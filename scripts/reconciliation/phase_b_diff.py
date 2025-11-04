@@ -201,9 +201,11 @@ def compare_files(baseline_path: Path):
         def _iso_date(series: pd.Series, dayfirst: bool) -> pd.Series:
             dt = pd.to_datetime(series, errors='coerce', dayfirst=dayfirst)
             iso = pd.Series(pd.NA, index=series.index, dtype='object')
-            mask = dt.notna()
-            if mask.any():
-                iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
+            # Check if dt is actually datetime64 dtype (not object)
+            if pd.api.types.is_datetime64_any_dtype(dt):
+                mask = dt.notna()
+                if mask.any():
+                    iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
             return iso
 
         # Try month-first, then day-first; adopt normalization only when both

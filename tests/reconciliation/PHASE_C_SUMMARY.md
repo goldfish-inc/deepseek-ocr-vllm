@@ -51,13 +51,38 @@ This log tracks improvements from Phase C remediation (issues linked under #244)
 
 ---
 
+## Complete Results Table (2025-11-04)
+
+All 11 RFMOs processed with date normalization enabled:
+
+| RFMO   | Match Rate | Total Cells | Matched  | Mismatched | Baseline Only | Pipeline Only | Status |
+|--------|------------|-------------|----------|------------|---------------|---------------|--------|
+| IATTC  | 100.00%    | 102,195     | 102,194  | 1          | 0             | 0             | ✅ |
+| ICCAT  | 99.99%     | 1,257,062   | 1,256,912| 150        | 0             | 0             | ✅ |
+| SPRFMO | 99.95%     | 69,125      | 69,087   | 38         | 0             | 0             | ✅ |
+| NPFC   | 99.80%     | 36,663      | 36,588   | 75         | 0             | 0             | ✅ |
+| NEAFC  | 99.58%     | 31,304      | 31,173   | 131        | 0             | 0             | ✅ |
+| FFA    | 98.00%     | 43,095      | 42,233   | 17         | 845           | 0             | ⚠️ |
+| WCPFC  | 97.33%     | 164,777     | 160,375  | 4,402      | 0             | 0             | ⚠️ |
+| IOTC   | 94.66%     | 202,198     | 191,405  | 151        | 5,321         | 5,321         | ⚠️ |
+| CCSBT  | 91.58%     | 37,968      | 34,770   | 34         | 1,582         | 1,582         | ⚠️ |
+| PNA    | 83.20%     | 8,052       | 6,699    | 11         | 671           | 671           | ⚠️ |
+| NAFO   | 6.67%      | 1,200       | 80       | 0          | 560           | 560           | ❌ |
+
+**Summary Stats:**
+- Total cells analyzed: 1,953,639
+- Overall match rate: 98.54%
+- 6 RFMOs ≥99% (excellent)
+- 5 RFMOs need improvement (83-98%)
+- 1 RFMO critical (NAFO: 6.67%)
+
 ### Stage 5 Rollout Status
 - Framework: config‑driven diff harness with aliases, case‑insensitive columns, and optional date/float/whitespace normalization
 - Batch runner: `scripts/reconciliation/run_phase_b_batch.sh`
 - Export race: fixed (wait for extractions to stabilize); verified with full CCSBT export (36,387 lines)
 - Date normalization: enabled; dual‑scheme comparison (month‑first/day‑first) reduces IATTC mismatches from 289 → 1
-- 2025‑11‑03T17:50Z batch (dates normalized): CCSBT, FFA, IATTC, ICCAT, IOTC, NAFO, NEAFC, NPFC, PNA
-- 2025‑11‑03T17:33Z batch (dates not normalized): SPRFMO, WCPFC (temporary; to be re‑run with dates)
-- Final summary regeneration may be skipped when local pandas/numpy are unavailable; batch script now warns and attempts a final refresh.
+- 2025‑11‑04T00:00Z complete batch: All 11 RFMOs processed with date normalization
+- Summary: `tests/reconciliation/diffs/_summary.csv` (auto-generated)
+- Fix applied: Added dtype check before `.dt` accessor to prevent AttributeError in phase_b_diff.py:206
 
-Last updated: 2025-11-03T17:55:00Z
+Last updated: 2025-11-04T00:05:00Z
