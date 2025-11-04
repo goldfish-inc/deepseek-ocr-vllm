@@ -1,0 +1,103 @@
+name: Go Quality
+
+"on":
+  pull_request:
+    paths:
+      - 'apps/**'
+      - '.github/workflows/go-quality.yml'
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Detect changed Go apps
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD)
+          mapfile -t APP_DIRS < <(echo "$CHANGED" | awk -F/ '/^apps\//{print $1"/"$2}' | sort -u)
+          if [ ${#APP_DIRS[@]} -eq 0 ]; then
+            echo "apps=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          printf '%s\n' "${APP_DIRS[@]}" > changed_apps.txt
+          echo "apps=$(paste -sd, changed_apps.txt)" >> $GITHUB_OUTPUT
+
+      - name: Format check (gofmt -s)
+        if: steps.changes.outputs.apps != ''
+        run: |
+          set -e
+          failed=0
+          while read -r app; do
+            [ -z "$app" ] && continue
+            out=$(gofmt -s -l "$app")
+            if [ -n "$out" ]; then
+              echo "$out" | sed 's/^/unformatted: /'
+              failed=1
+            fi
+          done < changed_apps.txt
+          [ $failed -eq 0 ] || { echo "Go files need formatting. Run: gofmt -s -w <files>" >&2; exit 1; }
+
+      - name: Vet
+        if: steps.changes.outputs.apps != ''
+        run: |
+          set -e
+          while read -r m; do
+            [ -f "$m/go.mod" ] || continue
+            echo "::group::go vet $m"
+            (cd "$m" && go vet ./...)
+            echo "::endgroup::"
+          done < changed_apps.txt
+
+      - name: Staticcheck
+        if: steps.changes.outputs.apps != ''
+        run: |
+          set -e
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          while read -r m; do
+            [ -f "$m/go.mod" ] || continue
+            echo "::group::staticcheck $m"
+            (cd "$m" && staticcheck ./...)
+            echo "::endgroup::"
+          done < changed_apps.txt
+
+      - name: govulncheck (advisory)
+        if: steps.changes.outputs.apps != ''
+        continue-on-error: true
+        run: |
+          set -e
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          while read -r m; do
+            [ -f "$m/go.mod" ] || continue
+            echo "::group::govulncheck $m"
+            (cd "$m" && govulncheck ./... || true)
+            echo "::endgroup::"
+          done < changed_apps.txt
+
+      - name: Module tidy check
+        if: steps.changes.outputs.apps != ''
+        run: |
+          set -e
+          while read -r m; do
+            [ -f "$m/go.mod" ] || continue
+            (cd "$m" && go mod tidy -v)
+          done < changed_apps.txt
+          git diff --quiet || { echo "go.mod/go.sum not tidy in changed apps. Run go mod tidy." >&2; exit 1; }

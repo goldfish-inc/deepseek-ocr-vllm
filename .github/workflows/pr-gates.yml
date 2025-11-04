@@ -1,0 +1,181 @@
+name: PR Gates (Policy, Go, Preview)
+
+"on":
+  pull_request:
+    types: [opened, synchronize, edited, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  opa-tests:
+    name: OPA Tests (policy changes)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect policy changes
+        id: changes
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD | tr '\n' ' ')
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          if echo "$CHANGED" | grep -Eq '^policy/'; then
+            echo "run_opa=true" >> $GITHUB_OUTPUT
+          else
+            echo "run_opa=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up pnpm
+        if: steps.changes.outputs.run_opa == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.12.2'
+          run_install: false
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.run_opa == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'pnpm'
+
+      - name: Install workspace deps
+        if: steps.changes.outputs.run_opa == 'true'
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install OPA
+        if: steps.changes.outputs.run_opa == 'true'
+        uses: open-policy-agent/setup-opa@v2
+
+      - name: Run OPA tests
+        if: steps.changes.outputs.run_opa == 'true'
+        run: pnpm --filter @oceanid/policy test
+
+      - name: Policy formatting check
+        if: steps.changes.outputs.run_opa == 'true'
+        run: |
+          cd policy
+          opa fmt --write opa-policies.rego
+          if ! git diff --exit-code -- opa-policies.rego; then
+            echo "Policy not formatted. Run: pnpm --filter @oceanid/policy fmt" >&2
+            exit 1
+          fi
+
+      - name: Coverage threshold (>=75%)
+        if: steps.changes.outputs.run_opa == 'true'
+        run: |
+          chmod +x policy/opa_coverage_check.sh
+          OPA_COVERAGE_MIN=0.75 policy/opa_coverage_check.sh
+
+      - name: No policy changes detected
+        if: steps.changes.outputs.run_opa != 'true'
+        run: echo "No policy changes; skipping OPA tests."
+
+  go-tests:
+    name: Go Tests (changed apps)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed Go apps
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha || '' }}"
+          if [ -n "$base_sha" ]; then
+            DIFF_BASE="$base_sha"
+          else
+            DIFF_BASE="$(git rev-parse HEAD~1)"
+          fi
+          CHANGED=$(git diff --name-only "$DIFF_BASE"...HEAD)
+          # List unique app dirs with go.mod or .go changes
+          mapfile -t APP_DIRS < <(echo "$CHANGED" | awk -F/ '/^apps\//{print $1"/"$2}' | sort -u)
+          if [ ${#APP_DIRS[@]} -eq 0 ]; then
+            echo "do_test=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "do_test=true" >> $GITHUB_OUTPUT
+          printf '%s\n' "${APP_DIRS[@]}" > changed_apps.txt
+          echo "apps=$(paste -sd, changed_apps.txt)" >> $GITHUB_OUTPUT
+          echo "Changed apps:" && cat changed_apps.txt || true
+
+      - name: Set up Go
+        if: steps.changes.outputs.do_test == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run tests in changed apps (-race)
+        if: steps.changes.outputs.do_test == 'true'
+        run: |
+          set -euo pipefail
+          while read -r app; do
+            if [ -z "$app" ]; then continue; fi
+            if [ -f "$app/go.mod" ]; then
+              echo "::group::go test $app"
+              (cd "$app" && go test -race ./...)
+              echo "::endgroup::"
+            fi
+          done < changed_apps.txt
+
+      - name: No Go app changes detected
+        if: steps.changes.outputs.do_test != 'true'
+        run: echo "No apps/* Go changes; skipping tests."
+
+  preview-proof:
+    name: Preview Evidence Present
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR body contains preview evidence or is labeled skip-preview
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          if echo "$PR_LABELS" | grep -qi 'skip-preview'; then
+            echo "skip-preview label present; passing."
+            exit 0
+          fi
+          if echo "$PR_BODY" | grep -Eiq 'pulumi preview|pulumi actions|Preview:'; then
+            echo "Pulumi preview evidence found."
+            exit 0
+          fi
+          echo "Expected pulumi preview evidence in PR body or add label 'skip-preview' when truly N/A." >&2
+          exit 1
+
+  optional-smoke:
+    name: "Optional Smoke (label: run-smoke)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check label and print info
+        run: |
+          labels='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          if echo "$labels" | grep -qi 'run-smoke'; then
+            echo "Label run-smoke present, attempting smoke."
+          else
+            echo "No run-smoke label; skipping runtime smoke."
+            exit 0
+          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run smoke (best-effort)
+        run: |
+          set -euo pipefail
+          make smoke || { echo "smoke failed"; exit 1; }
