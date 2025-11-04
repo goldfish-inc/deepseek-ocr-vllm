@@ -1,6 +1,6 @@
 # Simple task runner for the Oceanid workspace
 
-.PHONY: install build lint test preview up destroy refresh clean hooks format pre-commit
+.PHONY: install build lint test preview up destroy refresh clean hooks format pre-commit reconcile-guard
 
 STACK ?= ryan-taylor/oceanid-cluster/prod
 
@@ -71,6 +71,17 @@ focus:
 db-guard:
 	bash scripts/ci/guard_paused_modules.sh
 
+# Reconciliation validation (local pre-commit check)
+.PHONY: reconcile-guard
+reconcile-guard:
+	@echo "Validating reconciliation metrics..."
+	@if [ ! -f tests/reconciliation/diffs/_summary.csv ]; then \
+		echo "⚠️  No reconciliation summary found. Run 'scripts/reconciliation/run_phase_b_batch.sh' first."; \
+		exit 1; \
+	fi
+	@python3 scripts/reconciliation/validate_reconciliation.py && \
+		echo "✅ Reconciliation validation passed" || \
+		{ echo "❌ Reconciliation validation failed"; exit 1; }
 
 # Minimal deploy for current architecture (no SSH provisioning or LB)
 .PHONY: deploy-simple
