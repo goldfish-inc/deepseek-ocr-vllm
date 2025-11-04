@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +42,13 @@ def load_config():
     cfg = {
         "aliases": DEFAULT_ALIAS_MAP.copy(),
         "case_insensitive_columns": ["FLAG"],
+        "date_columns": [],  # Restrict date parsing to these columns (empty = all)
+        "value_mappings": {},  # Per-column value mappings
+        "unicode": {
+            "normalize": None,  # None, "NFC", "NFD", "NFKC", "NFKD"
+            "accent_insensitive_columns": [],  # Temporary: compare without accents
+        },
+        "numeric": {},  # Per-column precision: {"BEAM_M": 2, "DEPTH_M": 2}
         "ignore_transformations": {
             "date_formats": False,
             "float_precision": None,
@@ -56,6 +64,18 @@ def load_config():
                         cfg["aliases"].update({str(k).upper(): str(v).upper() for k, v in doc["aliases"].items()})
                     if "case_insensitive_columns" in doc and isinstance(doc["case_insensitive_columns"], list):
                         cfg["case_insensitive_columns"] = [str(x).upper() for x in doc["case_insensitive_columns"]]
+                    if "date_columns" in doc and isinstance(doc["date_columns"], list):
+                        cfg["date_columns"] = [str(x).upper() for x in doc["date_columns"]]
+                    if "value_mappings" in doc and isinstance(doc["value_mappings"], dict):
+                        cfg["value_mappings"] = doc["value_mappings"]
+                    if "unicode" in doc and isinstance(doc["unicode"], dict):
+                        uc = doc["unicode"]
+                        if "normalize" in uc and uc["normalize"] in ["NFC", "NFD", "NFKC", "NFKD"]:
+                            cfg["unicode"]["normalize"] = uc["normalize"]
+                        if "accent_insensitive_columns" in uc and isinstance(uc["accent_insensitive_columns"], list):
+                            cfg["unicode"]["accent_insensitive_columns"] = [str(x).upper() for x in uc["accent_insensitive_columns"]]
+                    if "numeric" in doc and isinstance(doc["numeric"], dict):
+                        cfg["numeric"] = {str(k).upper(): int(v) for k, v in doc["numeric"].items() if isinstance(v, (int, float))}
                     if "ignore_transformations" in doc and isinstance(doc["ignore_transformations"], dict):
                         it = doc["ignore_transformations"]
                         cfg["ignore_transformations"]["date_formats"] = bool(it.get("date_formats", cfg["ignore_transformations"]["date_formats"]))
@@ -190,42 +210,143 @@ def compare_files(baseline_path: Path):
         merged['cmp_baseline'] = merged['cmp_baseline'].str.strip()
         merged['cmp_pipeline'] = merged['cmp_pipeline'].str.strip()
 
+    # Unicode normalization
+    unicode_norm = CONFIG.get("unicode", {}).get("normalize")
+    if unicode_norm in ["NFC", "NFD", "NFKC", "NFKD"]:
+        def _normalize_unicode(s: pd.Series) -> pd.Series:
+            return s.map(lambda x: unicodedata.normalize(unicode_norm, x) if isinstance(x, str) else x)
+        merged['cmp_baseline'] = _normalize_unicode(merged['cmp_baseline'])
+        merged['cmp_pipeline'] = _normalize_unicode(merged['cmp_pipeline'])
+
+    # Accent-insensitive columns (temporary workaround while fixing pipeline diacritics)
+    accent_insensitive_cols = CONFIG.get("unicode", {}).get("accent_insensitive_columns", [])
+    if accent_insensitive_cols:
+        def _remove_accents(s: str) -> str:
+            if not isinstance(s, str):
+                return s
+            # Decompose to NFD, filter out combining characters, then recompose
+            nfd = unicodedata.normalize('NFD', s)
+            return ''.join(c for c in nfd if unicodedata.category(c) != 'Mn')
+
+        mask = merged['column_name'].isin([c.upper() for c in accent_insensitive_cols])
+        merged.loc[mask, 'cmp_baseline'] = merged.loc[mask, 'cmp_baseline'].map(_remove_accents)
+        merged.loc[mask, 'cmp_pipeline'] = merged.loc[mask, 'cmp_pipeline'].map(_remove_accents)
+
+    # Value mappings (e.g., country codes GBR→GB)
+    if CONFIG.get("value_mappings"):
+        for column_key, mappings in CONFIG["value_mappings"].items():
+            column_name = column_key.upper()
+            if isinstance(mappings, dict):
+                mask = merged['column_name'] == column_name
+                for old_val, new_val in mappings.items():
+                    merged.loc[mask & (merged['cmp_baseline'] == str(old_val)), 'cmp_baseline'] = str(new_val)
+                    merged.loc[mask & (merged['cmp_pipeline'] == str(old_val)), 'cmp_pipeline'] = str(new_val)
+
     # Case-insensitive columns
     if CONFIG.get("case_insensitive_columns"):
         mask = merged['column_name'].isin([c.upper() for c in CONFIG["case_insensitive_columns"]])
         merged.loc[mask, 'cmp_baseline'] = merged.loc[mask, 'cmp_baseline'].str.upper()
         merged.loc[mask, 'cmp_pipeline'] = merged.loc[mask, 'cmp_pipeline'].str.upper()
 
-    # Date normalization
+    # Date normalization (restricted to date_columns if specified)
     if CONFIG["ignore_transformations"].get("date_formats", False):
-        def _iso_date(series: pd.Series, dayfirst: bool) -> pd.Series:
-            dt = pd.to_datetime(series, errors='coerce', dayfirst=dayfirst)
-            iso = pd.Series(pd.NA, index=series.index, dtype='object')
-            # Check if dt is actually datetime64 dtype (not object)
-            if pd.api.types.is_datetime64_any_dtype(dt):
-                mask = dt.notna()
-                if mask.any():
-                    iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
-            return iso
+        date_cols = CONFIG.get("date_columns", [])
+        # If date_columns is empty, apply to all columns (backward compat)
+        # If specified, only apply to those columns
+        if not date_cols:
+            # Apply to all rows
+            def _iso_date(series: pd.Series, dayfirst: bool) -> pd.Series:
+                dt = pd.to_datetime(series, errors='coerce', dayfirst=dayfirst)
+                iso = pd.Series(pd.NA, index=series.index, dtype='object')
+                # Check if dt is actually datetime64 dtype (not object)
+                if pd.api.types.is_datetime64_any_dtype(dt):
+                    mask = dt.notna()
+                    if mask.any():
+                        iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
+                return iso
 
-        # Try month-first, then day-first; adopt normalization only when both
-        # sides resolve to the same ISO string under one scheme
-        b_md = _iso_date(merged['cmp_baseline'], dayfirst=False)
-        p_md = _iso_date(merged['cmp_pipeline'], dayfirst=False)
-        eq_md = b_md.notna() & p_md.notna() & (b_md == p_md)
+            # Try month-first, then day-first; adopt normalization only when both
+            # sides resolve to the same ISO string under one scheme
+            b_md = _iso_date(merged['cmp_baseline'], dayfirst=False)
+            p_md = _iso_date(merged['cmp_pipeline'], dayfirst=False)
+            eq_md = b_md.notna() & p_md.notna() & (b_md == p_md)
 
-        b_dm = _iso_date(merged['cmp_baseline'], dayfirst=True)
-        p_dm = _iso_date(merged['cmp_pipeline'], dayfirst=True)
-        eq_dm = b_dm.notna() & p_dm.notna() & (b_dm == p_dm)
+            b_dm = _iso_date(merged['cmp_baseline'], dayfirst=True)
+            p_dm = _iso_date(merged['cmp_pipeline'], dayfirst=True)
+            eq_dm = b_dm.notna() & p_dm.notna() & (b_dm == p_dm)
 
-        merged['cmp_baseline'] = np.where(eq_md, b_md, merged['cmp_baseline'])
-        merged['cmp_pipeline'] = np.where(eq_md, p_md, merged['cmp_pipeline'])
+            merged['cmp_baseline'] = np.where(eq_md, b_md, merged['cmp_baseline'])
+            merged['cmp_pipeline'] = np.where(eq_md, p_md, merged['cmp_pipeline'])
 
-        still_unmatched = ~eq_md
-        merged['cmp_baseline'] = np.where(still_unmatched & eq_dm, b_dm, merged['cmp_baseline'])
-        merged['cmp_pipeline'] = np.where(still_unmatched & eq_dm, p_dm, merged['cmp_pipeline'])
+            still_unmatched = ~eq_md
+            merged['cmp_baseline'] = np.where(still_unmatched & eq_dm, b_dm, merged['cmp_baseline'])
+            merged['cmp_pipeline'] = np.where(still_unmatched & eq_dm, p_dm, merged['cmp_pipeline'])
+        else:
+            # Apply only to specific date columns
+            date_mask = merged['column_name'].isin([c.upper() for c in date_cols])
+            if date_mask.any():
+                def _iso_date(series: pd.Series, dayfirst: bool) -> pd.Series:
+                    dt = pd.to_datetime(series, errors='coerce', dayfirst=dayfirst)
+                    iso = pd.Series(pd.NA, index=series.index, dtype='object')
+                    # Check if dt is actually datetime64 dtype (not object)
+                    if pd.api.types.is_datetime64_any_dtype(dt):
+                        mask = dt.notna()
+                        if mask.any():
+                            iso.loc[mask] = dt.loc[mask].dt.strftime('%Y-%m-%d')
+                    return iso
 
-    # Float precision rounding
+                # Extract date column values
+                baseline_dates = merged.loc[date_mask, 'cmp_baseline']
+                pipeline_dates = merged.loc[date_mask, 'cmp_pipeline']
+
+                # Try month-first, then day-first
+                b_md = _iso_date(baseline_dates, dayfirst=False)
+                p_md = _iso_date(pipeline_dates, dayfirst=False)
+                eq_md = b_md.notna() & p_md.notna() & (b_md == p_md)
+
+                b_dm = _iso_date(baseline_dates, dayfirst=True)
+                p_dm = _iso_date(pipeline_dates, dayfirst=True)
+                eq_dm = b_dm.notna() & p_dm.notna() & (b_dm == p_dm)
+
+                # Create series for results with correct index
+                normalized_baseline = pd.Series(baseline_dates.values, index=baseline_dates.index)
+                normalized_pipeline = pd.Series(pipeline_dates.values, index=pipeline_dates.index)
+
+                # Apply normalization where dates match
+                normalized_baseline[eq_md] = b_md[eq_md]
+                normalized_pipeline[eq_md] = p_md[eq_md]
+
+                # Try day-first for still unmatched
+                still_unmatched = ~eq_md
+                normalized_baseline[still_unmatched & eq_dm] = b_dm[still_unmatched & eq_dm]
+                normalized_pipeline[still_unmatched & eq_dm] = p_dm[still_unmatched & eq_dm]
+
+                # Update back to merged dataframe
+                merged.loc[date_mask, 'cmp_baseline'] = normalized_baseline
+                merged.loc[date_mask, 'cmp_pipeline'] = normalized_pipeline
+
+    # Per-column numeric precision
+    numeric_config = CONFIG.get("numeric", {})
+    if numeric_config:
+        def _round_float_to(precision: int) -> callable:
+            def _rounder(s: pd.Series) -> pd.Series:
+                def _try_round(x: str) -> str:
+                    try:
+                        val = float(x)
+                        return (f"{round(val, precision):.{precision}f}").rstrip('0').rstrip('.') if precision > 0 else str(int(round(val)))
+                    except Exception:
+                        return x
+                return s.map(_try_round)
+            return _rounder
+
+        for column_name, precision in numeric_config.items():
+            mask = merged['column_name'] == column_name.upper()
+            if mask.any():
+                rounder = _round_float_to(precision)
+                merged.loc[mask, 'cmp_baseline'] = rounder(merged.loc[mask, 'cmp_baseline'])
+                merged.loc[mask, 'cmp_pipeline'] = rounder(merged.loc[mask, 'cmp_pipeline'])
+
+    # Global float precision rounding (fallback for columns not in numeric config)
     fp = CONFIG["ignore_transformations"].get("float_precision")
     if isinstance(fp, int) and fp is not None:
         def _round_float(s: pd.Series) -> pd.Series:

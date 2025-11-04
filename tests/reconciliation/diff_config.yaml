@@ -14,33 +14,123 @@ aliases:
 case_insensitive_columns:
   # Columns where case should be ignored during comparison
   - FLAG
+  - COUNTRYID
 
 # Date normalization configuration
 date_columns:
   # Restrict date parsing to known date columns to avoid false positives
-  # Uncomment and add specific columns to limit date normalization scope
+  # Empty list = apply to all columns (backward compat)
+  # Populated list = only apply to these specific columns
+  []
   # - CONFIRMATION_DATE
   # - LAST_MODIFICATION
   # - REGISTRATION_DATE
   # - AUTHORIZATION_START
   # - AUTHORIZATION_END
+  # - DATE_OF_ISSUE
+  # - EXPIRY_DATE
+  # - YEAR_BUILT
+  # - SOURCEGOLDFISHUPDATE
+  # - SOURCEREFRESHDATE
+
+# Unicode normalization
+unicode:
+  # Normalize all text to NFC (canonical composition)
+  # Reduces false positives from different Unicode representations
+  normalize: NFC
+
+  # Accent-insensitive comparison (TEMPORARY WORKAROUND)
+  # Use only while #259 (UTF-8 diacritics) is being fixed
+  # Empty = strict comparison (prefer this after #259 is fixed)
+  accent_insensitive_columns: []
+    # - NAME  # Uncomment to ignore diacritics in NAME column
 
 # Value normalization mappings
 value_mappings:
   # Country code mappings (ISO 3166-1 alpha-3 → alpha-2)
-  # Uncomment and extend as needed per RFMO requirements
-  # GBR: GB
-  # USA: US
-  # CAN: CA
-  # AUS: AU
-  # NZL: NZ
+  COUNTRYID:
+    GBR: GB
+    USA: US
+    FRA: FR
+    DEU: DE
+    ESP: ES
+    ITA: IT
+    NLD: NL
+    BEL: BE
+    PRT: PT
+    GRC: GR
+    SWE: SE
+    DNK: DK
+    NOR: NO
+    FIN: FI
+    POL: PL
+    IRL: IE
+    AUT: AT
+    CHE: CH
+    CZE: CZ
+    HUN: HU
+    ROU: RO
+    BGR: BG
+    HRV: HR
+    SVN: SI
+    SVK: SK
+    LTU: LT
+    LVA: LV
+    EST: EE
+    CYP: CY
+    MLT: MT
+    LUX: LU
+    ISL: IS
 
-  # Placeholder normalization (already handled in worker processor.go)
-  # NONE: ""
-  # N/A: ""
-  # NULL: ""
+  FLAG:
+    GBR: GB
+    USA: US
+    FRA: FR
+    DEU: DE
+    ESP: ES
+    ITA: IT
+    NLD: NL
+    BEL: BE
+    PRT: PT
+    GRC: GR
+    SWE: SE
+    DNK: DK
+    NOR: NO
+    FIN: FI
+    POL: PL
+    IRL: IE
+    AUT: AT
+    CHE: CH
+    CZE: CZ
+    HUN: HU
+    ROU: RO
+    BGR: BG
+    HRV: HR
+    SVN: SI
+    SVK: SK
+    LTU: LT
+    LVA: LV
+    EST: EE
+    CYP: CY
+    MLT: MT
+    LUX: LU
+    ISL: IS
+
+# Per-column numeric precision
+numeric:
+  # Specify rounding precision for numeric columns
+  # Format: COLUMN_NAME: precision (decimal places)
+  BEAM_M: 2
+  DEPTH_M: 2
+  LENGTH_M: 2
+  LENGTH_OA_M: 2
+  GROSS_TONNAGE: 2
+  GROSS_TONNAGE_T: 2
+  NET_TONNAGE: 2
+  ENGINE_POWER_KW: 0
+  ENGINE_POWER_HP: 0
 
 ignore_transformations:
-  date_formats: true
-  float_precision: 4
-  whitespace: true
+  date_formats: true     # Enable dual-scheme date normalization
+  float_precision: null  # Use per-column numeric config instead
+  whitespace: true       # Trim leading/trailing whitespace
