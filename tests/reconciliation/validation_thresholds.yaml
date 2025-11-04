@@ -1,0 +1,61 @@
+# Reconciliation validation thresholds (CI guard configuration)
+# Used by scripts/reconciliation/validate_reconciliation.py
+
+# Critical: null_aware_match_rate regression threshold (%)
+# Fail CI if any RFMO drops more than this percentage
+max_match_rate_drop_pct: 1.0  # Strict: 1% max drop
+
+# Warning: per-column coverage drop threshold (%)
+# Warn if pipeline coverage drops more than this for any column
+max_coverage_drop_pct: 5.0  # 5% coverage drop triggers warning
+
+# Baseline null_aware_match_rates (from 2025-11-04 run with null-aware metrics)
+# CI fails if current rate drops > max_match_rate_drop_pct below these baselines
+baseline_match_rates:
+  CCSBT: 0.9905   # 99.05% (49.4% join_key coverage)
+  FFA: 0.9998     # 99.98% (99.5% join_key coverage)
+  IATTC: 1.0000   # 100.00% (35.6% join_key coverage)
+  ICCAT: 0.9999   # 99.99% (no join_key; row_index fallback)
+  IOTC: 0.4425    # 44.25% (72.6% join_key coverage; high value mismatches)
+  NAFO: 0.9750    # 97.50% (82.5% join_key coverage; sparse data)
+  NEAFC: 0.9294   # 92.94% (100% join_key coverage)
+  NPFC: 0.9998    # 99.98% (100% join_key coverage)
+  PNA: 0.9966     # 99.66% (100% join_key coverage)
+  SPRFMO: 0.9995  # 99.95% (64.6% join_key coverage)
+  WCPFC: 0.9992   # 99.92% (no join_key; row_index fallback)
+
+# Critical columns where coverage drops trigger failures (not just warnings)
+# These are key vessel identifiers; coverage drops >10% are considered critical
+critical_columns:
+  - IMO
+  - NAME
+  - FLAG_STATE_CODE
+  - FLAG
+  - IRCS
+  - REGISTRATION_NUMBER
+  - VESSEL_NAME
+
+# RFMO-specific overrides (optional; uncomment to customize per-RFMO thresholds)
+# rfmo_overrides:
+#   IOTC:
+#     # IOTC has high value mismatches; allow larger drops
+#     max_match_rate_drop_pct: 5.0
+#   NAFO:
+#     # NAFO has sparse data; allow more coverage variance
+#     max_coverage_drop_pct: 15.0
+
+# Expected information gain/loss patterns (future: time-series tracking)
+# expected_info_gain:
+#   IOTC: 108980  # Baseline: 108,980 cells gained
+# expected_info_loss:
+#   IOTC: 108980  # Baseline: 108,980 cells lost (balanced)
+
+# Notes:
+# - IOTC has 44.25% null_aware_match_rate due to high value mismatches (6.3M changed_value)
+#   This is expected and represents structural differences, not extraction errors
+# - NAFO jumps from 32.5% → 97.5% with null-aware metrics (both sides agree on sparse data)
+# - Join-key coverage varies by RFMO:
+#     - 100%: NEAFC, NPFC, PNA (all vessels have IMO)
+#     - 99.5%: FFA (near-universal IMO)
+#     - 72.6%: IOTC (27.4% missing IMO → row_index fallback)
+#     - 49.4%: CCSBT (50.6% missing IMO → row_index fallback)

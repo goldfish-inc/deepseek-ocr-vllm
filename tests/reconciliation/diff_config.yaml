@@ -1,3 +1,9 @@
+# Join-key configuration for row alignment
+# Use IMO as default join key to handle row reordering between baseline and pipeline
+# When join_key is set, rows are aligned by this stable identifier instead of row_index
+# This fixes symmetric baseline-only/pipeline-only mismatches (IOTC, CCSBT, PNA)
+join_key: IMO  # Global default (can be overridden per-RFMO or set to null to disable)
+
 aliases:
   # Column name aliases (all normalized to uppercase with underscores)
   IMO_NUMBER: IMO
@@ -134,3 +140,37 @@ ignore_transformations:
   date_formats: true     # Enable dual-scheme date normalization
   float_precision: null  # Use per-column numeric config instead
   whitespace: true       # Trim leading/trailing whitespace
+
+# Null-aware diff configuration
+null_values:
+  # Tokens that represent missing/null values (normalized before all other transformations)
+  # Empty string is always treated as null
+  - ""
+  - "N/A"
+  - "NA"
+  - "NONE"
+  - "NULL"
+  - "—"
+  - "-"
+  - "Not Available"
+  - "Unknown"
+  - "n/a"
+  - "null"
+
+null_categories:
+  # Map null tokens to semantic categories (preserves "why null" signal)
+  # Used for reporting information gain/loss patterns
+  "N/A": "not_applicable"
+  "NA": "not_applicable"
+  "Not Available": "not_available"
+  "NONE": "unknown"
+  "NULL": "unknown"
+  "Unknown": "unknown"
+  "—": "not_provided"
+  "-": "not_provided"
+
+null_policy:
+  # Controls how null matches are scored in match_rate calculations
+  count_match_null_as_positive: true    # Both null = valid match (intelligence gathering mindset)
+  count_info_gain_as_positive: true     # Baseline null → pipeline value = gain (reward filling gaps)
+  count_info_loss_as_negative: true     # Baseline value → pipeline null = loss (penalize data loss)

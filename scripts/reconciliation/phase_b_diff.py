@@ -40,6 +40,7 @@ DEFAULT_ALIAS_MAP = {
 
 def load_config():
     cfg = {
+        "join_key": "IMO",  # Global default join key for row alignment
         "aliases": DEFAULT_ALIAS_MAP.copy(),
         "case_insensitive_columns": ["FLAG"],
         "date_columns": [],  # Restrict date parsing to these columns (empty = all)
@@ -54,12 +55,23 @@ def load_config():
             "float_precision": None,
             "whitespace": True,
         },
+        "null_values": ["", "N/A", "NA", "NONE", "NULL", "—", "-"],  # Default null tokens
+        "null_categories": {},  # Map null tokens to semantic categories
+        "null_policy": {
+            "count_match_null_as_positive": True,
+            "count_info_gain_as_positive": True,
+            "count_info_loss_as_negative": True,
+        },
     }
     if CONFIG_PATH.exists() and yaml is not None:
         try:
             with CONFIG_PATH.open("r") as fh:
                 doc = yaml.safe_load(fh) or {}
                 if isinstance(doc, dict):
+                    if "join_key" in doc:
+                        # Allow null to disable join_key, otherwise canonicalize
+                        jk = doc["join_key"]
+                        cfg["join_key"] = str(jk).upper() if jk is not None else None
                     if "aliases" in doc and isinstance(doc["aliases"], dict):
                         cfg["aliases"].update({str(k).upper(): str(v).upper() for k, v in doc["aliases"].items()})
                     if "case_insensitive_columns" in doc and isinstance(doc["case_insensitive_columns"], list):
@@ -86,6 +98,15 @@ def load_config():
                             except Exception:
                                 pass
                         cfg["ignore_transformations"]["whitespace"] = bool(it.get("whitespace", cfg["ignore_transformations"]["whitespace"]))
+                    if "null_values" in doc and isinstance(doc["null_values"], list):
+                        cfg["null_values"] = [str(v) for v in doc["null_values"]]
+                    if "null_categories" in doc and isinstance(doc["null_categories"], dict):
+                        cfg["null_categories"] = {str(k): str(v) for k, v in doc["null_categories"].items()}
+                    if "null_policy" in doc and isinstance(doc["null_policy"], dict):
+                        np = doc["null_policy"]
+                        cfg["null_policy"]["count_match_null_as_positive"] = bool(np.get("count_match_null_as_positive", cfg["null_policy"]["count_match_null_as_positive"]))
+                        cfg["null_policy"]["count_info_gain_as_positive"] = bool(np.get("count_info_gain_as_positive", cfg["null_policy"]["count_info_gain_as_positive"]))
+                        cfg["null_policy"]["count_info_loss_as_negative"] = bool(np.get("count_info_loss_as_negative", cfg["null_policy"]["count_info_loss_as_negative"]))
         except Exception:
             # Ignore config errors; proceed with defaults
             pass
@@ -113,6 +134,28 @@ def load_config():
 CONFIG = load_config()
 
 
+def canonicalize_null(value: str) -> tuple[bool, str, str | None]:
+    """Canonicalize null values to detect and classify missing data.
+
+    Returns:
+        (is_null, canonical_value, null_reason)
+        - is_null: True if value represents null/missing
+        - canonical_value: Either NULL_TOKEN or the original value
+        - null_reason: Semantic category (not_applicable, unknown, etc.) or None
+    """
+    NULL_TOKEN = "<NULL>"
+    value_str = str(value).strip()
+
+    # Check if value matches any configured null token
+    null_values = CONFIG.get("null_values", [])
+    if value_str in null_values or value_str == "":
+        null_categories = CONFIG.get("null_categories", {})
+        null_reason = null_categories.get(value_str, "unknown" if value_str else "empty")
+        return (True, NULL_TOKEN, null_reason)
+
+    return (False, value_str, None)
+
+
 def canon_col_name(s: str) -> str:
     """Canonicalize column names to align baseline and pipeline headers.
 
@@ -128,15 +171,39 @@ def canon_col_name(s: str) -> str:
 
 
 def baseline_to_long(path: Path) -> pd.DataFrame:
+    """Convert baseline CSV to long format with optional join_key extraction.
+
+    If CONFIG["join_key"] is set, extracts that column's value for each row
+    before melting to enable row alignment by stable identifier instead of row_index.
+    """
     df = pd.read_csv(path, dtype=str).fillna("")
+
+    # Extract join_key column if configured
+    join_key_col = CONFIG.get("join_key")
+    join_key_values = {}  # row_index → join_key value
+    if join_key_col:
+        # Find the join_key column in the wide baseline (after canonicalization)
+        for col in df.columns:
+            if canon_col_name(str(col).strip()) == join_key_col.upper():
+                # Build row_index → join_key mapping
+                for idx, val in df[col].items():
+                    val_str = str(val).strip()
+                    join_key_values[idx] = val_str if val_str else None
+                break
+
     records = []
     for idx, row in df.iterrows():
         for col, value in row.items():
-            records.append({
+            record = {
                 'row_index': idx,
                 'column_name': canon_col_name(str(col).strip()),
                 'baseline_value': str(value),
-            })
+            }
+            # Add join_key if available for this row
+            if join_key_values:
+                record['join_key'] = join_key_values.get(idx)
+            records.append(record)
+
     return pd.DataFrame(records)
 
 
@@ -166,10 +233,15 @@ def find_current_file(slug: str) -> Path:
 
 summary_lines = []
 summary_lines.append(f"Generated: {datetime.utcnow().isoformat()}Z\n")
-summary_lines.append("baseline_file,current_file,total_cells,matched,baseline_only,pipeline_only,mismatched,match_rate\n")
+summary_lines.append("baseline_file,current_file,total_cells,matched,baseline_only,pipeline_only,mismatched,match_rate,null_aware_match_rate,count_match_value,count_match_null,count_info_gain,count_info_loss,count_changed_value\n")
 
 
 def normalize_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize pipeline export and extract join_key if configured.
+
+    If CONFIG["join_key"] is set, builds row_index → join_key mapping
+    from the long-form data where column_name matches the join_key.
+    """
     df = df.copy()
     df['row_index'] = df['row_index'].astype(int)
     df['column_name'] = df['column_name'].astype(str).map(lambda s: canon_col_name(s.strip()))
@@ -177,6 +249,20 @@ def normalize_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     df['confidence'] = pd.to_numeric(df['confidence'], errors='coerce')
     df['needs_review'] = df['needs_review'].astype(str)
     df['rule_chain'] = df['rule_chain'].astype(str)
+
+    # Extract join_key from pipeline long data if configured
+    join_key_col = CONFIG.get("join_key")
+    if join_key_col:
+        # Build row_index → join_key mapping from rows where column_name == join_key
+        join_key_rows = df[df['column_name'] == join_key_col.upper()]
+        if not join_key_rows.empty:
+            join_key_map = join_key_rows.set_index('row_index')['cleaned_value'].to_dict()
+            # Add join_key column to all rows
+            df['join_key'] = df['row_index'].map(lambda idx: join_key_map.get(idx))
+        else:
+            # Join key column not found in pipeline data; fallback to row_index
+            df['join_key'] = None
+
     return df
 
 
@@ -191,13 +277,69 @@ def compare_files(baseline_path: Path):
     pipe_df = pd.read_csv(current_path, dtype=str, keep_default_na=False)
     pipe_df = normalize_pipeline(pipe_df)
 
-    merged = base_long.merge(
-        pipe_df,
-        on=['row_index', 'column_name'],
-        how='outer',
-        indicator=True,
-        suffixes=('_baseline', '_pipeline')
+    # Determine merge keys: prefer join_key if available on both sides
+    join_key_col = CONFIG.get("join_key")
+    use_join_key = (
+        join_key_col and
+        'join_key' in base_long.columns and
+        'join_key' in pipe_df.columns and
+        base_long['join_key'].notna().any() and
+        pipe_df['join_key'].notna().any()
     )
+
+    if use_join_key:
+        # Merge on join_key + column_name (row alignment by stable identifier)
+        # Rows with missing join_key will fallback to outer merge behavior
+        print(f"[INFO] {slug}: Using join_key '{join_key_col}' for row alignment")
+
+        # Split into rows with/without join_key (treat empty strings as null)
+        # Apply null canonicalization to join_key values
+        def _has_join_key(series):
+            """Check if join_key is present (non-null and not empty after canonicalization)"""
+            return series.notna() & (series != '') & series.map(lambda x: not canonicalize_null(str(x))[0])
+
+        base_with_jk = base_long[_has_join_key(base_long['join_key'])]
+        base_no_jk = base_long[~base_long.index.isin(base_with_jk.index)]
+
+        pipe_with_jk = pipe_df[_has_join_key(pipe_df['join_key'])]
+        pipe_no_jk = pipe_df[~pipe_df.index.isin(pipe_with_jk.index)]
+
+        # Merge with join_key
+        merged_jk = base_with_jk.merge(
+            pipe_with_jk,
+            on=['join_key', 'column_name'],
+            how='outer',
+            indicator=True,
+            suffixes=('_baseline', '_pipeline')
+        )
+
+        # Merge without join_key (fallback to row_index)
+        merged_no_jk = base_no_jk.merge(
+            pipe_no_jk,
+            on=['row_index', 'column_name'],
+            how='outer',
+            indicator=True,
+            suffixes=('_baseline', '_pipeline')
+        )
+
+        # Combine results
+        merged = pd.concat([merged_jk, merged_no_jk], ignore_index=True)
+
+        # Report join_key coverage
+        jk_baseline_pct = (len(base_with_jk) / len(base_long) * 100) if len(base_long) > 0 else 0
+        jk_pipeline_pct = (len(pipe_with_jk) / len(pipe_df) * 100) if len(pipe_df) > 0 else 0
+        print(f"[INFO] {slug}: join_key coverage: baseline={jk_baseline_pct:.1f}%, pipeline={jk_pipeline_pct:.1f}%")
+    else:
+        # Fallback to row_index (current behavior)
+        if join_key_col:
+            print(f"[WARN] {slug}: join_key '{join_key_col}' not available, using row_index")
+        merged = base_long.merge(
+            pipe_df,
+            on=['row_index', 'column_name'],
+            how='outer',
+            indicator=True,
+            suffixes=('_baseline', '_pipeline')
+        )
 
     merged['pipeline_value'] = merged['cleaned_value'].fillna('')
 
@@ -205,10 +347,24 @@ def compare_files(baseline_path: Path):
     merged['cmp_baseline'] = merged['baseline_value'].astype(str)
     merged['cmp_pipeline'] = merged['pipeline_value'].astype(str)
 
-    # Whitespace trimming
+    # Null canonicalization (before all other transformations)
+    # Preserves null_reason for reporting, normalizes all null tokens to <NULL>
+    null_info_baseline = merged['cmp_baseline'].map(canonicalize_null)
+    null_info_pipeline = merged['cmp_pipeline'].map(canonicalize_null)
+
+    merged['is_null_baseline'] = null_info_baseline.map(lambda x: x[0])
+    merged['is_null_pipeline'] = null_info_pipeline.map(lambda x: x[0])
+    merged['null_reason_baseline'] = null_info_baseline.map(lambda x: x[2])
+    merged['null_reason_pipeline'] = null_info_pipeline.map(lambda x: x[2])
+
+    # Apply canonical null tokens for comparison
+    merged['cmp_baseline'] = null_info_baseline.map(lambda x: x[1])
+    merged['cmp_pipeline'] = null_info_pipeline.map(lambda x: x[1])
+
+    # Whitespace trimming (only for non-null values)
     if CONFIG["ignore_transformations"].get("whitespace", False):
-        merged['cmp_baseline'] = merged['cmp_baseline'].str.strip()
-        merged['cmp_pipeline'] = merged['cmp_pipeline'].str.strip()
+        merged.loc[~merged['is_null_baseline'], 'cmp_baseline'] = merged.loc[~merged['is_null_baseline'], 'cmp_baseline'].str.strip()
+        merged.loc[~merged['is_null_pipeline'], 'cmp_pipeline'] = merged.loc[~merged['is_null_pipeline'], 'cmp_pipeline'].str.strip()
 
     # Unicode normalization
     unicode_norm = CONFIG.get("unicode", {}).get("normalize")
@@ -361,16 +517,116 @@ def compare_files(baseline_path: Path):
         merged['cmp_pipeline'] = _round_float(merged['cmp_pipeline'])
 
     # Create subsets AFTER building cmp_* so they include normalized columns
-    only_baseline = merged[merged['_merge'] == 'left_only']
-    only_pipeline = merged[merged['_merge'] == 'right_only']
-    both = merged[merged['_merge'] == 'both']
+    only_baseline = merged[merged['_merge'] == 'left_only'].copy()
+    only_pipeline = merged[merged['_merge'] == 'right_only'].copy()
+    both = merged[merged['_merge'] == 'both'].copy()
 
+    # Null-aware diff classification
+    # For rows present in both datasets, classify based on null status and value equality
+    both['diff_class'] = 'unknown'
+
+    # match_value: both non-null and equal
+    mask_match_value = both['_merge'] == 'both'
+    mask_match_value &= ~both['is_null_baseline'] & ~both['is_null_pipeline']
+    mask_match_value &= both['cmp_baseline'] == both['cmp_pipeline']
+    both.loc[mask_match_value, 'diff_class'] = 'match_value'
+
+    # match_null: both null (valid signal)
+    mask_match_null = both['_merge'] == 'both'
+    mask_match_null &= both['is_null_baseline'] & both['is_null_pipeline']
+    both.loc[mask_match_null, 'diff_class'] = 'match_null'
+
+    # info_gain: baseline null → pipeline non-null (good)
+    mask_info_gain = both['_merge'] == 'both'
+    mask_info_gain &= both['is_null_baseline'] & ~both['is_null_pipeline']
+    both.loc[mask_info_gain, 'diff_class'] = 'info_gain'
+
+    # info_loss: baseline non-null → pipeline null (bad)
+    mask_info_loss = both['_merge'] == 'both'
+    mask_info_loss &= ~both['is_null_baseline'] & both['is_null_pipeline']
+    both.loc[mask_info_loss, 'diff_class'] = 'info_loss'
+
+    # changed_value: both non-null but different values
+    mask_changed_value = both['_merge'] == 'both'
+    mask_changed_value &= ~both['is_null_baseline'] & ~both['is_null_pipeline']
+    mask_changed_value &= both['cmp_baseline'] != both['cmp_pipeline']
+    both.loc[mask_changed_value, 'diff_class'] = 'changed_value'
+
+    # Compute counts for each classification
+    count_match_value = (both['diff_class'] == 'match_value').sum()
+    count_match_null = (both['diff_class'] == 'match_null').sum()
+    count_info_gain = (both['diff_class'] == 'info_gain').sum()
+    count_info_loss = (both['diff_class'] == 'info_loss').sum()
+    count_changed_value = (both['diff_class'] == 'changed_value').sum()
+
+    # Compute null-aware match rate based on policy
+    null_policy = CONFIG.get("null_policy", {})
+    positive_count = count_match_value  # Always count exact value matches
+
+    if null_policy.get("count_match_null_as_positive", True):
+        positive_count += count_match_null
+
+    if null_policy.get("count_info_gain_as_positive", True):
+        positive_count += count_info_gain
+
+    negative_count = count_changed_value  # Always penalize value changes
+
+    if null_policy.get("count_info_loss_as_negative", True):
+        negative_count += count_info_loss
+
+    # Traditional metrics (backward compat)
     mismatched = both[both['cmp_baseline'] != both['cmp_pipeline']]
     matched = both.shape[0] - mismatched.shape[0]
     total = merged.shape[0]
 
+    # Null-aware match rate
+    null_aware_match_rate = positive_count / both.shape[0] if both.shape[0] > 0 else 0
+
+    # Per-column presence metrics
+    presence_records = []
+    for col_name in merged['column_name'].unique():
+        col_data = merged[merged['column_name'] == col_name]
+        col_both = col_data[col_data['_merge'] == 'both']
+
+        baseline_total = len(col_both)
+        pipeline_total = len(col_both)
+        baseline_non_null = (~col_both['is_null_baseline']).sum() if 'is_null_baseline' in col_both.columns else 0
+        pipeline_non_null = (~col_both['is_null_pipeline']).sum() if 'is_null_pipeline' in col_both.columns else 0
+
+        baseline_non_null_pct = (baseline_non_null / baseline_total * 100) if baseline_total > 0 else 0
+        pipeline_non_null_pct = (pipeline_non_null / pipeline_total * 100) if pipeline_total > 0 else 0
+        delta_pct = pipeline_non_null_pct - baseline_non_null_pct
+
+        # Counts per diff_class for this column
+        col_match_value = (col_both['diff_class'] == 'match_value').sum() if 'diff_class' in col_both.columns else 0
+        col_match_null = (col_both['diff_class'] == 'match_null').sum() if 'diff_class' in col_both.columns else 0
+        col_info_gain = (col_both['diff_class'] == 'info_gain').sum() if 'diff_class' in col_both.columns else 0
+        col_info_loss = (col_both['diff_class'] == 'info_loss').sum() if 'diff_class' in col_both.columns else 0
+        col_changed_value = (col_both['diff_class'] == 'changed_value').sum() if 'diff_class' in col_both.columns else 0
+
+        presence_records.append({
+            'column_name': col_name,
+            'baseline_non_null_count': baseline_non_null,
+            'baseline_non_null_pct': baseline_non_null_pct,
+            'pipeline_non_null_count': pipeline_non_null,
+            'pipeline_non_null_pct': pipeline_non_null_pct,
+            'delta_pct': delta_pct,
+            'match_value': col_match_value,
+            'match_null': col_match_null,
+            'info_gain': col_info_gain,
+            'info_loss': col_info_loss,
+            'changed_value': col_changed_value,
+        })
+
+    # Export presence metrics
+    if presence_records:
+        presence_df = pd.DataFrame(presence_records)
+        presence_path = DIFF_DIR / f"{slug.lower()}_presence.csv"
+        presence_df.to_csv(presence_path, index=False)
+
+    # Update summary with null-aware metrics
     summary_lines.append(
-        f"{baseline_path.name},{current_path.name},{total},{matched},{only_baseline.shape[0]},{only_pipeline.shape[0]},{mismatched.shape[0]},{matched/total if total else 0:.4f}\n"
+        f"{baseline_path.name},{current_path.name},{total},{matched},{only_baseline.shape[0]},{only_pipeline.shape[0]},{mismatched.shape[0]},{matched/total if total else 0:.4f},{null_aware_match_rate:.4f},{count_match_value},{count_match_null},{count_info_gain},{count_info_loss},{count_changed_value}\n"
     )
 
     if mismatched.empty and only_baseline.empty and only_pipeline.empty:

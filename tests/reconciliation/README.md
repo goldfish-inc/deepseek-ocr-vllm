@@ -74,6 +74,40 @@ Diff reports are written into `diffs/` and referenced from issues (#245, #248, #
 
 See `tests/reconciliation/PHASE_C_SUMMARY.md` for per‑RFMO outcomes and notes.
 
+### Null-Aware Metrics (Phase C Enhancement)
+
+The diff harness now treats **missing data as a first-class signal** (intelligence gathering mindset):
+
+- **Information gain** (baseline null → pipeline value) = **positive** ✅
+- **Match null** (both null) = **valid signal** ✅
+- **Information loss** (baseline value → pipeline null) = **negative** ❌
+
+**Key Features:**
+- **5 diff categories**: `match_value`, `match_null`, `info_gain`, `info_loss`, `changed_value`
+- **Null canonicalization**: All null tokens (`""`, `N/A`, `NA`, `NONE`, `NULL`, etc.) normalized to `<NULL>`
+- **Per-column presence metrics**: Track coverage improvements/regressions per RFMO and column
+- **CI guard thresholds**: Prevent match rate regressions and coverage drops
+
+**Metrics Exported:**
+- `diffs/_summary.csv`: Per-RFMO `null_aware_match_rate` and category counts
+- `diffs/<rfmo>_presence.csv`: Per-column coverage (`baseline_non_null_pct`, `pipeline_non_null_pct`, `delta_pct`)
+
+**Validation:**
+```bash
+# Run reconciliation with null-aware metrics
+PREFER_EXT=xlsx scripts/reconciliation/run_phase_b_batch.sh
+
+# Validate results (CI guard)
+python scripts/reconciliation/validate_reconciliation.py
+# ✅ All reconciliation checks passed
+```
+
+**Example Insight (NAFO):**
+- Traditional `match_rate`: 32.5% ❌ (penalizes all nulls)
+- Null-aware `match_rate`: 97.5% ✅ (both sides agree on sparse data)
+
+See **[`docs/reconciliation/null-aware-metrics.md`](../../docs/reconciliation/null-aware-metrics.md)** for full documentation, examples, and best practices.
+
 ## How to Reproduce Phase B Results
 
 ### Quick Start

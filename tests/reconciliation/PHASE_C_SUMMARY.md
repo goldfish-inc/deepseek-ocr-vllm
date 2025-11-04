@@ -85,4 +85,54 @@ All 11 RFMOs processed with date normalization enabled:
 - Summary: `tests/reconciliation/diffs/_summary.csv` (auto-generated)
 - Fix applied: Added dtype check before `.dt` accessor to prevent AttributeError in phase_b_diff.py:206
 
-Last updated: 2025-11-04T00:05:00Z
+### Null-Aware Diff Metrics (Phase C Enhancement)
+
+The diff harness now treats missing data as a **first-class signal** (intelligence gathering mindset) instead of penalizing all nulls uniformly.
+
+#### Null Canonicalization
+- **Null tokens**: `""`, `N/A`, `NA`, `NONE`, `NULL`, `—`, `-`, `Not Available`, `Unknown` (configurable in `diff_config.yaml`)
+- **Null categories**: Maps tokens to semantic reasons (e.g., `not_applicable`, `unknown`, `not_provided`) to preserve "why null" signal
+- **Canonical form**: All null tokens normalized to `<NULL>` before comparison (prevents false positives from different null representations)
+
+#### Diff Classification (5 categories)
+Each cell pair is classified based on null status and value equality:
+
+1. **`match_value`**: Both non-null and equal → **Positive** (exact match)
+2. **`match_null`**: Both null → **Positive** (valid signal; both sides agree data is missing)
+3. **`info_gain`**: Baseline null → pipeline non-null → **Positive** (pipeline fills gaps)
+4. **`info_loss`**: Baseline non-null → pipeline null → **Negative** (data loss; downstream TBD)
+5. **`changed_value`**: Both non-null but different → **Negative** (value mismatch)
+
+#### Metrics Exported
+
+**Per-RFMO Summary** (`tests/reconciliation/diffs/_summary.csv`):
+- `null_aware_match_rate`: % of cells classified as positive (configurable via `null_policy`)
+- `count_match_value`: Exact value matches (both non-null, equal)
+- `count_match_null`: Null matches (both null)
+- `count_info_gain`: Information gain (baseline null → pipeline value)
+- `count_info_loss`: Information loss (baseline value → pipeline null)
+- `count_changed_value`: Value changes (both non-null, different)
+
+**Per-Column Presence** (`tests/reconciliation/diffs/<rfmo>_presence.csv`):
+- `baseline_non_null_pct`: % of non-null cells in baseline
+- `pipeline_non_null_pct`: % of non-null cells in pipeline
+- `delta_pct`: Coverage change (pipeline - baseline)
+- Per-column counts: `match_value`, `match_null`, `info_gain`, `info_loss`, `changed_value`
+
+#### Null Policy (configurable)
+Controls how null matches are scored in `null_aware_match_rate`:
+- `count_match_null_as_positive: true` (default) — Both null = valid match
+- `count_info_gain_as_positive: true` (default) — Reward filling gaps
+- `count_info_loss_as_negative: true` (default) — Penalize data loss
+
+#### Join-Key Coverage Fix
+- Empty strings now treated as null when determining join-key coverage
+- Fixes IOTC/CCSBT/PNA symmetric baseline-only/pipeline-only mismatches (missing IMO → fallback to row_index)
+- Reports actual join-key coverage per RFMO: `baseline={X}%, pipeline={Y}%`
+
+#### Use Cases
+- **Information gain tracking**: Identify which columns/RFMOs benefit from pipeline extraction (baseline null → pipeline value)
+- **Coverage gaps**: Per-column presence metrics show which fields have low coverage in baseline or pipeline
+- **Null semantics**: Distinguish between "not applicable" vs "unknown" vs "not provided" for intelligence reporting
+
+Last updated: 2025-11-04T00:30:00Z
