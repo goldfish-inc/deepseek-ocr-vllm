@@ -60,6 +60,7 @@ diffs/       # Diff reports produced by the comparison harness (Phase B)
 - Helpers
   - `scripts/reconciliation/rebuild_worker_image.sh`: no‑cache build with version stamp, then `docker compose up` stack.
   - `scripts/reconciliation/run_iattc_phase_b.sh`: run Phase B for IATTC only and print summary line.
+  - `scripts/reconciliation/run_phase_b_batch.sh`: run Phase B for a set of RFMOs (defaults to CCSBT, FFA, IOTC, NAFO, PNA, SPRFMO, WCPFC). Override with `RFMO_LIST="CCSBT,FFA"`.
 
 Diff reports are written into `diffs/` and referenced from issues (#245, #248, #249, umbrella #247).
 
@@ -72,3 +73,86 @@ Diff reports are written into `diffs/` and referenced from issues (#245, #248, #
   - Placeholder normalization (e.g., `NONE`/`null` → empty string)
 
 See `tests/reconciliation/PHASE_C_SUMMARY.md` for per‑RFMO outcomes and notes.
+
+## How to Reproduce Phase B Results
+
+### Quick Start
+
+```bash
+# Full batch run (all 11 RFMOs with date normalization)
+PREFER_EXT=xlsx scripts/reconciliation/run_phase_b_batch.sh
+
+# Single RFMO
+ONLY=IATTC PREFER_EXT=xlsx scripts/reconciliation/run_phase_b.sh
+
+# Regenerate consolidated summary
+scripts/reconciliation/phase_b_diff.py
+```
+
+### Environment Toggles
+
+**File Format Preference:**
+```bash
+PREFER_EXT=xlsx  # Prefer XLSX over CSV when both exist (default)
+PREFER_EXT=csv   # Prefer CSV over XLSX
+```
+
+**RFMO Selection:**
+```bash
+ONLY=IATTC                    # Single RFMO
+RFMO_LIST="IATTC,ICCAT,NAFO"  # Subset (batch script only)
+```
+
+**Normalization Overrides:**
+```bash
+IGNORE_DATE_FORMATS=1              # Enable date normalization (dual-scheme)
+CASE_INSENSITIVE_COLUMNS=FLAG      # Case-insensitive comparison
+ROUND_FLOATS=4                     # Float precision tolerance
+IGNORE_WHITESPACE=1                # Ignore leading/trailing whitespace
+```
+
+### Expected Output
+
+**Summary file:** `tests/reconciliation/diffs/_summary.csv`
+```csv
+Generated: 2025-11-04T00:00:49.240123Z
+baseline_file,current_file,total_cells,matched,baseline_only,pipeline_only,mismatched,match_rate
+iattc_vessels_cleaned.csv,IATTC_vessels_2025-08-26_xlsx_stage.csv,102195,102194,0,0,1,1.0000
+...
+```
+
+**Individual diffs:** `tests/reconciliation/diffs/{rfmo}_diff.csv`
+```csv
+row_index,column_name,baseline_value,pipeline_value,confidence,needs_review,rule_chain
+19,NAME,PLAYA MENDUIÑA,PLAYA MENDUIA,0.675,t,{6}
+...
+```
+
+### Troubleshooting
+
+**Export race condition** (partial exports):
+- Symptom: Row counts don't match expected (e.g., 1 row instead of 3,785)
+- Solution: Script now waits for extraction count to stabilize (fixed in ca23dd4)
+
+**AttributeError: Can only use .dt accessor**:
+- Symptom: Error in phase_b_diff.py:206
+- Solution: Fixed in a917883 (dtype check before .dt accessor)
+
+**Summary not regenerating**:
+- Symptom: `_summary.csv` shows old timestamp
+- Solution: Ensure pandas/numpy installed: `pip install pandas numpy`
+
+### Phase B Baseline (rfmo-phaseb-2025-11-03)
+
+**Overall Results:**
+- Total cells: 1,953,639
+- Overall match rate: 98.54%
+- 6 RFMOs ≥99% (IATTC, ICCAT, SPRFMO, NPFC, NEAFC, FFA)
+
+**Key Features:**
+- Dual-scheme date normalization (month-first + day-first)
+- Config-driven aliases and case-insensitive columns
+- Stable export with race condition protection
+- Batch processing with continue-on-error resilience
+
+See [release notes](https://github.com/goldfish-inc/oceanid/releases/tag/rfmo-phaseb-2025-11-03) for detailed results.
