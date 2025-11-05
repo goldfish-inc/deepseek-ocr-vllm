@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
 	"strings"
 
 	"net/http"
@@ -165,39 +166,30 @@ func (w *Worker) parseExcel(content []byte) ([][]string, []string, error) {
 
 // normalizeColumnName standardizes column names
 func normalizeColumnName(name string) string {
-	// Trim whitespace
-	name = strings.TrimSpace(name)
+	// Trim and uppercase
+	n := strings.ToUpper(strings.TrimSpace(name))
 
-	// Replace multiple spaces with single space
-	name = strings.Join(strings.Fields(name), " ")
+	// Canonicalize: replace any run of non-alphanumeric with single underscore
+	// Matches Python canon_col_name behavior in phase_b_diff.py
+	re := regexp.MustCompile(`[^A-Z0-9]+`)
+	n = re.ReplaceAllString(n, "_")
+	n = strings.Trim(n, "_")
 
-	// Convert to uppercase for consistency
-	name = strings.ToUpper(name)
-
-	// Replace common variations
-	replacements := map[string]string{
-		"VESSEL NAME":   "VESSEL_NAME",
-		"VESSEL-NAME":   "VESSEL_NAME",
-		"IMO NUMBER":    "IMO",
-		"IMO NO":        "IMO",
-		"IMO NO.":       "IMO",
-		"CALL SIGN":     "CALL_SIGN",
-		"CALLSIGN":      "CALL_SIGN",
-		"FLAG STATE":    "FLAG",
-		"FLAG-STATE":    "FLAG",
-		"GROSS TONNAGE": "GROSS_TONNAGE",
-		"GT":            "GROSS_TONNAGE",
-		"YEAR BUILT":    "YEAR_BUILT",
-		"BUILD YEAR":    "YEAR_BUILT",
+	// Aliases to collapse common synonyms to canonical names
+	// Keep aligned with DEFAULT_ALIAS_MAP in phase_b_diff.py
+	aliases := map[string]string{
+		"IMO_NUMBER": "IMO",
+		"IMO_NO":     "IMO",
+		"IMO_NO_":    "IMO",
+		"CALLSIGN":   "CALL_SIGN",
+		"FLAG_STATE": "FLAG",
+		"GT":         "GROSS_TONNAGE",
+	}
+	if v, ok := aliases[n]; ok {
+		n = v
 	}
 
-	for pattern, replacement := range replacements {
-		if name == pattern {
-			name = replacement
-		}
-	}
-
-	return name
+	return n
 }
 
 // downloadFile downloads a file from S3 or presigned URL

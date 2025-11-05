@@ -4,18 +4,36 @@
 # This fixes symmetric baseline-only/pipeline-only mismatches (IOTC, CCSBT, PNA)
 join_key: IMO  # Global default (can be overridden per-RFMO or set to null to disable)
 
+# Composite keys (Phase D): used when join_key missing or duplicate
+# Global default and per-RFMO overrides. Keys are canonicalized (uppercase names).
+composite_keys:
+  - IMO
+  - VESSEL_NAME
+composite_overrides:
+  IOTC:
+    # Prefer IMO+NAME; fallback to NAME+FLAG_STATE_CODE+REGNO
+    - [IMO, VESSEL_NAME]
+    - [VESSEL_NAME, FLAG_STATE_CODE, REGNO]
+  PNA:
+    - [IMO, VESSEL_NAME]
+  CCSBT:
+    # Primary: VESSEL_REGISTRATION_NUMBER + VESSEL_NAME
+    # Fallbacks: CCSBT_REGISTRATION_NUMBER + VESSEL_NAME, IMO + VESSEL_NAME
+    - [VESSEL_REGISTRATION_NUMBER, VESSEL_NAME]
+    - [CCSBT_REGISTRATION_NUMBER, VESSEL_NAME]
+    - [IMO, VESSEL_NAME]
+    - [IMO, FLAG]
+    - [CALL_SIGN, VESSEL_NAME]
+
 aliases:
   # Column name aliases (all normalized to uppercase with underscores)
   IMO_NUMBER: IMO
   IMO_NO: IMO
   IMO_NO_: IMO
-
-  # NAFO-specific mappings (pipeline → baseline schema)
-  VESSEL_NAME: NAME
-  FLAG: COUNTRYID
-  RADIO: IRCS
-  "IMO_*": IMO
-  EXTERNAL_REFERENCE_NUMBER: EXTERNAL_REFERENCE_NUMBER  # Keep as-is (not in baseline)
+  CALLSIGN: CALL_SIGN
+  # Note: NAFO-specific mappings (VESSEL_NAME→NAME, FLAG→COUNTRYID, RADIO→IRCS)
+  # are NOT included here as they break other RFMOs. NAFO baseline already uses
+  # canonical names, so no aliases needed.
 
 case_insensitive_columns:
   # Columns where case should be ignored during comparison
@@ -48,8 +66,8 @@ unicode:
   # Accent-insensitive comparison (TEMPORARY WORKAROUND)
   # Use only while #259 (UTF-8 diacritics) is being fixed
   # Empty = strict comparison (prefer this after #259 is fixed)
-  accent_insensitive_columns: []
-    # - NAME  # Uncomment to ignore diacritics in NAME column
+  accent_insensitive_columns:
+    - VESSEL_NAME
 
 # Value normalization mappings
 value_mappings:

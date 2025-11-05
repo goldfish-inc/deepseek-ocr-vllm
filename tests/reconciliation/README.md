@@ -108,6 +108,31 @@ python scripts/reconciliation/validate_reconciliation.py
 
 See **[`docs/reconciliation/null-aware-metrics.md`](../../docs/reconciliation/null-aware-metrics.md)** for full documentation, examples, and best practices.
 
+### Composite Keys + Duplicate-Aware Join (Phase D)
+
+To collapse symmetric baseline-only/pipeline-only counts when `IMO` is missing or duplicated (IOTC, CCSBT, PNA), the harness now:
+
+- Prefers `join_key` when present and unique on both sides.
+- Falls back to configured `composite_keys` when present and unique on both sides.
+- Otherwise falls back to `row_index` alignment.
+
+Duplicate-aware policy: if a `join_key` or `composite_key` value is duplicated on either side, those rows are excluded from key-based alignment and safely aligned by `row_index`.
+
+Config (in `tests/reconciliation/diff_config.yaml`):
+
+```yaml
+join_key: IMO
+composite_keys: [IMO, VESSEL_NAME]
+composite_overrides:
+  PNA: [IMO, VESSEL_NAME]
+  CCSBT: [IMO, REGISTRATION_NUMBER]
+```
+
+Exports now include alignment breakdowns:
+
+- Summary (`diffs/_summary.csv`): `aligned_by_join_key`, `aligned_by_composite`, `aligned_by_row_index`
+- Presence (`diffs/<rfmo>_presence.csv`): per-column alignment counts with the same three fields
+
 ## How to Reproduce Phase B Results
 
 ### Quick Start

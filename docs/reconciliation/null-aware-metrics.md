@@ -252,22 +252,40 @@ WCPFC.IMO: delta_pct = -15.0%  ← Coverage dropped 15%
 
 ---
 
-## Next Steps: Composite Keys (Phase D)
+## Composite Keys (Phase D)
 
-Current limitation: Single `join_key` (IMO only). Fails when:
-- IMO is missing (IOTC: 27.4% of rows)
-- IMO is duplicated (rare but breaks alignment)
+To address missing or duplicated IMOs (e.g., IOTC, CCSBT, PNA), the harness implements a duplicate-aware alignment strategy:
 
-**Proposed enhancement:**
+1. Align by `join_key` (e.g., `IMO`) when present and unique on both sides.
+2. Else align by `composite_keys` (e.g., `[IMO, VESSEL_NAME]` or `[IMO, REGISTRATION_NUMBER]`) when present and unique on both sides.
+3. Else fall back to `row_index`.
+
+If a `join_key` or `composite_key` value is duplicated on either side, those rows are excluded from key-based alignment and safely aligned by `row_index`.
+
+### Configuration
+
+`tests/reconciliation/diff_config.yaml`:
 ```yaml
-join_key:
-  primary: IMO
-  fallback:
-    - [IMO, VESSEL_NAME]  # Composite key for missing IMO
-    - [VESSEL_NAME, FLAG_STATE_CODE]  # Final fallback
+join_key: IMO
+composite_keys: [IMO, VESSEL_NAME]
+composite_overrides:
+  PNA: [IMO, VESSEL_NAME]
+  CCSBT: [IMO, REGISTRATION_NUMBER]
 ```
 
-This will collapse remaining symmetric mismatches and improve join coverage from 72.6% → 95%+.
+### Exports and Reporting
+
+- Summary (`tests/reconciliation/diffs/_summary.csv`) adds:
+  - `aligned_by_join_key`, `aligned_by_composite`, `aligned_by_row_index`
+- Presence (`tests/reconciliation/diffs/<rfmo>_presence.csv`) adds the same alignment counts per column.
+
+Console logs report key coverage and duplicates filtered:
+```
+[INFO] IOTC: join_key coverage: baseline=72.6%, pipeline=72.6%
+[INFO] IOTC: join_key duplicates excluded: baseline=12, pipeline=9
+[INFO] IOTC: composite_key coverage: baseline=94.8%, pipeline=95.1%
+[INFO] IOTC: composite_key duplicates excluded: baseline=3, pipeline=5
+```
 
 ---
 

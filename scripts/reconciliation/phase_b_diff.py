@@ -62,6 +62,12 @@ def load_config():
             "count_info_gain_as_positive": True,
             "count_info_loss_as_negative": True,
         },
+        # Phase D: composite key support
+        # Global default composite key columns (uppercase, canonicalized names)
+        # and optional per-RFMO overrides
+        # Composite keys can be a single set [A,B] or list of sets [[A,B],[C,D]]
+        "composite_keys": [],  # e.g., ["IMO", "VESSEL_NAME"] or [["IMO","VESSEL_NAME"],["VESSEL_NAME","FLAG_STATE_CODE"]]
+        "composite_overrides": {},  # e.g., {"PNA": ["IMO", "VESSEL_NAME"], "CCSBT": [["VESSEL_REGISTRATION_NUMBER","VESSEL_NAME"],["IMO","VESSEL_NAME"]]}
     }
     if CONFIG_PATH.exists() and yaml is not None:
         try:
@@ -107,6 +113,52 @@ def load_config():
                         cfg["null_policy"]["count_match_null_as_positive"] = bool(np.get("count_match_null_as_positive", cfg["null_policy"]["count_match_null_as_positive"]))
                         cfg["null_policy"]["count_info_gain_as_positive"] = bool(np.get("count_info_gain_as_positive", cfg["null_policy"]["count_info_gain_as_positive"]))
                         cfg["null_policy"]["count_info_loss_as_negative"] = bool(np.get("count_info_loss_as_negative", cfg["null_policy"]["count_info_loss_as_negative"]))
+                    # Composite keys configuration (Phase D)
+                    if "composite_keys" in doc and isinstance(doc["composite_keys"], list):
+                        # Accept [A,B] or [[A,B],[C,D]]
+                        if doc["composite_keys"] and all(isinstance(x, (str, int, float)) for x in doc["composite_keys"]):
+                            cfg["composite_keys"] = [[str(x).upper() for x in doc["composite_keys"]]]
+                        else:
+                            sets = []
+                            for s in doc["composite_keys"]:
+                                if isinstance(s, list):
+                                    sets.append([str(x).upper() for x in s])
+                            cfg["composite_keys"] = sets
+                    # Support either specific key name or generic 'overrides' for compatibility with prompt
+                    if "composite_overrides" in doc and isinstance(doc["composite_overrides"], dict):
+                        norm: dict[str, list[list[str]]] = {}
+                        for k, v in doc["composite_overrides"].items():
+                            key = str(k).upper()
+                            if isinstance(v, list):
+                                # Either [A,B] or [[A,B],[C,D]]
+                                if v and all(isinstance(x, (str, int, float)) for x in v):
+                                    norm[key] = [[str(x).upper() for x in v]]
+                                else:
+                                    sets = []
+                                    for s in v:
+                                        if isinstance(s, list):
+                                            sets.append([str(x).upper() for x in s])
+                                    norm[key] = sets
+                            else:
+                                norm[key] = []
+                        cfg["composite_overrides"] = norm
+                    elif "overrides" in doc and isinstance(doc["overrides"], dict):
+                        # Treat top-level 'overrides' as composite key overrides if present
+                        norm: dict[str, list[list[str]]] = {}
+                        for k, v in doc["overrides"].items():
+                            key = str(k).upper()
+                            if isinstance(v, list):
+                                if v and all(isinstance(x, (str, int, float)) for x in v):
+                                    norm[key] = [[str(x).upper() for x in v]]
+                                else:
+                                    sets = []
+                                    for s in v:
+                                        if isinstance(s, list):
+                                            sets.append([str(x).upper() for x in s])
+                                    norm[key] = sets
+                            else:
+                                norm[key] = []
+                        cfg["composite_overrides"] = norm
         except Exception:
             # Ignore config errors; proceed with defaults
             pass
@@ -132,6 +184,23 @@ def load_config():
 
 
 CONFIG = load_config()
+
+
+def composite_key_sets(slug: str) -> list[list[str]]:
+    """Return ordered list of composite key sets for a given RFMO slug.
+
+    Each set is a list of canonical column names. Uses overrides if present,
+    otherwise the global default. Returns [] if none configured.
+    """
+    overrides = CONFIG.get("composite_overrides", {}) or {}
+    if isinstance(overrides, dict) and slug.upper() in overrides:
+        ov = overrides.get(slug.upper()) or []
+        if isinstance(ov, list):
+            return [[str(x).upper() for x in s] for s in ov]
+    keys = CONFIG.get("composite_keys", []) or []
+    if keys and isinstance(keys[0], list):
+        return [[str(x).upper() for x in s] for s in keys]
+    return []
 
 
 def canonicalize_null(value: str) -> tuple[bool, str, str | None]:
@@ -170,7 +239,7 @@ def canon_col_name(s: str) -> str:
     return CONFIG["aliases"].get(s, s)
 
 
-def baseline_to_long(path: Path) -> pd.DataFrame:
+def baseline_to_long(path: Path, slug: str) -> pd.DataFrame:
     """Convert baseline CSV to long format with optional join_key extraction.
 
     If CONFIG["join_key"] is set, extracts that column's value for each row
@@ -191,6 +260,32 @@ def baseline_to_long(path: Path) -> pd.DataFrame:
                     join_key_values[idx] = val_str if val_str else None
                 break
 
+    # Extract composite_key if configured (supports multiple key sets; use first complete)
+    composite_sets = composite_key_sets(slug)
+    composite_values = {}  # row_index → composite_key string
+    if composite_sets:
+        canon_to_orig = {canon_col_name(c): c for c in df.columns}
+        for idx in df.index:
+            key_value = None
+            for set_cols in composite_sets:
+                # Ensure all columns exist
+                if not all(c in canon_to_orig for c in set_cols):
+                    continue
+                parts: list[str] = []
+                missing = False
+                for c in set_cols:
+                    orig = canon_to_orig.get(c)
+                    v = "" if orig is None else str(df.at[idx, orig]).strip()
+                    is_null, _, _ = canonicalize_null(v)
+                    if (v == "") or is_null:
+                        missing = True
+                        break
+                    parts.append(v)
+                if not missing and parts:
+                    key_value = "||".join(parts)
+                    break
+            composite_values[idx] = key_value
+
     records = []
     for idx, row in df.iterrows():
         for col, value in row.items():
@@ -202,6 +297,9 @@ def baseline_to_long(path: Path) -> pd.DataFrame:
             # Add join_key if available for this row
             if join_key_values:
                 record['join_key'] = join_key_values.get(idx)
+            # Add composite_key if available for this row
+            if composite_values:
+                record['composite_key'] = composite_values.get(idx)
             records.append(record)
 
     return pd.DataFrame(records)
@@ -233,10 +331,10 @@ def find_current_file(slug: str) -> Path:
 
 summary_lines = []
 summary_lines.append(f"Generated: {datetime.utcnow().isoformat()}Z\n")
-summary_lines.append("baseline_file,current_file,total_cells,matched,baseline_only,pipeline_only,mismatched,match_rate,null_aware_match_rate,count_match_value,count_match_null,count_info_gain,count_info_loss,count_changed_value\n")
+summary_lines.append("baseline_file,current_file,total_cells,matched,baseline_only,pipeline_only,mismatched,match_rate,null_aware_match_rate,count_match_value,count_match_null,count_info_gain,count_info_loss,count_changed_value,aligned_by_join_key,aligned_by_composite,aligned_by_row_index\n")
 
 
-def normalize_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_pipeline(df: pd.DataFrame, slug: str) -> pd.DataFrame:
     """Normalize pipeline export and extract join_key if configured.
 
     If CONFIG["join_key"] is set, builds row_index → join_key mapping
@@ -263,6 +361,40 @@ def normalize_pipeline(df: pd.DataFrame) -> pd.DataFrame:
             # Join key column not found in pipeline data; fallback to row_index
             df['join_key'] = None
 
+    # Extract composite_key if configured (supports multiple key sets; use first complete)
+    comp_sets = composite_key_sets(slug)
+    if comp_sets:
+        # Subset to rows for union of composite columns
+        union_cols = sorted({c for s in comp_sets for c in s})
+        subset = df[df['column_name'].isin([c.upper() for c in union_cols])]
+        if not subset.empty:
+            try:
+                wide = subset.pivot_table(index='row_index', columns='column_name', values='cleaned_value', aggfunc='first')
+                wide = wide.fillna("")
+                composite_map: dict[int, str | None] = {}
+                for ridx, row in wide.iterrows():
+                    value = None
+                    for set_cols in comp_sets:
+                        parts: list[str] = []
+                        missing = False
+                        for c in set_cols:
+                            v = str(row.get(c, "")).strip()
+                            is_null, _, _ = canonicalize_null(v)
+                            if (v == "") or is_null:
+                                missing = True
+                                break
+                            parts.append(v)
+                        if not missing and parts:
+                            value = "||".join(parts)
+                            break
+                    composite_map[int(ridx)] = value
+                df['composite_key'] = df['row_index'].map(lambda idx: composite_map.get(int(idx)))
+            except Exception as e:
+                print(f"[ERROR] {slug}: Failed to build composite_key: {e}")
+                df['composite_key'] = None
+        else:
+            df['composite_key'] = None
+
     return df
 
 
@@ -273,73 +405,146 @@ def compare_files(baseline_path: Path):
         print(f"[WARN] No pipeline output for {baseline_path.name} (slug {slug})")
         return
 
-    base_long = baseline_to_long(baseline_path)
+    base_long = baseline_to_long(baseline_path, slug)
     pipe_df = pd.read_csv(current_path, dtype=str, keep_default_na=False)
-    pipe_df = normalize_pipeline(pipe_df)
+    pipe_df = normalize_pipeline(pipe_df, slug)
 
-    # Determine merge keys: prefer join_key if available on both sides
+    # Determine merge keys: prefer join_key if available and unique; then composite; else row_index
     join_key_col = CONFIG.get("join_key")
-    use_join_key = (
-        join_key_col and
-        'join_key' in base_long.columns and
-        'join_key' in pipe_df.columns and
-        base_long['join_key'].notna().any() and
-        pipe_df['join_key'].notna().any()
-    )
+    def _has_key(series: pd.Series) -> pd.Series:
+        # Present = non-null, not empty, not canonical null
+        return series.notna() & (series != '') & series.map(lambda x: not canonicalize_null(str(x))[0])
 
-    if use_join_key:
-        # Merge on join_key + column_name (row alignment by stable identifier)
-        # Rows with missing join_key will fallback to outer merge behavior
-        print(f"[INFO] {slug}: Using join_key '{join_key_col}' for row alignment")
+    # Stage 1: join_key-based merge with duplicate-aware filtering
+    merged_parts: list[pd.DataFrame] = []
+    aligned_counts = {"join_key": 0, "composite": 0, "row_index": 0}
 
-        # Split into rows with/without join_key (treat empty strings as null)
-        # Apply null canonicalization to join_key values
-        def _has_join_key(series):
-            """Check if join_key is present (non-null and not empty after canonicalization)"""
-            return series.notna() & (series != '') & series.map(lambda x: not canonicalize_null(str(x))[0])
+    base_remaining = base_long.copy()
+    pipe_remaining = pipe_df.copy()
 
-        base_with_jk = base_long[_has_join_key(base_long['join_key'])]
-        base_no_jk = base_long[~base_long.index.isin(base_with_jk.index)]
+    if (
+        join_key_col
+        and ('join_key' in base_long.columns)
+        and ('join_key' in pipe_df.columns)
+        and base_long['join_key'].notna().any()
+        and pipe_df['join_key'].notna().any()
+    ):
+        print(f"[INFO] {slug}: Considering join_key '{join_key_col}' for alignment")
 
-        pipe_with_jk = pipe_df[_has_join_key(pipe_df['join_key'])]
-        pipe_no_jk = pipe_df[~pipe_df.index.isin(pipe_with_jk.index)]
+        base_jk = base_remaining[_has_key(base_remaining['join_key'])]
+        pipe_jk = pipe_remaining[_has_key(pipe_remaining['join_key'])]
 
-        # Merge with join_key
-        merged_jk = base_with_jk.merge(
-            pipe_with_jk,
+        # Compute duplicates at the row level (unique row_index per join_key)
+        base_jk_rows = base_jk[['row_index', 'join_key']].drop_duplicates()
+        pipe_jk_rows = pipe_jk[['row_index', 'join_key']].drop_duplicates()
+        dup_base_keys = set(base_jk_rows['join_key'][base_jk_rows['join_key'].isin(
+            base_jk_rows['join_key'][base_jk_rows['join_key'].duplicated(keep=False)]
+        )])
+        dup_pipe_keys = set(pipe_jk_rows['join_key'][pipe_jk_rows['join_key'].isin(
+            pipe_jk_rows['join_key'][pipe_jk_rows['join_key'].duplicated(keep=False)]
+        )])
+        dup_any = dup_base_keys.union(dup_pipe_keys)
+
+        # Filter out duplicates from key-based alignment
+        base_jk_unique = base_jk[~base_jk['join_key'].isin(dup_any)]
+        pipe_jk_unique = pipe_jk[~pipe_jk['join_key'].isin(dup_any)]
+
+        merged_jk = base_jk_unique.merge(
+            pipe_jk_unique,
             on=['join_key', 'column_name'],
             how='outer',
             indicator=True,
             suffixes=('_baseline', '_pipeline')
         )
+        merged_jk['aligned_by'] = 'join_key'
 
-        # Merge without join_key (fallback to row_index)
-        merged_no_jk = base_no_jk.merge(
-            pipe_no_jk,
-            on=['row_index', 'column_name'],
-            how='outer',
-            indicator=True,
-            suffixes=('_baseline', '_pipeline')
+        # Update aligned count and remaining pools
+        aligned_counts["join_key"] = int((merged_jk['_merge'] == 'both').sum())
+
+        # Exclude all rows that participated in the join_key attempt (unique ones only) from remaining
+        used_base_rows = set(base_jk_unique['row_index'].unique())
+        used_pipe_rows = set(pipe_jk_unique['row_index'].unique())
+        base_remaining = base_remaining[~base_remaining['row_index'].isin(used_base_rows)]
+        pipe_remaining = pipe_remaining[~pipe_remaining['row_index'].isin(used_pipe_rows)]
+
+        merged_parts.append(merged_jk)
+
+        # Report coverage and duplicates
+        jk_baseline_cov = (len(base_jk_rows) / len(base_long[['row_index']].drop_duplicates()) * 100) if len(base_long) > 0 else 0
+        jk_pipeline_cov = (len(pipe_jk_rows) / len(pipe_df[['row_index']].drop_duplicates()) * 100) if len(pipe_df) > 0 else 0
+        print(
+            f"[INFO] {slug}: join_key coverage: baseline={jk_baseline_cov:.1f}%, pipeline={jk_pipeline_cov:.1f}%"
         )
-
-        # Combine results
-        merged = pd.concat([merged_jk, merged_no_jk], ignore_index=True)
-
-        # Report join_key coverage
-        jk_baseline_pct = (len(base_with_jk) / len(base_long) * 100) if len(base_long) > 0 else 0
-        jk_pipeline_pct = (len(pipe_with_jk) / len(pipe_df) * 100) if len(pipe_df) > 0 else 0
-        print(f"[INFO] {slug}: join_key coverage: baseline={jk_baseline_pct:.1f}%, pipeline={jk_pipeline_pct:.1f}%")
+        if dup_any:
+            print(
+                f"[INFO] {slug}: join_key duplicates excluded: baseline={len(dup_base_keys)}, pipeline={len(dup_pipe_keys)}"
+            )
     else:
-        # Fallback to row_index (current behavior)
         if join_key_col:
-            print(f"[WARN] {slug}: join_key '{join_key_col}' not available, using row_index")
-        merged = base_long.merge(
-            pipe_df,
-            on=['row_index', 'column_name'],
+            print(f"[WARN] {slug}: join_key '{join_key_col}' not available; will try composite/row_index")
+
+    # Stage 2: composite key-based merge with duplicate-aware filtering
+    comp_sets = composite_key_sets(slug)
+    if comp_sets and ('composite_key' in base_long.columns) and ('composite_key' in pipe_df.columns):
+        print(f"[INFO] {slug}: Considering composite key sets {comp_sets} for alignment")
+        base_ck = base_remaining[_has_key(base_remaining['composite_key'])]
+        pipe_ck = pipe_remaining[_has_key(pipe_remaining['composite_key'])]
+
+        base_ck_rows = base_ck[['row_index', 'composite_key']].drop_duplicates()
+        pipe_ck_rows = pipe_ck[['row_index', 'composite_key']].drop_duplicates()
+        dup_base_ck = set(base_ck_rows['composite_key'][base_ck_rows['composite_key'].isin(
+            base_ck_rows['composite_key'][base_ck_rows['composite_key'].duplicated(keep=False)]
+        )])
+        dup_pipe_ck = set(pipe_ck_rows['composite_key'][pipe_ck_rows['composite_key'].isin(
+            pipe_ck_rows['composite_key'][pipe_ck_rows['composite_key'].duplicated(keep=False)]
+        )])
+        dup_any_ck = dup_base_ck.union(dup_pipe_ck)
+
+        base_ck_unique = base_ck[~base_ck['composite_key'].isin(dup_any_ck)]
+        pipe_ck_unique = pipe_ck[~pipe_ck['composite_key'].isin(dup_any_ck)]
+
+        merged_ck = base_ck_unique.merge(
+            pipe_ck_unique,
+            on=['composite_key', 'column_name'],
             how='outer',
             indicator=True,
             suffixes=('_baseline', '_pipeline')
         )
+        merged_ck['aligned_by'] = 'composite'
+        aligned_counts["composite"] = int((merged_ck['_merge'] == 'both').sum())
+
+        used_base_rows_ck = set(base_ck_unique['row_index'].unique())
+        used_pipe_rows_ck = set(pipe_ck_unique['row_index'].unique())
+        base_remaining = base_remaining[~base_remaining['row_index'].isin(used_base_rows_ck)]
+        pipe_remaining = pipe_remaining[~pipe_remaining['row_index'].isin(used_pipe_rows_ck)]
+
+        merged_parts.append(merged_ck)
+
+        # Report composite coverage and duplicates
+        comp_baseline_cov = (len(base_ck_rows) / max(1, len(base_long[['row_index']].drop_duplicates())) * 100)
+        comp_pipeline_cov = (len(pipe_ck_rows) / max(1, len(pipe_df[['row_index']].drop_duplicates())) * 100)
+        print(
+            f"[INFO] {slug}: composite_key coverage: baseline={comp_baseline_cov:.1f}%, pipeline={comp_pipeline_cov:.1f}%"
+        )
+        if dup_any_ck:
+            print(
+                f"[INFO] {slug}: composite_key duplicates excluded: baseline={len(dup_base_ck)}, pipeline={len(dup_pipe_ck)}"
+            )
+
+    # Stage 3: row_index fallback on remaining rows
+    merged_idx = base_remaining.merge(
+        pipe_remaining,
+        on=['row_index', 'column_name'],
+        how='outer',
+        indicator=True,
+        suffixes=('_baseline', '_pipeline')
+    )
+    merged_idx['aligned_by'] = 'row_index'
+    aligned_counts["row_index"] = int((merged_idx['_merge'] == 'both').sum())
+    merged_parts.append(merged_idx)
+
+    # Combine all parts
+    merged = pd.concat(merged_parts, ignore_index=True)
 
     merged['pipeline_value'] = merged['cleaned_value'].fillna('')
 
@@ -604,6 +809,11 @@ def compare_files(baseline_path: Path):
         col_info_loss = (col_both['diff_class'] == 'info_loss').sum() if 'diff_class' in col_both.columns else 0
         col_changed_value = (col_both['diff_class'] == 'changed_value').sum() if 'diff_class' in col_both.columns else 0
 
+        # Alignment breakdown for this column (how many cells were aligned by which strategy)
+        aligned_by_join_key = int((col_both.get('aligned_by') == 'join_key').sum()) if 'aligned_by' in col_both.columns else 0
+        aligned_by_composite = int((col_both.get('aligned_by') == 'composite').sum()) if 'aligned_by' in col_both.columns else 0
+        aligned_by_row_index = int((col_both.get('aligned_by') == 'row_index').sum()) if 'aligned_by' in col_both.columns else 0
+
         presence_records.append({
             'column_name': col_name,
             'baseline_non_null_count': baseline_non_null,
@@ -616,6 +826,9 @@ def compare_files(baseline_path: Path):
             'info_gain': col_info_gain,
             'info_loss': col_info_loss,
             'changed_value': col_changed_value,
+            'aligned_by_join_key': aligned_by_join_key,
+            'aligned_by_composite': aligned_by_composite,
+            'aligned_by_row_index': aligned_by_row_index,
         })
 
     # Export presence metrics
@@ -624,9 +837,9 @@ def compare_files(baseline_path: Path):
         presence_path = DIFF_DIR / f"{slug.lower()}_presence.csv"
         presence_df.to_csv(presence_path, index=False)
 
-    # Update summary with null-aware metrics
+    # Update summary with null-aware metrics and alignment breakdown
     summary_lines.append(
-        f"{baseline_path.name},{current_path.name},{total},{matched},{only_baseline.shape[0]},{only_pipeline.shape[0]},{mismatched.shape[0]},{matched/total if total else 0:.4f},{null_aware_match_rate:.4f},{count_match_value},{count_match_null},{count_info_gain},{count_info_loss},{count_changed_value}\n"
+        f"{baseline_path.name},{current_path.name},{total},{matched},{only_baseline.shape[0]},{only_pipeline.shape[0]},{mismatched.shape[0]},{matched/total if total else 0:.4f},{null_aware_match_rate:.4f},{count_match_value},{count_match_null},{count_info_gain},{count_info_loss},{count_changed_value},{aligned_counts['join_key']},{aligned_counts['composite']},{aligned_counts['row_index']}\n"
     )
 
     if mismatched.empty and only_baseline.empty and only_pipeline.empty:
@@ -650,6 +863,9 @@ def compare_files(baseline_path: Path):
         fh.write(f"Pipeline-only cells: {only_pipeline.shape[0]}\n")
         fh.write(f"Mismatched cells: {mismatched.shape[0]}\n")
     print(f"[DIFF] {slug}: mismatched={mismatched.shape[0]}, baseline_only={only_baseline.shape[0]}, pipeline_only={only_pipeline.shape[0]}")
+    print(
+        f"[ALIGN] {slug}: join_key={aligned_counts['join_key']}, composite={aligned_counts['composite']}, row_index={aligned_counts['row_index']}"
+    )
 
 
 for baseline_file in baseline_files:
