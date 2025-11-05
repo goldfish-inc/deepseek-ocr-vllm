@@ -1,6 +1,6 @@
 module github.com/goldfish-inc/oceanid/annotations-sink
 
-go 1.25.3
+go 1.24.8
 
 require (
 	github.com/lib/pq v1.10.9 // Latest v1.10.x (no v1.10.11 exists as of 2025-10-16)

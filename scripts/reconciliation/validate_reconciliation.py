@@ -44,6 +44,28 @@ DEFAULT_THRESHOLDS = {
 
     # Key columns where coverage drops are critical
     "critical_columns": ["IMO", "NAME", "FLAG_STATE_CODE", "FLAG"],
+
+    # Alignment guard: required columns in summary
+    "alignment_required_columns": [
+        "aligned_by_join_key",
+        "aligned_by_composite",
+        "aligned_by_row_index",
+    ],
+
+    # Alignment guard: max allowed row_index-aligned cells per RFMO
+    # Flags regressions where composite/join alignment should be engaging
+    "alignment_row_index_thresholds": {
+        "CCSBT": 1000,  # currently ~598
+        "IOTC": 100,    # currently 0
+        "PNA": 50,      # currently 20
+    },
+
+    # Alignment guard: minimum composite engagement per RFMO
+    # Ensures composite keys continue to engage
+    "alignment_composite_min": {
+        "CCSBT": 15000,  # currently ~18630
+        "IOTC": 70000,   # currently ~80316
+    },
 }
 
 
@@ -146,6 +168,74 @@ def validate_presence(diffs_dir: Path, thresholds: dict) -> tuple[bool, list[str
     return (len(errors) == 0, errors, warnings)
 
 
+def validate_alignment(summary_path: Path, thresholds: dict) -> tuple[bool, list[str], list[str]]:
+    """Validate alignment expectations from summary CSV.
+
+    Checks:
+      - Required alignment columns exist
+      - Row-index alignment not exceeding RFMO-specific thresholds
+      - Minimum composite engagement for target RFMOs
+
+    Returns:
+        (passed, errors, warnings)
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not summary_path.exists():
+        return (False, [f"Summary file not found: {summary_path}"], warnings)
+
+    try:
+        df = pd.read_csv(summary_path, skiprows=1)
+    except Exception as e:
+        return (False, [f"Failed to read summary: {e}"], warnings)
+
+    required_cols = thresholds.get("alignment_required_columns", [])
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        errors.append(
+            f"Summary missing alignment columns: {', '.join(missing)}"
+        )
+        # If required columns are missing, further checks won't work; return early
+        return (False, errors, warnings)
+
+    # Build RFMO code from baseline_file first token
+    df = df.copy()
+    df["rfmo"] = df["baseline_file"].map(lambda s: str(s).split("_")[0].upper() if pd.notna(s) else "")
+
+    # Row-index thresholds
+    row_index_limits: dict = thresholds.get("alignment_row_index_thresholds", {}) or {}
+    for rfmo, limit in row_index_limits.items():
+        sub = df[df["rfmo"] == rfmo]
+        if sub.empty:
+            continue
+        try:
+            val = int(sub["aligned_by_row_index"].iloc[0])
+        except Exception:
+            val = 0
+        if val > int(limit):
+            errors.append(
+                f"{rfmo}: aligned_by_row_index={val} exceeds threshold={limit}"
+            )
+
+    # Composite engagement minimums
+    comp_mins: dict = thresholds.get("alignment_composite_min", {}) or {}
+    for rfmo, minimum in comp_mins.items():
+        sub = df[df["rfmo"] == rfmo]
+        if sub.empty:
+            continue
+        try:
+            val = int(sub["aligned_by_composite"].iloc[0])
+        except Exception:
+            val = 0
+        if val < int(minimum):
+            errors.append(
+                f"{rfmo}: aligned_by_composite={val} below minimum={minimum}"
+            )
+
+    return (len(errors) == 0, errors, warnings)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate reconciliation metrics")
     parser.add_argument(
@@ -179,9 +269,14 @@ def main():
         args.diffs_dir, thresholds
     )
 
+    # Alignment validation (composite/join/row_index expectations)
+    align_passed, align_errors, align_warnings = validate_alignment(
+        args.summary, thresholds
+    )
+
     # Report results
-    all_errors = summary_errors + presence_errors
-    all_warnings = summary_warnings + presence_warnings
+    all_errors = summary_errors + presence_errors + align_errors
+    all_warnings = summary_warnings + presence_warnings + align_warnings
 
     if all_errors:
         print("❌ CRITICAL FAILURES:", file=sys.stderr)

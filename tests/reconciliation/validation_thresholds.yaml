@@ -35,6 +35,23 @@ critical_columns:
   - REGISTRATION_NUMBER
   - VESSEL_NAME
 
+# Alignment guard: ensures alignment strategy does not regress
+alignment_required_columns:
+  - aligned_by_join_key
+  - aligned_by_composite
+  - aligned_by_row_index
+
+# Max allowed row_index-aligned cells per RFMO (spike detection)
+alignment_row_index_thresholds:
+  CCSBT: 1000   # currently ~598
+  IOTC: 100     # currently 0
+  PNA: 50       # currently 20
+
+# Minimum composite engagement per RFMO (ensures composite aligns rows)
+alignment_composite_min:
+  CCSBT: 15000  # currently ~18630
+  IOTC: 70000   # currently ~80316
+
 # RFMO-specific overrides (optional; uncomment to customize per-RFMO thresholds)
 # rfmo_overrides:
 #   IOTC:

@@ -287,6 +287,23 @@ Console logs report key coverage and duplicates filtered:
 [INFO] IOTC: composite_key duplicates excluded: baseline=3, pipeline=5
 ```
 
+### Composite-Key-Only Normalization
+
+To improve identity matching without changing values, you can enable normalization when assembling composite keys:
+
+```yaml
+composite_key_normalization:
+  enabled: true
+  rules:
+    strip_quotes: true
+    strip_apostrophes: true
+    ampersand_to_and: true
+    compress_whitespace: true
+    remove_degree_symbol: true
+```
+
+This normalization runs only during key assembly (both baseline and pipeline), keeping diff values intact.
+
 ---
 
 ## References

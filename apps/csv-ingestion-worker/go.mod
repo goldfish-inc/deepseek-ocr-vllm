@@ -1,6 +1,6 @@
 module github.com/goldfish-inc/oceanid/apps/csv-ingestion-worker
 
-go 1.25.3
+go 1.24.8
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.2

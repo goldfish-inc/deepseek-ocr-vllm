@@ -62,6 +62,19 @@ def load_config():
             "count_info_gain_as_positive": True,
             "count_info_loss_as_negative": True,
         },
+        # Composite key normalization (applies only to key assembly, not values)
+        "composite_key_normalization": {
+            "enabled": False,
+            "rules": {
+                "strip_quotes": False,
+                "strip_apostrophes": False,
+                "ampersand_to_and": False,
+                "compress_whitespace": True,
+                "remove_degree_symbol": False,
+            },
+            # Optional per-RFMO overrides: { RFMO: { enabled, rules } }
+            "overrides": {},
+        },
         # Phase D: composite key support
         # Global default composite key columns (uppercase, canonicalized names)
         # and optional per-RFMO overrides
@@ -159,6 +172,38 @@ def load_config():
                             else:
                                 norm[key] = []
                         cfg["composite_overrides"] = norm
+                    # Composite key normalization block
+                    if "composite_key_normalization" in doc and isinstance(doc["composite_key_normalization"], dict):
+                        ckn = doc["composite_key_normalization"]
+                        # enabled
+                        if isinstance(ckn.get("enabled"), bool):
+                            cfg["composite_key_normalization"]["enabled"] = ckn["enabled"]
+                        # rules
+                        if isinstance(ckn.get("rules"), dict):
+                            for rk, rv in ckn["rules"].items():
+                                try:
+                                    cfg["composite_key_normalization"]["rules"][str(rk)] = bool(rv)
+                                except Exception:
+                                    pass
+                        # overrides
+                        if isinstance(ckn.get("overrides"), dict):
+                            ov: dict[str, dict] = {}
+                            for rfmo, block in ckn["overrides"].items():
+                                if not isinstance(block, dict):
+                                    continue
+                                rf = str(rfmo).upper()
+                                o_block = {
+                                    "enabled": bool(block.get("enabled", cfg["composite_key_normalization"]["enabled"])),
+                                    "rules": cfg["composite_key_normalization"]["rules"].copy(),
+                                }
+                                if isinstance(block.get("rules"), dict):
+                                    for rk, rv in block["rules"].items():
+                                        try:
+                                            o_block["rules"][str(rk)] = bool(rv)
+                                        except Exception:
+                                            pass
+                                ov[rf] = o_block
+                            cfg["composite_key_normalization"]["overrides"] = ov
         except Exception:
             # Ignore config errors; proceed with defaults
             pass
@@ -184,6 +229,43 @@ def load_config():
 
 
 CONFIG = load_config()
+
+
+def _ck_norm_rules_for(slug: str) -> tuple[bool, dict[str, bool]]:
+    """Resolve composite-key normalization settings for RFMO slug."""
+    ckn = CONFIG.get("composite_key_normalization", {}) or {}
+    enabled = bool(ckn.get("enabled", False))
+    rules = dict(ckn.get("rules", {}))
+    overrides = ckn.get("overrides", {}) or {}
+    if isinstance(overrides, dict) and slug.upper() in overrides:
+        block = overrides[slug.upper()]
+        if isinstance(block, dict):
+            enabled = bool(block.get("enabled", enabled))
+            br = block.get("rules", {}) or {}
+            if isinstance(br, dict):
+                rules.update({str(k): bool(v) for k, v in br.items()})
+    return enabled, rules
+
+
+def normalize_composite_part(value: str, slug: str) -> str:
+    """Normalize a composite-key part per config without changing diff values."""
+    if not isinstance(value, str):
+        return value
+    enabled, rules = _ck_norm_rules_for(slug)
+    if not enabled:
+        return value
+    s = value
+    if rules.get("strip_quotes", False):
+        s = s.replace('"', "").replace("“", "").replace("”", "")
+    if rules.get("strip_apostrophes", False):
+        s = s.replace("'", "").replace("’", "").replace("‘", "")
+    if rules.get("ampersand_to_and", False):
+        s = s.replace("&", " AND ")
+    if rules.get("remove_degree_symbol", False):
+        s = s.replace("°", " ")
+    if rules.get("compress_whitespace", True):
+        s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 
 def composite_key_sets(slug: str) -> list[list[str]]:
@@ -280,7 +362,7 @@ def baseline_to_long(path: Path, slug: str) -> pd.DataFrame:
                     if (v == "") or is_null:
                         missing = True
                         break
-                    parts.append(v)
+                    parts.append(normalize_composite_part(v, slug))
                 if not missing and parts:
                     key_value = "||".join(parts)
                     break
@@ -383,7 +465,7 @@ def normalize_pipeline(df: pd.DataFrame, slug: str) -> pd.DataFrame:
                             if (v == "") or is_null:
                                 missing = True
                                 break
-                            parts.append(v)
+                            parts.append(normalize_composite_part(v, slug))
                         if not missing and parts:
                             value = "||".join(parts)
                             break

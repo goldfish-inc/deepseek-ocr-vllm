@@ -1,6 +1,6 @@
 module github.com/goldfish-inc/oceanid/apps/annotation-sink
 
-go 1.25.3
+go 1.24.8
 
 require github.com/jackc/pgx/v5 v5.6.0
 

@@ -1,6 +1,6 @@
 module github.com/goldfish-inc/oceanid/ls-triton-adapter
 
-go 1.25.3
+go 1.24.8
 
 require (
 	github.com/sugarme/tokenizer v0.3.0 // Latest v0.3.x (no v0.4.0 exists as of 2025-10-16)

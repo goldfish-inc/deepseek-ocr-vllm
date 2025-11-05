@@ -69,6 +69,16 @@ unicode:
   accent_insensitive_columns:
     - VESSEL_NAME
 
+# Composite-key-only normalization (surgical; affects key assembly only)
+composite_key_normalization:
+  enabled: true
+  rules:
+    strip_quotes: true
+    strip_apostrophes: true
+    ampersand_to_and: true
+    compress_whitespace: true
+    remove_degree_symbol: true
+
 # Value normalization mappings
 value_mappings:
   # Country code mappings (ISO 3166-1 alpha-3 → alpha-2)

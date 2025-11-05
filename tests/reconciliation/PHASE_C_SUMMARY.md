@@ -136,3 +136,74 @@ Controls how null matches are scored in `null_aware_match_rate`:
 - **Null semantics**: Distinguish between "not applicable" vs "unknown" vs "not provided" for intelligence reporting
 
 Last updated: 2025-11-04T00:30:00Z
+
+---
+
+## Phase D – Composite Keys + Duplicate-Aware Join (2025-11-05)
+
+Objective: Collapse symmetric baseline‑only/pipeline‑only counts by aligning rows with identifiers beyond `row_index`.
+
+Implemented (PR #265 + normalization):
+- Worker header canonicalization (uppercase + non‑alnum → underscore; aliases for IMO/CALL SIGN)
+- Composite keys with duplicate‑aware policy and per‑RFMO overrides
+- Alignment breakdown metrics in summary/presence exports
+- Composite‑key‑only normalization (surgical; keys only, values untouched): quotes/apostrophes/ampersand/whitespace/degree symbol
+
+### Alignment Breakdown (Before → After)
+
+| RFMO  | aligned_by_join_key | aligned_by_composite | aligned_by_row_index |
+|-------|----------------------|----------------------|----------------------|
+| CCSBT | 16,368 → 17,112     | 0 → 18,630           | 18,436 → 598         |
+| IOTC  | 111,240 → 111,240   | 0 → 80,316           | 80,316 → 0           |
+| PNA   | 6,690 → 6,690       | 0 → 20               | 20 → 0               |
+
+Notes:
+- CCSBT: Composite key engagement went from 0 to 18,630 (now dominant), with punctuation normalization adding +184 additional composite‑aligned cells. Row‑index fallback reduced ~97%.
+- IOTC: Rows previously aligned by row_index now align by composite keys (80,316). Join‑key coverage unchanged (72.6%).
+- PNA: Stable join‑key alignment with minor composite engagement (20) post‑normalization.
+
+### Match Rate Impact (null‑aware)
+
+| RFMO  | Before | After  | Delta  |
+|-------|--------|--------|--------|
+| CCSBT | 0.9991 | 0.9994 | +0.0003|
+| IOTC  | 0.9992 | 0.9992 | 0      |
+| PNA   | 0.9984 | 0.9984 | 0      |
+
+Observations:
+- Improvements primarily affect symmetric only‑cells and alignment strategy, not value matches; null‑aware rates remain stable or improve marginally.
+
+### Configuration Snippets
+
+Composite key overrides:
+
+```
+composite_overrides:
+  CCSBT:
+    - [VESSEL_REGISTRATION_NUMBER, VESSEL_NAME]
+    - [CCSBT_REGISTRATION_NUMBER, VESSEL_NAME]
+    - [IMO, VESSEL_NAME]
+    - [IMO, FLAG]
+    - [CALL_SIGN, VESSEL_NAME]
+  IOTC:
+    - [IMO, VESSEL_NAME]
+    - [VESSEL_NAME, FLAG_STATE_CODE, REGNO]
+```
+
+Composite‑key‑only normalization (keys only; values untouched):
+
+```
+composite_key_normalization:
+  enabled: true
+  rules:
+    strip_quotes: true
+    strip_apostrophes: true
+    ampersand_to_and: true
+    compress_whitespace: true
+    remove_degree_symbol: true
+```
+
+### Next Steps
+- Open follow‑up PR: feat/composite‑key‑normalization (dependent on #265)
+- After #261 (Unicode NFC/diacritics) merges, remove `unicode.accent_insensitive_columns: [VESSEL_NAME]` and re‑validate.
+- Scope per‑RFMO normalization only if regressions observed; current global rules acceptable.

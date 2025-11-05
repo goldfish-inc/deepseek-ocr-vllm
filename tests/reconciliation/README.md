@@ -133,6 +133,22 @@ Exports now include alignment breakdowns:
 - Summary (`diffs/_summary.csv`): `aligned_by_join_key`, `aligned_by_composite`, `aligned_by_row_index`
 - Presence (`diffs/<rfmo>_presence.csv`): per-column alignment counts with the same three fields
 
+Composite-Key-Only Normalization (surgical):
+- To resolve punctuation/diacritic quirks in identity matching without changing values, enable composite-key normalization:
+
+```yaml
+composite_key_normalization:
+  enabled: true
+  rules:
+    strip_quotes: true
+    strip_apostrophes: true
+    ampersand_to_and: true
+    compress_whitespace: true
+    remove_degree_symbol: true
+```
+
+This applies only when assembling composite keys (baseline & pipeline), leaving the diff values untouched.
+
 ## How to Reproduce Phase B Results
 
 ### Quick Start
