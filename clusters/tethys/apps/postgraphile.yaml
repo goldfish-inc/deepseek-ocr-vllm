@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: postgraphile
+        egress: external
     spec:
       imagePullSecrets:
         - name: ghcr-creds

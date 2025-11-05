@@ -228,16 +228,17 @@ const tritonBaseUrl = pulumi.interpolate`https://${clusterConfig.nodeTunnel.host
 const cfAccessClientIdOut = cfg.getSecret("cfAccessClientId") as any;
 const cfAccessClientSecretOut = cfg.getSecret("cfAccessClientSecret") as any;
 
-const adapterImage = cfg.get("adapterImage");
-const adapterImageTag = cfg.get("adapterImageTag") || "main";
-const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
-    k8sProvider,
-    tritonBaseUrl,
-    cfAccessClientId: (cfAccessClientIdOut as any) ?? undefined,
-    cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
-    image: (adapterImage as any) || undefined,
-    imageTag: adapterImage ? undefined : adapterImageTag,
-}, { parent: appsNamespace });
+// TEMPORARILY DISABLED: ls-triton-adapter (will re-enable later)
+// const adapterImage = cfg.get("adapterImage");
+// const adapterImageTag = cfg.get("adapterImageTag") || "main";
+// const lsAdapter = new LsTritonAdapter("ls-triton-adapter", {
+//     k8sProvider,
+//     tritonBaseUrl,
+//     cfAccessClientId: (cfAccessClientIdOut as any) ?? undefined,
+//     cfAccessClientSecret: (cfAccessClientSecretOut as any) ?? undefined,
+//     image: (adapterImage as any) || undefined,
+//     imageTag: adapterImage ? undefined : adapterImageTag,
+// }, { parent: appsNamespace });
 
 // Label Studio deployment moved to GitOps (Flux)
 // See clusters/tethys/apps/label-studio-release.yaml
@@ -633,7 +634,7 @@ if __name__ == "__main__":
 
     const provisionerEnv: pulumi.Input<k8s.types.input.core.v1.EnvVar>[] = [
         { name: "LABEL_STUDIO_URL", value: "http://label-studio-ls-app.apps.svc.cluster.local:8080" },
-        { name: "ML_BACKEND_URL", value: pulumi.interpolate`${lsAdapter.serviceUrl}` as any },
+        // ML_BACKEND_URL removed - lsAdapter no longer deployed
         { name: "AWS_BUCKET_NAME", value: awsBucketName },
         { name: "AWS_REGION_NAME", value: awsRegion },
         { name: "S3_IMPORT_PREFIX", value: awsImportPrefix },
@@ -684,7 +685,7 @@ if __name__ == "__main__":
                 },
             },
         },
-    }, { provider: k8sProvider, parent: appsNamespace, dependsOn: [lsAdapter, provConfig, provSecret] }); // labelStudio removed - managed by Flux
+    }, { provider: k8sProvider, parent: appsNamespace, dependsOn: [provConfig, provSecret] }); // labelStudio removed - managed by Flux, lsAdapter removed
 })();
 
 // Verification: List webhooks and confirm NER_Data exists (runs once)
@@ -814,7 +815,7 @@ if (enableProjectBootstrapperService) {
         namespace: "apps",
         labelStudioUrl: "http://label-studio-ls-app.apps.svc.cluster.local:8080", // Internal cluster URL for API calls
         labelStudioPat: lsPat,
-        nerBackendUrl: lsAdapter.serviceUrl,
+        nerBackendUrl: "http://disabled", // lsAdapter removed
         sinkIngestUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/ingest`,
         sinkWebhookUrl: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
         nerLabelsJson: nerLabelsJson as any,
@@ -1104,7 +1105,7 @@ $SUDO systemctl restart tritonserver
 export const smeUrls = {
     labelStudio: smeReadiness.labelStudioUrl,
     gpuServices: smeReadiness.gpuServiceUrl,
-    adapterHealth: pulumi.interpolate`${lsAdapter.serviceUrl}/health`,
+    // adapterHealth removed - lsAdapter no longer deployed
     annotationsWebhook: pulumi.interpolate`${annotationsSink.serviceUrl}/webhook`,
 };
 
@@ -1185,7 +1186,7 @@ export const outputs = {
     nodeTunnelDaemonSet: nodeTunnels ? nodeTunnels.outputs.daemonSetName : pulumi.output(""),
     nodeTunnelMetricsService: nodeTunnels ? nodeTunnels.outputs.metricsServiceName : pulumi.output(""),
     nodeTunnelDnsRecords: nodeTunnels ? nodeTunnels.outputs.dnsRecords : pulumi.output({}),
-    lsMlBackendUrl: lsAdapter.serviceUrl,
+    // lsMlBackendUrl removed - lsAdapter no longer deployed
     fluxNamespace: flux ? flux.namespace : pulumi.output(""),
     gitRepository: clusterConfig.gitops.repositoryUrl,
     gitPath: clusterConfig.gitops.path,
