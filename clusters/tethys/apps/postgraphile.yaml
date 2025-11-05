@@ -1,0 +1,83 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgraphile-secrets
+  namespace: apps
+type: Opaque
+stringData:
+  DATABASE_URL: "postgres://vessels_ro:lO/juK0YYMS9iDc5FXH5DZqNoyS1rHJJkzK9biVFLVo=@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+  CORS_ORIGINS: "https://ocean-goldfish.vercel.app,https://ocean.boathou.se"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgraphile
+  namespace: apps
+  labels:
+    app: postgraphile
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgraphile
+  template:
+    metadata:
+      labels:
+        app: postgraphile
+    spec:
+      containers:
+        - name: postgraphile
+          image: ghcr.io/goldfish-inc/oceanid/postgraphile:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgraphile-secrets
+                  key: DATABASE_URL
+            - name: CORS_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: postgraphile-secrets
+                  key: CORS_ORIGINS
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgraphile
+  namespace: apps
+  labels:
+    app: postgraphile
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: postgraphile
