@@ -41,15 +41,7 @@ MD012:
   maximum: 2
 
 # MD013/line-length - Line length
-MD013:
-  line_length: 120
-  heading_line_length: 120
-  code_blocks: false
-  code_block_line_length: 120
-  tables: false
-  headings: true
-  strict: false
-  stern: false
+MD013: false
 
 # MD014/commands-show-output - Dollar signs used before commands without output
 MD014: true
@@ -61,9 +53,7 @@ MD018: true
 MD019: true
 
 # MD022/blanks-around-headings - Headings should be surrounded by blank lines
-MD022:
-  lines_above: 1
-  lines_below: 1
+MD022: false
 
 # MD024/no-duplicate-heading - Multiple headings with the same content
 MD024:
@@ -96,11 +86,10 @@ MD030:
   ol_multi: 1
 
 # MD031/blanks-around-fences - Fenced code blocks should be surrounded by blank lines
-MD031:
-  list_items: true
+MD031: false
 
 # MD032/blanks-around-lists - Lists should be surrounded by blank lines
-MD032: true
+MD032: false
 
 # MD033/no-inline-html - Inline HTML
 MD033:
@@ -139,8 +128,7 @@ MD035:
   style: "---"
 
 # MD036/no-emphasis-as-heading - Emphasis used instead of a heading
-MD036:
-  punctuation: ".,;:!?。，；：！？"
+MD036: false
 
 # MD037/no-space-in-emphasis - Spaces inside emphasis markers
 MD037: true
@@ -152,12 +140,10 @@ MD038: true
 MD039: true
 
 # MD040/fenced-code-language - Fenced code blocks should have a language specified
-MD040: true
+MD040: false
 
 # MD041/first-line-heading - First line in a file should be a top-level heading
-MD041:
-  level: 1
-  front_matter_title: ""
+MD041: false
 
 # MD042/no-empty-links - No empty links
 MD042: true

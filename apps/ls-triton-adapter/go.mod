@@ -1,6 +1,6 @@
 module github.com/goldfish-inc/oceanid/ls-triton-adapter
 
-go 1.23.0
+go 1.25.3
 
 require (
 	github.com/sugarme/tokenizer v0.3.0 // Latest v0.3.x (no v0.4.0 exists as of 2025-10-16)
@@ -10,9 +10,13 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.39.3 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.39.3
+	github.com/aws/aws-sdk-go-v2/config v1.31.13
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.5
+)
+
+require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.31.13 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.17 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.10 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.10 // indirect
@@ -23,7 +27,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.29.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.7 // indirect
