@@ -9,6 +9,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // processCSVTask handles the main CSV processing workflow
@@ -301,12 +304,33 @@ func (w *Worker) standardizeFormat(value string, rule CleaningRule) string {
 	case "remove_quotes":
 		return strings.Trim(value, `"'`)
 	case "remove_special":
-		re := regexp.MustCompile(`[^a-zA-Z0-9\s.-]`)
-		return re.ReplaceAllString(value, "")
+		// CHANGED: Preserve all valid UTF-8 characters (including diacritics)
+		// Only remove control characters and invalid UTF-8 sequences
+		return removeInvalidUTF8(value)
+	case "normalize_unicode":
+		// Apply NFC normalization to preserve diacritics in canonical form
+		return norm.NFC.String(value)
 	default:
-		// Default: trim whitespace
-		return strings.TrimSpace(value)
+		// Default: trim whitespace and apply NFC normalization
+		return norm.NFC.String(strings.TrimSpace(value))
 	}
+}
+
+// removeInvalidUTF8 removes invalid UTF-8 sequences while preserving valid Unicode (including diacritics)
+func removeInvalidUTF8(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+
+	// Remove invalid UTF-8 runes
+	var buf strings.Builder
+	buf.Grow(len(s))
+	for _, r := range s {
+		if r != utf8.RuneError {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
 }
 
 // updateConfidence calculates new confidence after applying a rule
