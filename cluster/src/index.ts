@@ -1203,3 +1203,4 @@ export const outputs = {
     componentHealth: migration ? migration.outputs.componentHealth : pulumi.output({}),
     scriptRetirementReady: migration ? migration.outputs.scriptRetirementReady : pulumi.output(false),
 };
+// Trigger deployment: PostGraphile ESC configuration applied $(date +%Y-%m-%d)
