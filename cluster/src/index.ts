@@ -288,6 +288,7 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
 })();
 
 // PostGraphile secrets (Supabase read-only connection)
+// ESC config: postgraphileDatabaseUrl set 2025-11-05
 (() => {
     const cfg = new pulumi.Config();
     const databaseUrl = cfg.getSecret("postgraphileDatabaseUrl");
