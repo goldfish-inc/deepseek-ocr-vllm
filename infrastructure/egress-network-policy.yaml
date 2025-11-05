@@ -1,5 +1,6 @@
 ---
-# Allow selected application pods to route external HTTP(S) via egress gateway.
+# Allow selected application pods to route external traffic.
+# Supports both HTTP(S) via egress gateway and direct TCP (for databases).
 # Note: NetworkPolicy enforcement depends on the cluster CNI. With Flannel, this
 # may not be enforced; using HTTP(S)_PROXY envs in apps remains the primary path.
 apiVersion: networking.k8s.io/v1
@@ -38,3 +39,7 @@ spec:
       ports:
         - protocol: TCP
           port: 3128
+    # Direct external access for databases (PostgreSQL, etc)
+    # Empty 'to' allows all destinations outside the cluster
+    - ports:
+        - protocol: TCP
