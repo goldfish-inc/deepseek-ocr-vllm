@@ -3,11 +3,13 @@ node_modules/
 .pnpm-store/
 .yarn/
 
-# Build outputs
+# Build outputs (TypeScript compilation)
 bin/
 dist/
-*.js
-*.js.map
+cluster/**/*.js
+cluster/**/*.js.map
+cloud/**/*.js
+cloud/**/*.js.map
 *.d.ts
 *.d.ts.map
 
