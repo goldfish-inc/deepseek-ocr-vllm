@@ -63,11 +63,9 @@ unicode:
   # Reduces false positives from different Unicode representations
   normalize: NFC
 
-  # Accent-insensitive comparison (TEMPORARY WORKAROUND)
-  # Use only while #259 (UTF-8 diacritics) is being fixed
-  # Empty = strict comparison (prefer this after #259 is fixed)
-  accent_insensitive_columns:
-    - VESSEL_NAME
+  # Accent-insensitive comparison
+  # Empty list = strict comparison (diacritics preserved in extraction pipeline per #261)
+  accent_insensitive_columns: []
 
 # Composite-key-only normalization (surgical; affects key assembly only)
 composite_key_normalization:
