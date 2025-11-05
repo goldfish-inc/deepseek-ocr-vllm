@@ -74,4 +74,4 @@ spec:
 
           # Image pull secret for private GitHub Container Registry
           imagePullSecrets:
-          - name: ghcr-pull-secret
+          - name: ghcr-creds

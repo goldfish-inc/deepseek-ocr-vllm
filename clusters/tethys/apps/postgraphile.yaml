@@ -27,7 +27,7 @@ spec:
         app: postgraphile
     spec:
       imagePullSecrets:
-        - name: ghcr-pull-secret
+        - name: ghcr-creds
       containers:
         - name: postgraphile
           image: ghcr.io/goldfish-inc/oceanid/postgraphile:latest
