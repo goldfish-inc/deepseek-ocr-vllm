@@ -1,14 +1,4 @@
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgraphile-secrets
-  namespace: apps
-type: Opaque
-stringData:
-  DATABASE_URL: "postgres://vessels_ro:lO%2FjuK0YYMS9iDc5FXH5DZqNoyS1rHJJkzK9biVFLVo%3D@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
-  CORS_ORIGINS: "https://ocean-goldfish.vercel.app,https://ocean.boathou.se"
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

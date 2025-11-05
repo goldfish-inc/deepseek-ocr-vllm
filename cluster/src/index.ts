@@ -285,6 +285,24 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
         }, { provider: k8sProvider, parent: appsNamespace });
     }
 })();
+
+// PostGraphile secrets (Supabase read-only connection)
+(() => {
+    const cfg = new pulumi.Config();
+    const databaseUrl = cfg.getSecret("postgraphileDatabaseUrl");
+    const corsOrigins = cfg.get("postgraphileCorsOrigins") || "https://ocean-goldfish.vercel.app,https://ocean.boathou.se";
+    if (databaseUrl) {
+        new k8s.core.v1.Secret("postgraphile-secrets", {
+            metadata: { name: "postgraphile-secrets", namespace: "apps" },
+            type: "Opaque",
+            stringData: {
+                DATABASE_URL: databaseUrl,
+                CORS_ORIGINS: corsOrigins,
+            },
+        }, { provider: k8sProvider, parent: appsNamespace });
+    }
+})();
+
 // In-cluster one-off provisioner Job to configure Label Studio project "NER_Data"
 // - Connects ML backend
 // - Applies full NER labeling interface from ESC/labels.json
