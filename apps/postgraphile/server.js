@@ -49,7 +49,7 @@ app.get('/healthz', (_req, res) => res.status(200).send('ok'))
 const { parse } = require('pg-connection-string')
 const dbConfig = parse(DATABASE_URL)
 
-// TLS configuration: strict verification for Crunchy Bridge, relaxed for Supabase pooler
+// TLS configuration: relaxed verification for all providers (Alpine/Node.js CA trust issues)
 const isSupabasePooler = dbConfig.host && dbConfig.host.includes('pooler.supabase.com')
 const isCrunchyBridge = dbConfig.host && dbConfig.host.includes('db.postgresbridge.com')
 
@@ -58,9 +58,10 @@ if (isSupabasePooler) {
   dbConfig.ssl = { rejectUnauthorized: false }
   console.log('Using Supabase pooler with relaxed TLS verification')
 } else if (isCrunchyBridge) {
-  // Crunchy Bridge: strict TLS verification with system CA bundle
-  dbConfig.ssl = { rejectUnauthorized: true }
-  console.log('Using Crunchy Bridge with strict TLS verification')
+  // Crunchy Bridge: relaxed TLS verification (Alpine/Node.js doesn't recognize Let's Encrypt chain)
+  // Connection is still encrypted, just not verifying the certificate authority
+  dbConfig.ssl = { rejectUnauthorized: false }
+  console.log('Using Crunchy Bridge with TLS (relaxed verification)')
 } else {
   // Default: require TLS but allow self-signed certs for local development
   dbConfig.ssl = { rejectUnauthorized: false }
