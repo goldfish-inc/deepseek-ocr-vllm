@@ -64,7 +64,7 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
                 "config.yaml": `tunnel: ${cluster.cloudflare.tunnelId}
 credentials-file: /etc/cloudflared/token/token
 no-autoupdate: true
-protocol: auto
+protocol: http2
 edge-ip-version: "4"
 metrics: 0.0.0.0:${cluster.metricsPort}
 
