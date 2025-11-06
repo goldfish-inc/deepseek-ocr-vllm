@@ -58,9 +58,9 @@ if (isSupabasePooler) {
   dbConfig.ssl = { rejectUnauthorized: false }
   console.log('Using Supabase pooler with relaxed TLS verification')
 } else if (isCrunchyBridge) {
-  // Crunchy Bridge: use strict TLS verification with system CA bundle
-  dbConfig.ssl = { rejectUnauthorized: true }
-  console.log('Using Crunchy Bridge with strict TLS verification')
+  // Crunchy Bridge: TLS enabled but relaxed verification (Let's Encrypt certs may not be in Node CA bundle)
+  dbConfig.ssl = { rejectUnauthorized: false }
+  console.log('Using Crunchy Bridge with TLS (relaxed verification)')
 } else {
   // Default: require TLS but allow self-signed certs for local development
   dbConfig.ssl = { rejectUnauthorized: false }
