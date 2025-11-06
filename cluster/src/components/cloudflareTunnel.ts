@@ -109,6 +109,11 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                             fsGroup: 65532,
                         },
                         priorityClassName: "system-cluster-critical",
+                        // Limit pod restarts: CrashLoopBackOff escalates exponentially (10s, 20s, 40s, 80s, 160s, capped at 5min)
+                        // After ~5 failed startups (total ~5min), pod enters sustained CrashLoopBackOff
+                        restartPolicy: "Always",
+                        // Terminate pods quickly on failure to speed up CrashLoopBackOff detection
+                        terminationGracePeriodSeconds: 5,
                         affinity: {
                             nodeAffinity: {
                                 requiredDuringSchedulingIgnoredDuringExecution: {
@@ -145,6 +150,8 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     },
                                 ],
                                 // Startup probe gives cloudflared time to establish the first tunnel
+                                // Max startup time: 20s initial + (5s period × 12 failures) = 80s
+                                // After 80s without success, pod is killed and restarted (enters CrashLoopBackOff)
                                 startupProbe: {
                                     httpGet: {
                                         path: "/metrics",
@@ -152,7 +159,7 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     },
                                     initialDelaySeconds: 20,
                                     periodSeconds: 5,
-                                    failureThreshold: 30,
+                                    failureThreshold: 12,  // Reduced from 30 to fail faster
                                 },
                                 // Readiness requires an active tunnel connection as reported by metrics
                                 readinessProbe: {
@@ -168,6 +175,7 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     failureThreshold: 3,
                                 },
                                 // Liveness: metrics endpoint reachable implies process is healthy
+                                // Kills pod after 3 consecutive failures (90s: 30s initial + 3×20s period)
                                 livenessProbe: {
                                     httpGet: {
                                         path: "/metrics",
@@ -175,6 +183,7 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     },
                                     initialDelaySeconds: 30,
                                     periodSeconds: 20,
+                                    failureThreshold: 3,  // Default is 3, made explicit
                                 },
                                 resources: cluster.cloudflare.tunnelResources,
                                 securityContext: {
