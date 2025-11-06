@@ -7,6 +7,7 @@ const PORT = process.env.PORT || 8080
 const DATABASE_URL = process.env.DATABASE_URL
 
 // PostGraphile GraphQL API for vessels data
+// Connects to Crunchy Bridge with strict TLS verification
 
 if (!DATABASE_URL) {
   // eslint-disable-next-line no-console
