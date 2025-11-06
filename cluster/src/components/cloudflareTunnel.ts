@@ -61,30 +61,16 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
                 namespace: namespace.metadata.name,
             },
             data: {
-                "config.yaml": pulumi.output(extraIngress).apply((rules) => {
-                    const extras = rules.map(r => `  - hostname: ${r.hostname}
-    service: ${r.service}
-    originRequest:\n      noTLSVerify: ${r.noTLSVerify ? "true" : "false"}\n`).join("");
-                    return `tunnel: ${cluster.cloudflare.tunnelId}
+                "config.yaml": `tunnel: ${cluster.cloudflare.tunnelId}
 credentials-file: /etc/cloudflared/token/token
 no-autoupdate: true
 protocol: http2
 metrics: 0.0.0.0:${cluster.metricsPort}
 
-# Enable WARP routing for private network access (Zero Trust)
-# Allows WARP clients to reach cluster private IPs with mutual TLS intact
-warp-routing:
-  enabled: true
-
-ingress:
-  - hostname: ${cluster.cloudflare.tunnelHostname}
-    service: ${cluster.cloudflare.tunnelServiceUrl}
-    originRequest:
-      noTLSVerify: false
-      caPool: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-${extras}  - service: http_status:404
-` as string;
-                }),
+# Ingress rules are managed remotely via Cloudflare API (cloudflare.ZeroTrustTunnelCloudflaredConfig)
+# This ensures cloudflared uses the authoritative remote configuration and prevents drift
+# Local ingress rules are intentionally omitted to avoid conflicts with remote config
+`,
             },
         }, { provider: k8sProvider, parent: this });
 

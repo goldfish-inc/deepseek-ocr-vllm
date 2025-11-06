@@ -269,6 +269,44 @@ const nautilusCname = new cloudflare.Record("nautilus-dns", {
 });
 
 // =============================================================================
+// CLOUDFLARE TUNNEL CONFIGURATION (Public Hostnames)
+// =============================================================================
+// Manages the tunnel's ingress rules remotely via Cloudflare API
+// This is the source of truth for routing; local configmap ingress is ignored
+
+const mainTunnelId = "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc";
+
+const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunnel-config", {
+    accountId: cloudflareAccountId!,
+    tunnelId: mainTunnelId,
+    config: {
+        ingressRules: [
+            {
+                hostname: "k3s.boathou.se",
+                service: "https://kubernetes.default.svc.cluster.local:443",
+                originRequest: {
+                    noTlsVerify: false,
+                    caPool: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                },
+            },
+            {
+                hostname: "graph.boathou.se",
+                service: "http://postgraphile.apps.svc.cluster.local:8080",
+                originRequest: {
+                    noTlsVerify: true,
+                },
+            },
+            {
+                service: "http_status:404",
+            },
+        ],
+        warpRouting: {
+            enabled: true,
+        },
+    },
+});
+
+// =============================================================================
 // CLOUDFLARE ACCESS
 // =============================================================================
 
