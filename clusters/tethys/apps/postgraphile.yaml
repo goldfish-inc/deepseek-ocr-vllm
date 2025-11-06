@@ -16,6 +16,9 @@ spec:
       labels:
         app: postgraphile
     spec:
+      # Pin to tethys (srv712429) to egress from 157.173.210.123 (Crunchy Bridge firewall allowlist)
+      nodeSelector:
+        kubernetes.io/hostname: srv712429
       # Bypass CoreDNS for outbound lookups so Crunchy Bridge resolves even when cluster DNS stalls
       dnsPolicy: None
       dnsConfig:
