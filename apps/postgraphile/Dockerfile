@@ -2,6 +2,8 @@ FROM node:20-alpine
 
 ENV NODE_ENV=production
 ENV PORT=8080
+# Point Node.js to system CA bundle (Alpine Linux location)
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
