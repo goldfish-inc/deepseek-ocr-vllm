@@ -64,7 +64,8 @@ export class CloudflareTunnel extends pulumi.ComponentResource {
                 "config.yaml": `tunnel: ${cluster.cloudflare.tunnelId}
 credentials-file: /etc/cloudflared/token/token
 no-autoupdate: true
-protocol: http2
+protocol: auto
+edge-ip-version: "4"
 metrics: 0.0.0.0:${cluster.metricsPort}
 
 # Ingress rules are managed remotely via Cloudflare API (cloudflare.ZeroTrustTunnelCloudflaredConfig)
@@ -103,8 +104,27 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                             "app.kubernetes.io/name": "cloudflared",
                             "app.kubernetes.io/part-of": cluster.name,
                         },
+                        // Bump this token to force a new ReplicaSet rollout
+                        annotations: {
+                            "oceanid.dev/rollout-token": "1",
+                        },
                     },
                     spec: {
+                        // Use explicit DNS to prioritize Cloudflare public DNS for external lookups (cfd-features.argotunnel.com)
+                        // but include CoreDNS for in-cluster service resolution (postgraphile.apps.svc.cluster.local)
+                        dnsPolicy: "None",
+                        dnsConfig: {
+                            nameservers: ["10.43.0.10", "1.1.1.1", "8.8.8.8"], // CoreDNS first, then public DNS
+                            searches: [
+                                "cloudflared.svc.cluster.local",
+                                "svc.cluster.local",
+                                "cluster.local",
+                            ],
+                            options: [
+                                { name: "ndots", value: "5" }, // Prefer search domains for 4+ dots
+                                { name: "edns0" },
+                            ],
+                        },
                         securityContext: {
                             fsGroup: 65532,
                         },
@@ -150,8 +170,8 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     },
                                 ],
                                 // Startup probe gives cloudflared time to establish the first tunnel
-                                // Max startup time: 20s initial + (5s period × 12 failures) = 80s
-                                // After 80s without success, pod is killed and restarted (enters CrashLoopBackOff)
+                                // Increase window to accommodate external DNS slowness during tunnel bootstrap
+                                // Max startup time: 20s initial + (5s period × 24 failures) = 140s
                                 startupProbe: {
                                     httpGet: {
                                         path: "/metrics",
@@ -159,16 +179,13 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                     },
                                     initialDelaySeconds: 20,
                                     periodSeconds: 5,
-                                    failureThreshold: 12,  // Reduced from 30 to fail faster
+                                    failureThreshold: 24,
                                 },
-                                // Readiness requires an active tunnel connection as reported by metrics
+                                // Readiness uses HTTP metrics endpoint (tunnel connection status checked via liveness)
                                 readinessProbe: {
-                                    exec: {
-                                        command: [
-                                            "sh",
-                                            "-c",
-                                            `wget -qO- http://127.0.0.1:${cluster.metricsPort}/metrics | grep -q 'cloudflared_tunnel_connected 1'`,
-                                        ],
+                                    httpGet: {
+                                        path: "/metrics",
+                                        port: "metrics",
                                     },
                                     initialDelaySeconds: 15,
                                     periodSeconds: 10,
@@ -229,6 +246,8 @@ metrics: 0.0.0.0:${cluster.metricsPort}
             provider: k8sProvider,
             parent: this,
             dependsOn: [namespace],
+            // Allow extra time for rollouts when DNS or feature negotiation is slow
+            customTimeouts: { create: "10m", update: "10m" },
             // Force replacement when probe config or image changes to avoid stuck updates
             replaceOnChanges: ["spec.template.spec.containers[*].readinessProbe", "spec.template.spec.containers[*].livenessProbe", "spec.template.spec.containers[*].startupProbe", "spec.template.spec.containers[*].image"]
         });
