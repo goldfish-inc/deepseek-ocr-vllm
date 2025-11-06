@@ -288,7 +288,7 @@ if (labelStudioDbUrl && awsAccessKeyId && awsSecretAccessKey) {
 })();
 
 // PostGraphile secrets (Crunchy Bridge connection)
-// ESC config: postgraphileDatabaseUrl using IP address for DNS stability 2025-11-05
+// ESC config: postgraphileDatabaseUrl using hostname for strict TLS verification
 (() => {
     const cfg = new pulumi.Config();
     const databaseUrl = cfg.getSecret("postgraphileDatabaseUrl");
