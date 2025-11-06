@@ -217,8 +217,9 @@ This would eliminate the need for manual API updates after deployments.
 - **Tunnel ID**: `6ff4dfd7-2b77-4a4f-84d9-3241bea658dc`
 - **Account ID**: `8fa97474778c8a894925c148ca829739`
 - **Zero Trust Org**: `goldfishinc.cloudflareaccess.com`
+- **QUIC Re-enablement**: See [`docs/operations/cloudflare-tunnel-quic.md`](operations/cloudflare-tunnel-quic.md) for protocol investigation and runbook
 
 ---
 
-**Last Updated**: October 9, 2025
+**Last Updated**: November 6, 2025
 **Related**: 502 errors often come from service name/port mismatch or remote config not updated
