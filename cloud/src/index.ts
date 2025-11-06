@@ -307,6 +307,35 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
 });
 
 // =============================================================================
+// CLOUDFLARE RATE LIMITING
+// =============================================================================
+// Protect PostGraphile /graphql endpoint from abuse
+// GET blocked (introspection disabled), POST rate-limited per IP
+
+const graphqlRateLimit = new cloudflare.RateLimit("graphql-rate-limit", {
+    zoneId: cloudflareZoneId,
+    threshold: 120, // requests per period
+    period: 60, // seconds
+    action: {
+        mode: "simulate", // Start with simulate, change to "ban" after testing
+        timeout: 60, // ban duration in seconds
+    },
+    match: {
+        request: {
+            urlPattern: `graph.boathou.se/graphql`,
+            methods: ["POST"],
+        },
+        response: {
+            // Rate limit all responses (don't differentiate by status)
+            statuses: [200, 201, 300, 301, 302, 400, 401, 403, 404, 405, 429, 500, 502, 503],
+            originTraffic: true,
+        },
+    },
+    description: "PostGraphile API rate limit: 120 req/min per IP",
+    disabled: false,
+});
+
+// =============================================================================
 // CLOUDFLARE ACCESS
 // =============================================================================
 
@@ -370,6 +399,7 @@ export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
+export const graphqlRateLimitId = graphqlRateLimit.id;
 
 // =============================================================================
 // PULUMI ESC
