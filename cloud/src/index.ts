@@ -246,6 +246,17 @@ const labelCname = new cloudflare.Record("label-cname", {
     comment: "Label Studio for oceanid-cluster via main tunnel",
 });
 
+// postgraphile graphql api
+const graphCname = new cloudflare.Record("graph-cname", {
+    zoneId: cloudflareZoneId,
+    name: "graph.boathou.se",
+    type: "CNAME",
+    content: "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc.cfargotunnel.com",
+    proxied: true,
+    ttl: 1,
+    comment: "PostGraphile GraphQL API for vessels data via main tunnel",
+});
+
 // nautilus documentation site (cloudflare pages)
 const nautilusCname = new cloudflare.Record("nautilus-dns", {
     zoneId: cloudflareZoneId,
@@ -316,6 +327,7 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
 export const labelDnsRecord = labelCname.id;
+export const graphDnsRecord = graphCname.id;
 export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;

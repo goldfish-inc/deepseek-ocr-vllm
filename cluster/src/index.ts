@@ -76,10 +76,13 @@ const controlPlaneLB = enableControlPlaneLB
 const gpuHostname = pulumi.interpolate`gpu.${clusterConfig.nodeTunnel.hostname}`;
 const airflowHostname = pulumi.interpolate`airflow.${clusterConfig.nodeTunnel.hostname}`;
 const minioHostname = pulumi.interpolate`minio.${clusterConfig.nodeTunnel.hostname}`;
+const graphqlHostname = "graph.boathou.se"; // PostGraphile GraphQL API
 const enableAppsStack = cfg.getBoolean("enableAppsStack") ?? false;
 
 const extraIngressRules: Array<{ hostname: pulumi.Input<string>; service: pulumi.Input<string>; noTLSVerify?: pulumi.Input<boolean> }>= [
     // Note: GPU service is handled by HostCloudflared on Calypso, not this tunnel
+    // PostGraphile GraphQL API for vessels data
+    { hostname: graphqlHostname, service: "http://postgraphile.apps.svc.cluster.local:8080", noTLSVerify: true },
 ];
 
 if (enableAppsStack) {
