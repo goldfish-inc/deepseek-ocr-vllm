@@ -21,7 +21,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: postgraphile
-          image: ghcr.io/goldfish-inc/oceanid/postgraphile:latest
+          image: ghcr.io/goldfish-inc/oceanid/postgraphile:main
           ports:
             - containerPort: 8080
               name: http

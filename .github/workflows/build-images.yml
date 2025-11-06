@@ -210,6 +210,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/goldfish-inc/oceanid/postgraphile:${{ github.sha }}
-            ghcr.io/goldfish-inc/oceanid/postgraphile:latest
+            ghcr.io/goldfish-inc/oceanid/postgraphile:main
           cache-from: type=registry,ref=ghcr.io/goldfish-inc/oceanid/postgraphile:buildcache
           cache-to: type=registry,ref=ghcr.io/goldfish-inc/oceanid/postgraphile:buildcache,mode=max
