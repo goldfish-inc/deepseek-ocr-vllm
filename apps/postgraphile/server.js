@@ -6,6 +6,8 @@ const { postgraphile } = require('postgraphile')
 const PORT = process.env.PORT || 8080
 const DATABASE_URL = process.env.DATABASE_URL
 
+// PostGraphile GraphQL API for vessels data
+
 if (!DATABASE_URL) {
   // eslint-disable-next-line no-console
   console.warn('DATABASE_URL is not set; PostGraphile will fail to start')
