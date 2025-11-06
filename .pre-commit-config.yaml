@@ -101,3 +101,13 @@ repos:
         entry: bash scripts/ci/guard_paused_modules.sh
         language: system
         pass_filenames: false
+
+  # Enforce docker buildx for multi-platform builds
+  - repo: local
+    hooks:
+      - id: enforce-docker-buildx
+        name: Enforce Docker Buildx
+        entry: bash scripts/ci/enforce_docker_buildx.sh
+        language: system
+        pass_filenames: false
+        stages: [commit]
