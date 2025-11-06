@@ -1,0 +1,26 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudflared-tunnel-alert
+  namespace: cloudflared
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/part-of: oceanid-cluster
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: cloudflared.rules
+      interval: 30s
+      rules:
+        - alert: CloudflareTunnelDisconnected
+          expr: max_over_time(cloudflared_tunnel_connected[5m]) < 1
+          for: 5m
+          labels:
+            severity: page
+            component: networking
+            service: cloudflared
+          annotations:
+            summary: "Cloudflare Tunnel disconnected"
+            description: "Cloudflare Tunnel has been disconnected for more than 5 minutes. All external access to the cluster is unavailable."
+            runbook_url: "https://nautilus.boathou.se/runbooks/cloudflared-tunnel-down"
