@@ -1,4 +1,6 @@
-# Quick Reference: "What Do I Choose in Label Studio?"
+> Archived — November 2025
+
+# (Archived) Quick Reference: "What Do I Choose in Label Studio?"
 
 ## Short Answer: It Depends on File Type!
 
@@ -8,7 +10,7 @@
 | **CSV/XLSX** | Automatic: Data ingestion + Cleaning rules | Nothing in Label Studio UI* |
 | **TSV** | Automatic: Data ingestion + Cleaning rules | Nothing in Label Studio UI* |
 
-\* CSV/Excel files go **directly to database** - you don't review them in Label Studio UI
+This quick reference described the previous Label Studio-centric workflow. The current system does not use Label Studio. CSV/Excel and document processing now flow through services and Triton directly with results available in the database and via PostGraphile.
 
 ---
 

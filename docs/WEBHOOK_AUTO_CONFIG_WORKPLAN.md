@@ -1,8 +1,10 @@
-# Webhook Auto-Configuration - Implementation Summary
+> Archived — November 2025
+
+# (Archived) Webhook Auto-Configuration - Implementation Summary
 
 **Status**: ✅ **COMPLETED** (2025-10-16)
 
-**Goal**: Automatically configure webhooks for new Label Studio projects to enable CSV data pipeline processing.
+This document described the former Label Studio-based flow. Label Studio and the related project-bootstrapper have been removed from the Oceanid stack.
 
 **Problem**: 1,761 tasks uploaded by SMEs had not been processed because webhooks were never registered.
 

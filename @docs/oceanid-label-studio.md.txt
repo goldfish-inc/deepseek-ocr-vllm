@@ -1,4 +1,6 @@
-# Label Studio + Triton Technical Workplan
+# (Archived) Label Studio + Triton Technical Workplan
+
+> Archived — November 2025. Label Studio has been removed from the Oceanid stack. This document is retained for historical reference only.
 
   Goal: Stand up a production‑grade annotation, cleaning, and training platform where
   SMEs do minimal review work, predictions improve continuously (active learning), and

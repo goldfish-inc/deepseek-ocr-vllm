@@ -25,7 +25,7 @@
 
 ## 3. What Changes for Our Teams
 
-- **SMEs:** See pre-annotated tasks inside Label Studio; they simply approve/edit rather than start from scratch.
+- **SMEs:** Review pre-annotated outputs through internal tooling and PostGraphile; the pipeline aims to minimize manual edits.
 - **ML Platform:** Moves heavy training/jobs to DGX, ships fine-tuned models to Calypso for serving.
 - **DevOps:** Adds a managed GPU node with Tailscale access, standard monitoring, and documented maintenance tasks.
 - **Executives:** Faster time-to-insight, better use of SME capacity, and a clear path to scale Oceanid’s automation.

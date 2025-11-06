@@ -57,8 +57,8 @@ export class ClusterInfrastructure extends pulumi.ComponentResource {
     }
 }
 
-// ❌ WRONG: Don't deploy apps
-export class LabelStudio extends pulumi.ComponentResource {
+// ❌ WRONG: Don't deploy apps here
+export class AppWorkload extends pulumi.ComponentResource {
     // This should NOT be in Pulumi
 }
 ```
@@ -87,7 +87,7 @@ export class LabelStudio extends pulumi.ComponentResource {
 apiVersion: helm.toolkit.fluxcd.io/v2beta1
 kind: HelmRelease
 metadata:
-  name: label-studio
+  name: postgraphile
   namespace: apps
 spec:
   chart:
@@ -101,9 +101,9 @@ spec:
 ## Secret Management
 
 ### Current State (Transitional)
-1. Secrets stored in Pulumi ESC
-2. Pulumi creates K8s Secrets
-3. Flux references these Secrets
+1. Secrets stored in Pulumi ESC (e.g., database credentials)
+2. Pulumi creates K8s Secrets for platform components
+3. Flux references these for apps where applicable
 
 ### Target State (Pure GitOps)
 1. Secrets stored in Git (encrypted with SOPS/SealedSecrets)
@@ -113,15 +113,15 @@ spec:
 ### Migration Path
 ```bash
 # Step 1: Export from ESC
-pulumi config get --secret labelStudioDbPassword > temp-secret.txt
+pulumi config get --secret postgres_password > temp-secret.txt
 
 # Step 2: Create SealedSecret
 echo -n "$(cat temp-secret.txt)" | kubeseal --cert=pub-cert.pem \
-  --format yaml > label-studio-secret.yaml
+  --format yaml > postgraphile-secrets.yaml
 
 # Step 3: Commit to Git
-git add label-studio-secret.yaml
-git commit -m "Add sealed secret for Label Studio"
+git add postgraphile-secrets.yaml
+git commit -m "Add sealed secret for PostGraphile"
 ```
 
 ## Deployment Workflows

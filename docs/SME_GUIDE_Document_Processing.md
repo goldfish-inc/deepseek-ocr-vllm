@@ -1,8 +1,12 @@
-# SME Guide: How Document Processing Works in Label Studio
+> Archived — November 2025
+
+# (Archived) SME Guide: How Document Processing Worked in Label Studio
 
 ## Overview: Two Automatic Processing Paths
 
-When you upload a document to Label Studio, **BOTH** of these happen automatically:
+This guide applied to the previous Label Studio-based workflow and is retained for historical reference. Label Studio is no longer part of the Oceanid stack.
+
+When using the current system, documents are processed by services and Triton directly, with results surfaced via downstream applications and PostGraphile.
 
 1. **Text Analysis (NER)** - Finds vessel names, IMO numbers, flags, ports, dates
 2. **Table Extraction** - Finds and extracts tables from PDFs

@@ -2,7 +2,7 @@
 
 Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflare Zero Trust.
 
-> Status: Infrastructure operational with Go services (99% memory reduction), Label Studio, Triton Inference Server (Calypso RTX 4090) with Docling-Granite and DistilBERT NER. Staging database pipeline is active for SME launch.
+Status: Networking stack consolidated and hardened. Cloudflare tunnels (cluster + node), Tailscale subnet router, and egress DB proxy are fully reconciled. Flux is standardized to the flux-system namespace only, with OPA guardrails.
 
 ## Infrastructure Ownership
 
@@ -10,7 +10,7 @@ Pulumi-powered GitOps stack for operating the Oceanid K3s fleet behind Cloudflar
 |---------|---------|------------|--------------|
 | **[cloud/](cloud/)** | Cloudflare DNS/Access, CrunchyBridge PostgreSQL, ESC secrets | GitHub Actions (OIDC) | Push to `cloud/**` |
 | **[cluster/](cluster/)** | K3s bootstrap, Flux, PKO, Cloudflare tunnels | Local / Self-hosted runner | Manual `pulumi up` |
-| **[clusters/](clusters/)** | Application workloads (Label Studio, etc.) | Flux CD in-cluster | Push to `clusters/**` |
+| **[clusters/](clusters/)** | Application workloads (PostGraphile, Go services) | Flux CD in-cluster | Push to `clusters/**` |
 | **[policy/](policy/)** | OPA security policies, TypeScript helpers | GitHub Actions CI | All PRs |
 
 **Key Principle:** Cloud resources (DNS, DB) are automated via CI.
@@ -26,14 +26,13 @@ the **@ebisu globalDB** (maritime intelligence platform).
 ┌─────────────────────────────────────────────────────────────┐
 │ @oceanid: ETL + ML Pipeline (Staging)                       │
 │                                                              │
-│  Raw CSV/PDF → Docling-Granite → ML Cleaning → Human Review│
-│      ↓              ↓                ↓             ↓        │
-│  Label Studio   Structure      csv-repair     Corrections  │
-│                 Extraction       -bert                      │
+│  Raw CSV/PDF → Cleaning → Human Review                      │
+│      ↓              ↓                ↓                      │
+│  Go services   Structure        PostGraphile                │
+│                Extraction                                     │
 │                                                              │
 │  Components:                                                 │
 │  - Triton Inference (Calypso GPU): Models                   │
-│  - Label Studio: Annotation + review UI                     │
 │  - Cleandata DB: Separate database for data pipeline        │
 │  - CSV Ingestion Worker: Go service for data cleaning       │
 │  - Staging Pipeline: Confidence scoring + human review      │
@@ -138,46 +137,48 @@ pulumi config set --path 'oceanid-cluster:cloudflareTunnelResources.limits.memor
 └── pnpm-workspace.yaml
 ```
 
-## Minimal Architecture (Recommended)
+## Networking Architecture
 
-- Kubernetes only on the primary VPS.
-- Label Studio runs in K8s and is exposed at `https://label.boathou.se` via the cluster tunnel.
-- Calypso (GPU workstation) runs a host-level cloudflared and Triton Inference Server, exposed at `https://gpu.boathou.se`.
-- An in-cluster adapter (`ls-triton-adapter`) bridges Label Studio’s ML backend API to Triton HTTP v2.
-- All secrets live in Pulumi ESC; infra is managed by Pulumi.
+Core networking is provided by Cloudflare tunnels (cluster + node), optional Cloudflare WARP for operator access, and a Tailscale subnet router for unified egress. Highlights:
 
-Quick deploy (skip SSH-heavy steps while stabilizing):
+- Cluster tunnel (namespace `cloudflared`): In‑cluster Deployment publishes private services through Cloudflare Zero Trust. Uses remote tunnel config, `protocol: auto`, `edge-ip-version: "4"`, and extended startupProbe for resilience during external DNS slowness.
+- Node tunnels (namespace `node-tunnels`): DaemonSet with `warp-routing: enabled: true` to route private CIDRs and GPU access; hostNetwork with `ClusterFirstWithHostNet` DNS.
+- Calypso connector: Host‑level cloudflared (systemd) exposes Triton at `https://gpu.<base>` without in‑cluster adapters.
+- Tailscale subnet router (namespace `tailscale`): Single Deployment (pinned to tethys) advertises K8s CIDRs and can act as an exit node.
+- Egress DB proxy (namespace `apps`): Lightweight Deployment to forward Postgres traffic through a known egress IP.
+- Flux controllers: Managed only in `flux-system`. OPA forbids controllers outside this namespace.
+
+Operational shortcuts:
 
 ```bash
+# Simple deploy path and smoke checks
 make deploy-simple
-```
-
-Validate:
-
-```bash
 make smoke
-# Triton health
+
+# Triton health (Calypso)
 curl -sk https://gpu.boathou.se/v2/health/ready
-# Adapter health (port-forward)
-kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-curl -s http://localhost:9090/health
 ```
 
-Adapter config
-
-- Set NER labels (optional) via Pulumi config:
-
-  ```bash
-  pulumi -C cluster config set oceanid-cluster:nerLabels '["O","VESSEL","HS_CODE","PORT","COMMODITY","IMO","FLAG","RISK_LEVEL","DATE"]'
-  ```
-
-If kubectl cannot reach the API, start a resilient tunnel:
+If kubectl cannot reach the API, prefer WARP (see docs/warp-next-action.md). SSH tunnels are deprecated but available:
 
 ```bash
 scripts/k3s-ssh-tunnel.sh tethys
 export KUBECONFIG=cluster/kubeconfig.yaml
 kubectl get nodes
 ```
+
+### Rollouts & Health
+
+- Force rollouts deterministically by bumping the pod template annotation `oceanid.dev/rollout-token` on Deployments.
+- Cloudflared startup: extended `startupProbe` window (~140s) tolerates transient external DNS slowness during bootstrap.
+- Resource timeouts: `customTimeouts` (create/update 10m) prevent Pulumi from timing out while pods make progress.
+- Last resort during incident response: set `metadata.annotations["pulumi.com/skipAwait"] = "true"` on the Deployment to unblock reconciliation; remove after recovery.
+
+Troubleshooting cloudflared DNS:
+- If CoreDNS upstreams are slow, check logs in `kube-system` and verify forwarders.
+- As a temporary bypass, you can set per‑pod DNS on cloudflared (not required in steady state):
+  - `dnsPolicy: None`
+  - `dnsConfig.nameservers: ["1.1.1.1", "8.8.8.8"]`
 
 ## GPU Access via Calypso (Contract)
 
@@ -188,8 +189,7 @@ This is the standardized path to the GPU workstation — do not reinvent this.
   `cloudflared-node.service` to route `gpu.<base>` → `http://localhost:8000`.
 - Triton on Calypso: Pulumi `HostDockerService` renders `tritonserver.service` (Docker) with GPU flags and binds
   `/opt/triton/models`.
-- Adapter in cluster: `ls-triton-adapter` calls `TRITON_BASE_URL=https://gpu.<base>`.
-- When enabled, the adapter presents a Cloudflare Access service token so the public GPU endpoint is not exposed to the world.
+- Access gating: Use Cloudflare Access service tokens to protect `gpu.<base>` without exposing it publicly.
 - Pulumi flags/keys: `enableCalypsoHostConnector=true`, `cloudflareNodeTunnelId|Token|Hostname`, optional `tritonImage`.
 
 Mermaid (request flow):
@@ -197,21 +197,16 @@ Mermaid (request flow):
 ```mermaid
 sequenceDiagram
   participant SME as SME Browser
-  participant LS as Label Studio (K8s)
-  participant AD as Adapter (K8s)
   participant CF as Cloudflare Edge
   participant CL as cloudflared (Calypso)
   participant TR as Triton (Calypso)
 
-  SME->>LS: Upload doc / open task
-  LS->>AD: ML backend /predict
-  AD->>CF: HTTPS https://gpu.<base>
+  SME->>CF: HTTPS https://gpu.<base>
   CF->>CL: Tunnel request
   CL->>TR: http://localhost:8000/v2/models/.../infer
   TR-->>CL: logits
   CL-->>CF: response
-  CF-->>AD: 200 + logits
-  AD-->>LS: pre-labels
+  CF-->>SME: 200 + logits
   ```
 
 Admin commands (Calypso):
@@ -225,29 +220,12 @@ Admin commands (Calypso):
 - Copy the provided Triton Python model to Calypso:
   - `scp -r triton-models/docling_granite_python calypso:/tmp/`
   - `ssh calypso "sudo mv /tmp/docling_granite_python /opt/triton/models/ && sudo systemctl restart tritonserver"`
-- Call through the adapter with `model: "docling_granite_python"` and `pdf_base64`.
-
-Example:
+- Call Triton directly via `https://gpu.<base>` with the Triton HTTP v2 API.
 
 ```bash
-kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-PDF64=$(base64 -w0 sample.pdf)
-curl -s -X POST http://localhost:9090/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"docling_granite_python","pdf_base64":"'"$PDF64"'","prompt":"Extract vessel info"}'
+# Triton health (expect: ready: true)
+curl -sk https://gpu.boathou.se/v2/health/ready
 ```
-
-Alternatively, if you have an accessible document URL, you can pass `pdf_url` and skip base64:
-
-```bash
-curl -s -X POST http://localhost:9090/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"docling_granite_python","pdf_url":"https://example.com/doc.pdf","prompt":"Extract vessel info"}'
-```
-
-Label Studio integration
-
-- For automatic PDF pre‑labels from tasks, set the ML Model URL to the adapter's LS endpoint:
   - `http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls`
   - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
   The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.

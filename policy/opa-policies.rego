@@ -96,6 +96,20 @@ deny[msg] if {
     msg := "Namespace missing 'oceanid.cluster/managed-by' label."
 }
 
+###############################
+# Flux Controller Placement   #
+###############################
+
+deny[msg] if {
+    input.kind == "Deployment"
+    name := lower(object.get(input.metadata, "name", ""))
+    controllers := {"source-controller", "kustomize-controller", "helm-controller", "notification-controller", "image-automation-controller", "image-reflector-controller"}
+    name in controllers
+    ns := lower(object.get(input.metadata, "namespace", "default"))
+    ns != "flux-system"
+    msg := sprintf("Flux controller '%s' must run in 'flux-system' (found namespace '%s').", [name, ns])
+}
+
 deny[msg] if {
     input.kind == "Namespace"
     not has_label(input, "oceanid.cluster/component")

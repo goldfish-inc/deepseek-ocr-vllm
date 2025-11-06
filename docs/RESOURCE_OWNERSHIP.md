@@ -52,6 +52,8 @@ This document defines which tool/system owns which Kubernetes resources to preve
 - cert-manager (`cert-manager` namespace)
 - Cloudflare Tunnel daemon (`cloudflared` namespace)
 
+Guardrail: Flux controllers MUST run only in `flux-system`. An OPA policy enforces this and will block any controller Deployments outside that namespace.
+
 **Cluster-scoped Resources:**
 - CRDs (all Custom Resource Definitions)
 - ClusterRoles with `meta.helm.sh/release-name` annotation
@@ -64,8 +66,7 @@ This document defines which tool/system owns which Kubernetes resources to preve
 ### Flux Owns (clusters/tethys/)
 
 **Application Namespaces:**
-- `apps` - Label Studio, ML adapters, annotation sinks
-- `triton` - Triton Inference Server
+- `apps` - PostGraphile and Go services
 - `node-tunnels` - Per-node Cloudflare tunnels
 
 **Application Resources:**
@@ -80,6 +81,12 @@ This document defines which tool/system owns which Kubernetes resources to preve
 - GitRepository `flux-system/flux-system`
 - Kustomization `flux-system/flux-system`
 - ImageUpdateAutomation resources
+
+### Guardrails (OPA)
+
+- Flux controller Deployments (`source/kustomize/helm/notification/image-automation/image-reflector`) are denied outside `flux-system`.
+- Ingress objects are denied; use Cloudflare Tunnels and Gateway where applicable.
+- Service types NodePort/LoadBalancer are denied; prefer ClusterIP behind tunnels.
 
 ### Pre-flight Script (`cluster/scripts/preflight-check.sh`)
 

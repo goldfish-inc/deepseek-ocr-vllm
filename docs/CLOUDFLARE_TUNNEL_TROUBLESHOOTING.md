@@ -6,8 +6,8 @@
 
 ### How Cloudflare Tunnel Config Works
 
-1. **Pulumi creates ConfigMap** (`cloudflared-config`) with ingress rules
-2. **Cloudflared IGNORES the ConfigMap** and fetches config from Cloudflare's API
+1. **Pulumi creates ConfigMap** (`cloudflared-config`) with base settings
+2. **Cloudflared uses remote-managed config** and fetches rules from Cloudflare's API
 3. **Remote config version** is shown in logs as `version=X`
 4. **Local ConfigMap changes have NO EFFECT** until remote config is updated via API
 
@@ -44,7 +44,7 @@ CF_TOKEN=$(pulumi config get oceanid-cluster:cloudflareAdminToken)
 ### Update Tunnel Configuration
 
 ```bash
-# Full tunnel config update
+# Full tunnel config update (example)
 curl -X PUT \
   "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" \
   -H "Authorization: Bearer ${CF_TOKEN}" \
@@ -61,25 +61,9 @@ curl -X PUT \
           }
         },
         {
-          "hostname": "label.boathou.se",
-          "service": "http://label-studio-ls-app.apps.svc.cluster.local:8080",
-          "originRequest": {
-            "noTLSVerify": false
-          }
-        },
-        {
-          "hostname": "airflow.boathou.se",
-          "service": "http://airflow-web.apps.svc.cluster.local:8080",
-          "originRequest": {
-            "noTLSVerify": true
-          }
-        },
-        {
-          "hostname": "minio.boathou.se",
-          "service": "http://minio-console.apps.svc.cluster.local:9001",
-          "originRequest": {
-            "noTLSVerify": true
-          }
+          "hostname": "graph.boathou.se",
+          "service": "http://postgraphile.apps.svc.cluster.local:8080",
+          "originRequest": { "noTLSVerify": true }
         },
         {
           "service": "http_status:404"
@@ -105,8 +89,8 @@ kubectl logs -n cloudflared -l app.kubernetes.io/name=cloudflared --tail=20 | gr
 
 # 4. Verify service names in logs match your API update
 
-# 5. Test the endpoint
-curl -I https://label.boathou.se
+# 5. Test an endpoint (example)
+curl -I https://graph.boathou.se
 ```
 
 ## Common Issues
@@ -133,7 +117,7 @@ curl -I https://label.boathou.se
 2. Update HelmRelease `targetPort` to match
 3. Update tunnel config if service port changed
 
-**Example**: Label Studio Helm chart v1.11.4 uses nginx on port 8085, not 8080:
+**Example**: Some charts expose a different container port than the service port:
 ```yaml
 app:
   service:
@@ -145,9 +129,9 @@ app:
 
 **Symptom**: Pulumi runs successfully but cloudflared still uses old config
 
-**Cause**: Pulumi only updates the local ConfigMap, which cloudflared ignores
+**Cause**: Pulumi updating local artifacts does not change remote-managed ingress rules
 
-**Fix**: After Pulumi deployment, manually update tunnel config via API
+**Fix**: Manage ingress rules via Cloudflare API or the cloud stack that owns DNS/Zero Trust
 
 ## Best Practices
 
@@ -200,7 +184,7 @@ EOF
 
 ## Future Improvements
 
-**TODO**: Update Pulumi cloudflare tunnel component to manage config via API
+**TODO**: Update cloud stack to own tunnel config via API (Zero Trust)
 
 Current implementation:
 ```typescript
@@ -237,4 +221,4 @@ This would eliminate the need for manual API updates after deployments.
 ---
 
 **Last Updated**: October 9, 2025
-**Related Issue**: Label Studio 502 error due to service name + port mismatch
+**Related**: 502 errors often come from service name/port mismatch or remote config not updated

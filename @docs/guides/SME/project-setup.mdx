@@ -1,11 +1,13 @@
 # Label Studio Project Setup (SME)
 
-This guide shows how to set up a Label Studio project for SMEs with the correct Labeling Interface, annotation settings, ML backend, predictions, storage, and webhooks. Use the quick UI steps, or the optional script to automate.
+> Archived — November 2025
+
+This guide described the former Label Studio setup. Label Studio is no longer part of the Oceanid stack. For current setup and access patterns, see the Networking Architecture and GPU Access sections in the repository README.
 
 ## Before You Start
 
 - URL: `https://label.boathou.se`
-- Access: Cloudflare Access (use your SME email)
+// (Archived)
 - Storage: Each project automatically gets S3 import/export storage (preconfigured per project by Ops)
 - Optional (scripted): Label Studio PAT if you want to run a helper script
 
@@ -189,7 +191,7 @@ If you use the script below, these options are applied for you.
 
 Settings → Model → Connect model
 
-- URL: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
+// (Archived)
 - Health endpoint: `/health`
 - Setup endpoint: `/setup`
 - Leave auth blank
@@ -254,7 +256,7 @@ python3 scripts/provision-ls-project-lite.py --title "SME 2025"
 ```
 
 This will:
-- Connect `ls-triton-adapter` ML backend if missing
+// (Archived)
 - Generate and apply a full Labeling Interface from labels
 - Import a sample text task
 
@@ -303,7 +305,7 @@ classDef tip fill:#eef7ff,stroke:#87b0ff,color:#003b82;
 
 **Model suggestions are missing**
 
-- Settings → Model → ensure the URL is `http://ls-triton-adapter.apps.svc.cluster.local:9090`.
+// (Archived)
 - Click “Test”. If it fails, press “Reconnect” (no credentials needed) and retest.
 - In Settings → Annotation, confirm “Show predictions” (and optionally “Auto-annotation”) is enabled.
 

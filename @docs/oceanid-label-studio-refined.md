@@ -1290,3 +1290,5 @@ var (
 - Day 30: Documentation and runbooks
 
 This refined plan incorporates all decisions, emphasizes future-proofing over shortcuts, and provides detailed implementation specifications for each component.
+# Oceanid + Label Studio: Refined Architecture for SMEs
+> Archived — November 2025. Label Studio has been removed from the Oceanid stack. This document is retained for historical reference only.

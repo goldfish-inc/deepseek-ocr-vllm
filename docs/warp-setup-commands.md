@@ -5,18 +5,18 @@
 - **Commit**: 830af6f - WARP routing enabled in cloudflared
 - **Deployment**: Completed successfully at 2025-10-08 23:08:27Z
 - **Tunnel**: oceanid-cluster (6ff4dfd7) - 2 connectors active
-- **Routes**: Configured via cloudflared CLI ✅
+- **Routes**: Managed via Cloudflare Zero Trust (remote config) ✅
 - **Kubeconfig**: Created at ~/.kube/k3s-warp.yaml ✅
 - **Issue**: [#84](https://github.com/goldfish-inc/oceanid/issues/84)
 
 ## What's Already Done
 
-✅ WARP routing enabled in cloudflared ConfigMap
+✅ WARP routing enabled (remote-managed)
 ✅ Tunnel redeployed with new configuration
 ✅ Private network routes configured (10.42.0.0/16, 10.43.0.0/16, 192.168.2.0/24)
 ✅ Kubeconfig created with correct server URL (https://10.43.0.1:443)
 ✅ Setup completion script created (`scripts/complete-warp-setup.sh`)
-✅ Documentation created (`docs/cloudflare-warp-setup.md`)
+✅ Documentation updated (`docs/cloudflare-warp-setup.md`)
 
 ## Manual Steps Required (Only WARP Client Installation)
 
