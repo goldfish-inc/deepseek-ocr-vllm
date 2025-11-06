@@ -2,3 +2,4 @@ README.md
 *.md
 .git
 .gitignore
+fly.toml
