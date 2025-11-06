@@ -45,27 +45,23 @@ if (corsOrigins.length > 0) {
 // Health check
 app.get('/healthz', (_req, res) => res.status(200).send('ok'))
 
-// Parse DATABASE_URL and configure SSL based on database provider
+// Parse DATABASE_URL and configure TLS
 const { parse } = require('pg-connection-string')
+const net = require('net')
 const dbConfig = parse(DATABASE_URL)
 
-// TLS configuration: relaxed verification for all providers (Alpine/Node.js CA trust issues)
-const isSupabasePooler = dbConfig.host && dbConfig.host.includes('pooler.supabase.com')
-const isCrunchyBridge = dbConfig.host && dbConfig.host.includes('db.postgresbridge.com')
+const host = dbConfig.host || ''
+const isSupabasePooler = /pooler\.supabase\.com$/i.test(host)
+const isIPHost = net.isIP(host) !== 0
+const strictEnv = process.env.DB_SSL_STRICT
+const relaxTLS = strictEnv === 'false' || isSupabasePooler || isIPHost
 
-if (isSupabasePooler) {
-  // Supabase pooler requires relaxed cert verification due to connection pooling
+if (relaxTLS) {
   dbConfig.ssl = { rejectUnauthorized: false }
-  console.log('Using Supabase pooler with relaxed TLS verification')
-} else if (isCrunchyBridge) {
-  // Crunchy Bridge: relaxed TLS verification (Alpine/Node.js doesn't recognize Let's Encrypt chain)
-  // Connection is still encrypted, just not verifying the certificate authority
-  dbConfig.ssl = { rejectUnauthorized: false }
-  console.log('Using Crunchy Bridge with TLS (relaxed verification)')
+  console.log('TLS: relaxed verification enabled')
 } else {
-  // Default: require TLS but allow self-signed certs for local development
-  dbConfig.ssl = { rejectUnauthorized: false }
-  console.log('Using default TLS configuration (relaxed verification)')
+  dbConfig.ssl = { rejectUnauthorized: true }
+  console.log('TLS: strict verification enabled')
 }
 
 app.use(
