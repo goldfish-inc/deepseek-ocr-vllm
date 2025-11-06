@@ -64,6 +64,9 @@ if (relaxTLS) {
   console.log('TLS: strict verification enabled')
 }
 
+// Enable connection filtering plugin
+const ConnectionFilterPlugin = require('postgraphile-plugin-connection-filter')
+
 app.use(
   postgraphile(dbConfig, 'public', {
     dynamicJson: true,
@@ -74,6 +77,11 @@ app.use(
     disableDefaultMutations: true,
     ignoreRBAC: false,
     ignoreIndexes: false,
+    // Enable filtering on connections
+    appendPlugins: [ConnectionFilterPlugin],
+    graphileBuildOptions: {
+      connectionFilterRelations: true,
+    },
   })
 )
 

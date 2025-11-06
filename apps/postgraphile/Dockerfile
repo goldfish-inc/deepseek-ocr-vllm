@@ -13,7 +13,7 @@ RUN apk add --no-cache ca-certificates
 
 # Install minimal runtime deps locally for programmatic server (CORS + security headers)
 RUN npm init -y \
- && npm i --only=prod express@4 postgraphile@4 cors@2 helmet@7 pg-connection-string@2 \
+ && npm i --only=prod express@4 postgraphile@4 cors@2 helmet@7 pg-connection-string@2 postgraphile-plugin-connection-filter@2 \
  && npm cache clean --force
 
 # Copy server
