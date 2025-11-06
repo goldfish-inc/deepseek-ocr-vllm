@@ -85,6 +85,13 @@ metrics: 0.0.0.0:${cluster.metricsPort}
             },
             spec: {
                 replicas: 2,
+                strategy: {
+                    type: "RollingUpdate",
+                    rollingUpdate: {
+                        maxSurge: 1,
+                        maxUnavailable: 0,
+                    },
+                },
                 selector: {
                     matchLabels: {
                         "app.kubernetes.io/name": "cloudflared",
@@ -137,20 +144,36 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                                         containerPort: cluster.metricsPort,
                                     },
                                 ],
-                                readinessProbe: {
+                                // Startup probe gives cloudflared time to establish the first tunnel
+                                startupProbe: {
                                     httpGet: {
-                                        path: "/ready",
+                                        path: "/metrics",
                                         port: "metrics",
                                     },
-                                    initialDelaySeconds: 5,
-                                    periodSeconds: 10,
+                                    initialDelaySeconds: 20,
+                                    periodSeconds: 5,
+                                    failureThreshold: 30,
                                 },
-                                livenessProbe: {
-                                    httpGet: {
-                                        path: "/ready",
-                                        port: "metrics",
+                                // Readiness requires an active tunnel connection as reported by metrics
+                                readinessProbe: {
+                                    exec: {
+                                        command: [
+                                            "sh",
+                                            "-c",
+                                            `wget -qO- http://127.0.0.1:${cluster.metricsPort}/metrics | grep -q 'cloudflared_tunnel_connected 1'`,
+                                        ],
                                     },
                                     initialDelaySeconds: 15,
+                                    periodSeconds: 10,
+                                    failureThreshold: 3,
+                                },
+                                // Liveness: metrics endpoint reachable implies process is healthy
+                                livenessProbe: {
+                                    httpGet: {
+                                        path: "/metrics",
+                                        port: "metrics",
+                                    },
+                                    initialDelaySeconds: 30,
                                     periodSeconds: 20,
                                 },
                                 resources: cluster.cloudflare.tunnelResources,
@@ -193,7 +216,13 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                     },
                 },
             },
-        }, { provider: k8sProvider, parent: this, dependsOn: [namespace] });
+        }, {
+            provider: k8sProvider,
+            parent: this,
+            dependsOn: [namespace],
+            // Force replacement when probe config or image changes to avoid stuck updates
+            replaceOnChanges: ["spec.template.spec.containers[*].readinessProbe", "spec.template.spec.containers[*].livenessProbe", "spec.template.spec.containers[*].startupProbe", "spec.template.spec.containers[*].image"]
+        });
 
         const service = new k8s.core.v1.Service(`${name}-svc`, {
             metadata: {
@@ -214,6 +243,25 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                 ],
             },
         }, { provider: k8sProvider, parent: this });
+
+        // Ensure at least one cloudflared stays available during voluntary disruptions
+        const pdb = new k8s.policy.v1.PodDisruptionBudget(`${name}-pdb`, {
+            metadata: {
+                name: "cloudflared-pdb",
+                namespace: namespace.metadata.name,
+                labels: {
+                    "app.kubernetes.io/name": "cloudflared",
+                },
+            },
+            spec: {
+                minAvailable: 1 as any,
+                selector: {
+                    matchLabels: {
+                        "app.kubernetes.io/name": "cloudflared",
+                    },
+                },
+            },
+        }, { provider: k8sProvider, parent: this })
 
         // NOTE: DNS records (k3s.boathou.se, gpu.boathou.se) now managed by oceanid-cloud stack
         // The cloudflared deployment still runs here, but DNS is managed centrally
