@@ -106,25 +106,10 @@ metrics: 0.0.0.0:${cluster.metricsPort}
                         },
                         // Bump this token to force a new ReplicaSet rollout
                         annotations: {
-                            "oceanid.dev/rollout-token": "1",
+                            "oceanid.dev/rollout-token": "2",
                         },
                     },
                     spec: {
-                        // Use explicit DNS to prioritize Cloudflare public DNS for external lookups (cfd-features.argotunnel.com)
-                        // but include CoreDNS for in-cluster service resolution (postgraphile.apps.svc.cluster.local)
-                        dnsPolicy: "None",
-                        dnsConfig: {
-                            nameservers: ["10.43.0.10", "1.1.1.1", "8.8.8.8"], // CoreDNS first, then public DNS
-                            searches: [
-                                "cloudflared.svc.cluster.local",
-                                "svc.cluster.local",
-                                "cluster.local",
-                            ],
-                            options: [
-                                { name: "ndots", value: "5" }, // Prefer search domains for 4+ dots
-                                { name: "edns0" },
-                            ],
-                        },
                         securityContext: {
                             fsGroup: 65532,
                         },
