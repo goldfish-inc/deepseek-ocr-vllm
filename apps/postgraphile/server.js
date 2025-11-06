@@ -51,11 +51,10 @@ const net = require('net')
 const dbConfig = parse(DATABASE_URL)
 
 const host = dbConfig.host || ''
-const isSupabasePooler = /pooler\.supabase\.com$/i.test(host)
 const isCrunchyBridge = /db\.postgresbridge\.com$/i.test(host)
 const isIPHost = net.isIP(host) !== 0
 const strictEnv = process.env.DB_SSL_STRICT
-const relaxTLS = strictEnv === 'false' || isSupabasePooler || isCrunchyBridge || isIPHost
+const relaxTLS = strictEnv === 'false' || isCrunchyBridge || isIPHost
 
 if (relaxTLS) {
   dbConfig.ssl = { rejectUnauthorized: false }
