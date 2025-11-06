@@ -15,7 +15,6 @@ spec:
     metadata:
       labels:
         app: postgraphile
-        egress: external
     spec:
       # Bypass CoreDNS for outbound lookups so Crunchy Bridge resolves even when cluster DNS stalls
       dnsPolicy: None
