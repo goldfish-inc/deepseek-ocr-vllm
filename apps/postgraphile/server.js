@@ -42,12 +42,26 @@ if (corsOrigins.length > 0) {
 // Health check
 app.get('/healthz', (_req, res) => res.status(200).send('ok'))
 
-// Parse DATABASE_URL and add SSL configuration for Supabase
+// Parse DATABASE_URL and configure SSL based on database provider
 const { parse } = require('pg-connection-string')
 const dbConfig = parse(DATABASE_URL)
-dbConfig.ssl = {
-  rejectUnauthorized: true, // Verify certificate
-  ca: undefined, // Use system CA certificates
+
+// TLS configuration: strict verification for Crunchy Bridge, relaxed for Supabase pooler
+const isSupabasePooler = dbConfig.host && dbConfig.host.includes('pooler.supabase.com')
+const isCrunchyBridge = dbConfig.host && dbConfig.host.includes('db.postgresbridge.com')
+
+if (isSupabasePooler) {
+  // Supabase pooler requires relaxed cert verification due to connection pooling
+  dbConfig.ssl = { rejectUnauthorized: false }
+  console.log('Using Supabase pooler with relaxed TLS verification')
+} else if (isCrunchyBridge) {
+  // Crunchy Bridge: use strict TLS verification with system CA bundle
+  dbConfig.ssl = { rejectUnauthorized: true }
+  console.log('Using Crunchy Bridge with strict TLS verification')
+} else {
+  // Default: require TLS but allow self-signed certs for local development
+  dbConfig.ssl = { rejectUnauthorized: false }
+  console.log('Using default TLS configuration (relaxed verification)')
 }
 
 app.use(

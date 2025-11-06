@@ -1,239 +1,90 @@
-# Simple task runner for the Oceanid workspace
+SHELL := /bin/bash
 
-.PHONY: install build lint test preview up destroy refresh clean hooks format pre-commit reconcile-guard
+PARQUET ?= data/mvp/vessels_mvp.parquet
+PY := python
+# Allow overriding the DuckDB CLI path/version (e.g. DUCKDB=./tools/duckdb/duckdb)
+DUCKDB ?= duckdb
 
-STACK ?= ryan-taylor/oceanid-cluster/prod
+.PHONY: parquet md.load pg.dev.up pg.dev.load pg.dev.index graphql.up cb.load.parquet cb.load.md cb.index graphql.cb supabase.load
 
-install:
-	pnpm install --frozen-lockfile
+parquet:
+	@mkdir -p $(dir $(PARQUET))
+	$(PY) scripts/mvp_build_dataset.py --parquet $(PARQUET)
 
-build:
-	pnpm --filter @oceanid/cluster build
+md.load: ## Load $(PARQUET) into MotherDuck (requires MOTHERDUCK_TOKEN)
+	@if [[ -z "$$MOTHERDUCK_TOKEN" ]]; then echo "MOTHERDUCK_TOKEN not set"; exit 1; fi
+	$(DUCKDB) -c "INSTALL motherduck; LOAD motherduck; \
+	SET motherduck_token='$$MOTHERDUCK_TOKEN'; \
+	ATTACH 'md:vessels_demo' AS md (READ_ONLY false); \
+	CREATE OR REPLACE TABLE md.vessels AS SELECT * FROM read_parquet('$(PARQUET)'); \
+	SELECT COUNT(*) FROM md.vessels;"
 
-lint:
-	pnpm --filter @oceanid/cluster lint
-	pnpm --filter @oceanid/policy lint
-
-test:
-	# Requires opa in PATH
-	pnpm --filter @oceanid/policy test
-
-# CI helpers
-# Note: targets with colons (ci:*, db:*, ner:*) cannot be marked .PHONY in GNU Make < 4.0
-
-ci-opa:
-	@echo "Running OPA tests..."
-	pnpm --filter @oceanid/policy test
-
-ci-go:
-	@echo "Running Go tests for all apps/* with go.mod..."
-	@sh -c 'set -e; for m in apps/*; do if [ -f "$$m/go.mod" ]; then echo "==> $$m"; (cd "$$m" && go test ./...); fi; done'
-
-ci-all: ci-opa ci-go
-
-format:
-	pnpm --filter @oceanid/policy fmt
-
-preview:
-	cd cluster && pulumi stack select $(STACK) && pulumi preview --diff
-
-up:
-	cd cluster && pulumi stack select $(STACK) && pulumi up
-
-destroy:
-	cd cluster && pulumi stack select $(STACK) && pulumi destroy --yes
-
-refresh:
-	cd cluster && pulumi stack select $(STACK) && pulumi refresh --yes
-
-clean:
-	pnpm --filter @oceanid/cluster clean || true
-	rm -rf cluster/bin
-
-# Configure local Git to use repo hooks
-hooks:
-	git config core.hooksPath .githooks
-	chmod +x .githooks/pre-commit
-	@echo "Git hooks installed. Next commit will run type/checks and OPA tests."
-
-pre-commit:
-	@command -v pre-commit >/dev/null 2>&1 || { echo "Installing pre-commit..."; python3 -m pip install --user pre-commit || pipx install pre-commit; }
-	pre-commit install
-	@echo "pre-commit installed. Hooks configured from .pre-commit-config.yaml"
-
-
-# Focus utilities
-.PHONY: focus
-
-focus:
-	@echo "Focus is DB stabilization & tenant enrichment. See FOCUS.md, docs/DB_ROADMAP.md, sql/SCHEMA_STATUS.md."
-
-db-guard:
-	bash scripts/ci/guard_paused_modules.sh
-
-# Reconciliation validation (local pre-commit check)
-.PHONY: reconcile-guard
-reconcile-guard:
-	@echo "Validating reconciliation metrics..."
-	@if [ ! -f tests/reconciliation/diffs/_summary.csv ]; then \
-		echo "⚠️  No reconciliation summary found. Run 'scripts/reconciliation/run_phase_b_batch.sh' first."; \
-		exit 1; \
+pg.dev.up: ## Start local Postgres 17.6
+	@if ! docker ps -a --format '{{.Names}}' | grep -q '^vessels-db$$'; then \
+		docker run --name vessels-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=vessels -p 5432:5432 -d postgres:17.6; \
+	else \
+		echo 'vessels-db already exists'; \
 	fi
-	@python3 scripts/reconciliation/validate_reconciliation.py && \
-		echo "✅ Reconciliation validation passed" || \
-		{ echo "❌ Reconciliation validation failed"; exit 1; }
 
-# Minimal deploy for current architecture (no SSH provisioning or LB)
-.PHONY: deploy-simple
-deploy-simple:
-	cd cluster && \
-	pulumi stack select $(STACK) && \
-	pulumi config set oceanid-cluster:enableNodeProvisioning false && \
-	pulumi config set oceanid-cluster:enableMigration false && \
-	pulumi config set oceanid-cluster:enableControlPlaneLB false && \
-	pulumi config set oceanid-cluster:enableCalypsoHostConnector false && \
-	pnpm --silent >/dev/null || true && \
-	pulumi up --yes
+pg.dev.load: parquet pg.dev.up ## Load $(PARQUET) into local Postgres via DuckDB (CTAS)
+	$(DUCKDB) -c "INSTALL postgres; LOAD postgres; \
+	ATTACH 'pg' (TYPE POSTGRES, HOST '127.0.0.1', PORT 5432, USER 'postgres', PASSWORD 'postgres', DATABASE 'vessels'); \
+	CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM read_parquet('$(PARQUET)');"
 
-.PHONY: deploy-calypso
-deploy-calypso:
-	cd cluster && \
-	pulumi stack select $(STACK) && \
-	pulumi config set oceanid-cluster:enableCalypsoHostConnector true && \
-	pulumi up --yes --target-dependents \
-	  --target urn:pulumi:prod::oceanid-cluster::oceanid:networking:HostCloudflared::calypso-connector \
-	  --target urn:pulumi:prod::oceanid-cluster::oceanid:compute:HostDockerService::calypso-triton
+pg.dev.index: ## Add PK + indexes to local Postgres
+	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "ALTER TABLE vessels ADD COLUMN IF NOT EXISTS id bigserial PRIMARY KEY;"
+	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_entity_id_idx ON vessels(entity_id);"
+	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_imo_idx ON vessels(imo);"
+	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_mmsi_idx ON vessels(mmsi);"
 
-.PHONY: smoke
-smoke:
-	bash scripts/smoke.sh
+graphql.up: ## Start PostGraphile on localhost:5000 against local PG
+	docker run --rm -p 5000:5000 --network host graphile/postgraphile \
+	  --connection postgres://postgres:postgres@localhost:5432/vessels \
+	  --schema public --enhance-graphiql
 
-# NER training + ONNX export smoke
-.PHONY: smoke-ner
-smoke-ner:
-	bash scripts/smoke_ner.sh
+supabase.load: parquet ## Load $(PARQUET) into Supabase Postgres (requires SUPABASE_PG)
+	@if [[ -z "$$SUPABASE_PG" ]]; then echo "SUPABASE_PG not set"; exit 1; fi
+	@$(PY) scripts/load_supabase.py $(PARQUET)
 
-# Spark NER preproc (CPU local submit)
-.PHONY: spark-preproc
-spark-preproc:
-	@if ! command -v spark-submit >/dev/null 2>&1; then \
-		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
-	fi
-	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
-		echo "Usage: make spark-preproc INPUT=<path.jsonl> OUTPUT=</tmp/out>"; exit 1; \
-	fi
-	spark-submit --master local[*] \
-	  apps/spark-jobs/ner-preproc/job.py \
-	  --input "$(INPUT)" \
-	  --output "$(OUTPUT)"
+# CrunchyBridge env: CB_HOST, CB_PORT (default 5432), CB_USER, CB_PASS, CB_DB
+cb.load.parquet: parquet ## Load $(PARQUET) into CrunchyBridge via DuckDB (CTAS)
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	$(DUCKDB) -c "INSTALL postgres; LOAD postgres; \
+	ATTACH 'pg' (TYPE POSTGRES, HOST '$$CB_HOST', PORT $${CB_PORT:-5432}, USER '$$CB_USER', PASSWORD '$$CB_PASS', DATABASE '$$CB_DB'); \
+	CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM read_parquet('$(PARQUET)');"
 
-# Spark NER inference via adapter (per-row HTTP, simple scaffold)
-.PHONY: spark-infer
-spark-infer:
-	@if ! command -v spark-submit >/dev/null 2>&1; then \
-		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
-	fi
-	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
-		echo "Usage: make spark-infer INPUT=</tmp/preproc> OUTPUT=</tmp/infer> [ADAPTER_URL=http://ls-triton-adapter.apps.svc.cluster.local:9090] [STRUCTURED=true]"; exit 1; \
-	fi
-	spark-submit --master local[*] \
-	  apps/spark-jobs/ner-inference/job.py \
-	  --input "$(INPUT)" \
-	  --output "$(OUTPUT)" \
-	  --adapter-url "$(ADAPTER_URL)" \
-	  $(if $(STRUCTURED),--structured-output,)
+cb.load.md: ## Copy MotherDuck md.vessels → CrunchyBridge (requires MOTHERDUCK_TOKEN + CB_* env)
+	@if [[ -z "$$MOTHERDUCK_TOKEN" ]]; then echo "MOTHERDUCK_TOKEN not set"; exit 1; fi
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	$(DUCKDB) -c "INSTALL motherduck; LOAD motherduck; SET motherduck_token='$$MOTHERDUCK_TOKEN'; ATTACH 'md:vessels_demo' AS md; \
+	INSTALL postgres; LOAD postgres; ATTACH 'pg' (TYPE POSTGRES, HOST '$$CB_HOST', PORT $${CB_PORT:-5432}, USER '$$CB_USER', PASSWORD '$$CB_PASS', DATABASE '$$CB_DB'); \
+	CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM md.vessels;"
 
-# Spark NER batch inference via Triton (micro-batched, GPU-optimized)
-.PHONY: spark-infer-batch
-spark-infer-batch:
-	@if ! command -v spark-submit >/dev/null 2>&1; then \
-		echo "spark-submit not found; install Apache Spark or run on your Spark node"; exit 1; \
-	fi
-	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
-		echo "Usage: make spark-infer-batch INPUT=</tmp/preproc> OUTPUT=</tmp/infer-batch> [TRITON_URL=http://calypso.tail4a0e5.ts.net:8000] [MODEL_PATH=./models/ner-distilbert] [BATCH_SIZE=8]"; exit 1; \
-	fi
-	TOKENIZERS_PARALLELISM=false spark-submit --master local[*] \
-	  apps/spark-jobs/ner-inference/job.py \
-	  --batch-mode \
-	  --input "$(INPUT)" \
-	  --output "$(OUTPUT)" \
-	  --triton-url "$(TRITON_URL)" \
-	  --model-path "$(MODEL_PATH)" \
-	  --batch-size "$(BATCH_SIZE)"
+cb.index: ## Add PK + indexes to CrunchyBridge vessels table (deprecated: use cb.schema)
+	@echo "DEPRECATED: Use 'make cb.schema' instead for full schema setup (extensions, indexes, functions, views)"
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "ALTER TABLE vessels ADD COLUMN IF NOT EXISTS id bigserial PRIMARY KEY;"
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_entity_id_idx ON vessels(entity_id);"
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_imo_idx ON vessels(imo);"
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_mmsi_idx ON vessels(mmsi);"
 
-# Database (CrunchyBridge or any Postgres)
+cb.schema: ## Apply full schema (extensions, indexes, functions, views) from sql/vessels_lookup.sql
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	@if [[ ! -f sql/vessels_lookup.sql ]]; then echo "sql/vessels_lookup.sql not found"; exit 1; fi
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/vessels_lookup.sql
+	@echo "Schema applied successfully (extensions, indexes, functions, views)"
 
-MIG_DIR ?= sql/migrations
-DB_URL ?= $(DATABASE_URL)
+cb.normalize: ## Normalize vessels column names to lowercase
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c \
+	"DO \$$\$$ DECLARE r record; BEGIN FOR r IN SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='vessels' AND column_name <> lower(column_name) LOOP EXECUTE format('ALTER TABLE public.vessels RENAME COLUMN %I TO %I', r.column_name, lower(r.column_name)); END LOOP; END \$$\$$;"
+	@echo "Column names normalized to lowercase"
 
-db-migrate:
-	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
-	@command -v psql >/dev/null 2>&1 || { echo "psql is required"; exit 1; }
-	@for f in $$(ls -1 $(MIG_DIR)/*.sql 2>/dev/null | sort -V); do \
-		echo "==> applying $$f"; \
-		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f "$$f"; \
-	done
+cb.full: cb.load.parquet cb.normalize cb.schema ## Full pipeline: load parquet → normalize columns → apply schema
+	@echo "Full Crunchy Bridge setup complete"
 
-# CI-safe migration runner: only apply versioned migrations (V*.sql) in numerical order
-.PHONY: db-migrate-ci
-db-migrate-ci:
-	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
-	@command -v psql >/dev/null 2>&1 || { echo "psql is required"; exit 1; }
-	@for f in $$(ls -1 $(MIG_DIR)/V*.sql 2>/dev/null | sort -V); do \
-		echo "==> applying $$f"; \
-		psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f "$$f"; \
-	done
-
-db-psql:
-	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
-	psql "$(DB_URL)"
-
-db-status:
-	@if [ -z "$(DB_URL)" ]; then echo "Set DB_URL or DATABASE_URL to your Postgres URI"; exit 1; fi
-	psql "$(DB_URL)" -c "select now() as connected_at, current_user, current_database();" -c "select * from control.schema_versions order by applied_at desc limit 10;" || true
-
-# NER training helpers (requires Python with transformers & datasets)
-
-NER_LABELS ?= labels.json
-NER_DATA_DIR ?= ./local_annotations
-NER_OUT ?= ./models/ner-distilbert
-
-ner-train:
-	python3 scripts/ner_train.py --labels $(NER_LABELS) --data-dir $(NER_DATA_DIR) --out $(NER_OUT)
-
-ner-export:
-	bash scripts/export_onnx.sh $(NER_OUT) distilbert_onnx 63
-
-# NER labels config helpers
-
-ner-labels-array:
-	@command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
-	python3 scripts/ner_labels_from_labels_json.py > ner_labels.json
-	@echo "Wrote ner_labels.json (ordered label names)"
-
-ner-labels-sync: ner-labels-array
-	@cd cluster && pulumi stack select $(STACK)
-	@pulumi -C cluster config set oceanid-cluster:nerLabels "$(shell cat ner_labels.json)" --secret
-	@echo "Updated oceanid-cluster:nerLabels from ner_labels.json"
-
-# Restart the LS adapter to pick up label changes
-
-ner-adapter-restart:
-	@command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required"; exit 1; }
-	kubectl -n apps rollout restart deploy/ls-triton-adapter
-	kubectl -n apps rollout status deploy/ls-triton-adapter --timeout=180s
-
-# Full workflow: sync labels to Pulumi + restart adapter
-ner-labels-apply: ner-labels-sync ner-adapter-restart
-	@echo "✅ NER labels synced and adapter restarted"
-
-# PDF extraction helpers
-.PHONY: extract
-
-EXTRACT_PDF ?=
-EXTRACT_OUT ?=
-
-extract:
-	@if [ -z "$(EXTRACT_PDF)" ]; then echo "Usage: make extract EXTRACT_PDF=./in.pdf [EXTRACT_OUT=./out.json]"; exit 1; fi
-	@if ! command -v python3 >/dev/null 2>&1; then echo "python3 is required"; exit 1; fi
-	python3 scripts/pdf_extract.py --input "$(EXTRACT_PDF)" $(if $(EXTRACT_OUT),--out "$(EXTRACT_OUT)",)
+graphql.cb: ## Start PostGraphile against CrunchyBridge (read-only recommended)
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	docker run --rm -p 5000:5000 graphile/postgraphile \
+	  --connection postgres://$$CB_USER:$$CB_PASS@$$CB_HOST:$${CB_PORT:-5432}/$$CB_DB \
+	  --schema public --enhance-graphiql
