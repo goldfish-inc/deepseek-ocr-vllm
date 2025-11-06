@@ -26,11 +26,7 @@ fi
 
 # Critical deployments to verify (in order of dependency)
 CRITICAL_DEPLOYMENTS=(
-    "label-studio-ls-app"
-    "ls-triton-adapter"
-    "annotations-sink"
-    "csv-ingestion-worker-deployment"
-    "project-bootstrapper"
+    "postgraphile"
 )
 
 # Track failures
