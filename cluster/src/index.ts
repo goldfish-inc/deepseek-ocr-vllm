@@ -233,7 +233,7 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
 (() => {
     const cfg = new pulumi.Config();
     const databaseUrl = cfg.getSecret("postgraphileDatabaseUrl");
-    const corsOrigins = cfg.get("postgraphileCorsOrigins") || "https://ocean-goldfish.vercel.app,https://ocean.boathou.se";
+    const corsOrigins = cfg.get("postgraphileCorsOrigins") || "https://ocean.goldfish.io,https://ocean-goldfish.vercel.app,https://ocean.boathou.se";
     if (databaseUrl) {
         new k8s.core.v1.Secret("postgraphile-secrets", {
             metadata: { name: "postgraphile-secrets", namespace: "apps" },
@@ -322,7 +322,12 @@ const hfToken = cfg.getSecret("hfAccessToken");
             replicas: 1,
             selector: { matchLabels: labels },
             template: {
-                metadata: { labels },
+                metadata: {
+                    labels,
+                    annotations: {
+                        "oceanid.dev/rollout-token": "1",
+                    },
+                },
                 spec: {
                     // Pin to tethys so outbound IP is unified
                     nodeSelector: { "oceanid.node/name": "tethys" },
