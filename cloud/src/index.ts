@@ -409,12 +409,9 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
 // CORS is handled by PostGraphile itself (apps/postgraphile/server.js)
 // No GraphiQL playground (disabled in PostGraphile config) → no need for browser auth
 
-// Create service token for PostGraphile API access
-const postgraphileServiceToken = new cloudflare.AccessServiceToken("postgraphile-service-token", {
-    accountId: cloudflareAccountId,
-    name: "PostGraphile Platform Components",
-    duration: "8760h", // 1 year
-});
+// Use existing non-expiring service token "PostGraphile Backend Services"
+// Managed manually in Cloudflare dashboard for indefinite lifetime
+const postgraphileServiceTokenId = cfg.require("postgraphileServiceTokenId");
 
 const postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
     zoneId: cloudflareZoneId,
@@ -432,7 +429,7 @@ new cloudflare.AccessPolicy("postgraphile-access-service-token", {
     precedence: 10,
     decision: "bypass",
     includes: [
-        { serviceTokens: [postgraphileServiceToken.id] } as any,
+        { serviceTokens: [postgraphileServiceTokenId] } as any,
     ],
 });
 
@@ -446,8 +443,6 @@ export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
 export const postgraphileAccessAppId = postgraphileAccessApp.id;
-export const postgraphileServiceTokenClientId = postgraphileServiceToken.clientId;
-export const postgraphileServiceTokenClientSecret = postgraphileServiceToken.clientSecret;
 export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
