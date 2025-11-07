@@ -77,7 +77,12 @@ export class TailscaleSubnetRouter extends pulumi.ComponentResource {
           replicas: 1, // Single exit node (pinned to tethys)
           selector: { matchLabels: labels },
           template: {
-            metadata: { labels },
+            metadata: {
+              labels,
+              annotations: {
+                "oceanid.dev/rollout-token": "1",
+              },
+            },
             spec: {
               serviceAccountName: "tailscale",
               initContainers: [

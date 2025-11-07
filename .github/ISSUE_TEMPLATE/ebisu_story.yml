@@ -1,0 +1,60 @@
+name: EBISU Story
+description: Technical story for EBISU data model, ETL, GraphQL and ops.
+labels: [ebisu, enhancement]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the goal.
+      placeholder: e.g. Implement ebisu.vessel_identifiers with SCD‑2 history
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+      description: Why this matters (users, ops, scale, security).
+      placeholder: What breaks if we don’t do this?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope & Deliverables
+      description: Concrete deliverables (files, endpoints, tables) to produce.
+      placeholder:
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Plan
+      description: Step-by-step with owners and sequencing.
+      placeholder:
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation / Tests (required)
+      description: How we prove it works. Include specific commands/queries, thresholds, and automation.
+      placeholder: psql/duckdb queries, curl to GraphQL, Make targets, CI checks.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / Rollback
+      description: Known risks, mitigations, and rollback steps.
+  - type: textarea
+    id: deps
+    attributes:
+      label: Dependencies
+      description: Linked issues/PRs, env secrets, or schema pre-reqs.
+  - type: dropdown
+    id: acceptance
+    attributes:
+      label: Acceptance Gate
+      description: Gate that must pass before close.
+      options:
+        - All validations green in CI
+        - Data quality thresholds met
+        - SLO dashboards show healthy
+        - Approval from data owner
+    validations:
+      required: true

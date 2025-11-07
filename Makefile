@@ -5,7 +5,7 @@ PY := python
 # Allow overriding the DuckDB CLI path/version (e.g. DUCKDB=./tools/duckdb/duckdb)
 DUCKDB ?= duckdb
 
-.PHONY: parquet md.load pg.dev.up pg.dev.load pg.dev.index graphql.up cb.load.parquet cb.load.md cb.index graphql.cb supabase.load
+.PHONY: parquet md.load pg.dev.up pg.dev.load pg.dev.index graphql.up cb.load.parquet cb.load.md cb.index graphql.cb
 
 parquet:
 	@mkdir -p $(dir $(PARQUET))
@@ -37,14 +37,49 @@ pg.dev.index: ## Add PK + indexes to local Postgres
 	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_imo_idx ON vessels(imo);"
 	docker exec -i vessels-db psql -U postgres -d vessels -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_mmsi_idx ON vessels(mmsi);"
 
+pg.dev.migrate: ## Apply all migrations to local Postgres (docker-compose)
+	@for f in $$(ls -1 sql/migrations/V*.sql 2>/dev/null | sort); do \
+		echo "Applying $$f..."; \
+		docker exec -i oceanid-postgres psql -U postgres -d vessels -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/$$(basename $$f) || exit 1; \
+	done
+	@echo "All migrations applied successfully"
+
+pg.dev.schema: pg.dev.migrate ## Apply migrations + views/functions to local Postgres
+	@if [ -f sql/vessels_lookup.sql ]; then \
+		echo "Applying vessels_lookup.sql..."; \
+		docker exec -i oceanid-postgres psql -U postgres -d vessels -v ON_ERROR_STOP=1 < sql/vessels_lookup.sql; \
+	fi
+	@if [ -f sql/ebisu_stage.sql ]; then \
+		echo "Applying ebisu_stage.sql..."; \
+		docker exec -i oceanid-postgres psql -U postgres -d vessels -v ON_ERROR_STOP=1 < sql/ebisu_stage.sql; \
+	fi
+	@if [ -f sql/ebisu_transform.sql ]; then \
+		echo "Applying ebisu_transform.sql..."; \
+		docker exec -i oceanid-postgres psql -U postgres -d vessels -v ON_ERROR_STOP=1 < sql/ebisu_transform.sql; \
+	fi
+	@if [ -f sql/ebisu_admin.sql ]; then \
+		echo "Applying ebisu_admin.sql..."; \
+		docker exec -i oceanid-postgres psql -U postgres -d vessels -v ON_ERROR_STOP=1 < sql/ebisu_admin.sql; \
+	fi
+	@echo "Schema applied successfully (migrations + views/functions)"
+
+pg.dev.reset: ## Drop and recreate local Postgres database
+	docker exec -i oceanid-postgres psql -U postgres -c "DROP DATABASE IF EXISTS vessels;"
+	docker exec -i oceanid-postgres psql -U postgres -c "CREATE DATABASE vessels;"
+	@echo "Database reset complete. Run 'make pg.dev.schema' to apply schema."
+
+pg.dev.psql: ## Open psql shell to local Postgres
+	docker exec -it oceanid-postgres psql -U postgres -d vessels
+
+pg.dev.full: pg.dev.up pg.dev.load pg.dev.schema ## Full local setup: start → load → schema
+	@echo "Local development environment ready!"
+	@echo "PostGraphile: http://localhost:5000/graphiql"
+	@echo "PgAdmin: http://localhost:5050 (admin@oceanid.local / admin)"
+
 graphql.up: ## Start PostGraphile on localhost:5000 against local PG
 	docker run --rm -p 5000:5000 --network host graphile/postgraphile \
 	  --connection postgres://postgres:postgres@localhost:5432/vessels \
 	  --schema public --enhance-graphiql
-
-supabase.load: parquet ## Load $(PARQUET) into Supabase Postgres (requires SUPABASE_PG)
-	@if [[ -z "$$SUPABASE_PG" ]]; then echo "SUPABASE_PG not set"; exit 1; fi
-	@$(PY) scripts/load_supabase.py $(PARQUET)
 
 # CrunchyBridge env: CB_HOST, CB_PORT (default 5432), CB_USER, CB_PASS, CB_DB
 cb.load.parquet: parquet ## Load $(PARQUET) into CrunchyBridge via DuckDB (CTAS)
@@ -92,8 +127,8 @@ cb.full: cb.load.parquet cb.normalize cb.schema ## Full pipeline: load parquet �
 .PHONY: cb.stage.load cb.ebisu.process cb.ebisu.full
 cb.stage.load: parquet ## Stage Parquet rows into stage.vessels_load (adds batch metadata)
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
-	SUPABASE_PG="postgresql+psycopg2://$${CB_USER}:$${CB_PASS}@$${CB_HOST}:$${CB_PORT:-5432}/$${CB_DB}?sslmode=require" \
-		$(PY) scripts/load_supabase.py $(PARQUET) --stage
+	POSTGRES_DSN="postgresql+psycopg2://$${CB_USER}:$${CB_PASS}@$${CB_HOST}:$${CB_PORT:-5432}/$${CB_DB}?sslmode=require" \
+		$(PY) scripts/load_postgres.py $(PARQUET) --stage
 
 cb.ebisu.process: ## Run ebisu.process_vessel_load for latest batch
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi

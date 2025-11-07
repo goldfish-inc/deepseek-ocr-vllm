@@ -1,0 +1,26 @@
+SIMPLE INSTRUCTIONS TO START EBISU DATABASE
+==========================================
+
+1. Make sure Docker Desktop is running on your computer
+
+2. Open Terminal (Mac) or Command Prompt (Windows)
+
+3. Navigate to this folder:
+   cd path/to/ebisu-database-standalone
+
+4. Start the database:
+   docker-compose -f docker/docker-compose.yml up -d
+
+5. Wait 30 seconds for everything to start
+
+6. Connect using any PostgreSQL client:
+   - Host: localhost
+   - Port: 5433
+   - Database: ebisu
+   - Username: ebisu_user
+   - Password: ebisu_password
+
+To stop the database later:
+   docker-compose -f docker/docker-compose.yml down
+
+That's it! The database is ready to use.

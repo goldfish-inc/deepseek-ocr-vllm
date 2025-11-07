@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: ebisu-db
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_DB: ebisu
+      POSTGRES_USER: ebisu_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ebisu_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../import:/import
+      - ../scripts:/scripts
+
+  importer:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: ebisu-importer
+    depends_on:
+      - db
+    environment:
+      POSTGRES_DB: ebisu
+      POSTGRES_USER: ebisu_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ebisu_password}
+      POSTGRES_HOST: db
+    volumes:
+      - ../scripts:/app/scripts
+      - ../scripts/preprocessing:/app/preprocessing
+      - ../import:/import
+      - ../migrations:/app/migrations
+    entrypoint: ['/bin/bash', '/app/scripts/entrypoint.sh']
+
+volumes:
+  pgdata:

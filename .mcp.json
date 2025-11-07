@@ -3,20 +3,32 @@
     "sentry": {
       "type": "stdio",
       "command": "bash",
-      "args": ["-c", "npx @sentry/mcp-server@latest --access-token $(op read 'op://Private/Sentry MCP/credential')"],
+      "args": [
+        "-c",
+        "npx @sentry/mcp-server@latest --access-token $(op read 'op://Private/Sentry MCP/credential')"
+      ],
       "env": {}
     },
     "postgresql": {
       "type": "stdio",
       "command": "bash",
-      "args": ["-c", "npx @modelcontextprotocol/server-postgres $(op read 'op://Private/Crunchy Bridge Labelfish/connection string')"],
+      "args": [
+        "-c",
+        "npx @modelcontextprotocol/server-postgres $(op read 'op://Private/Crunchy Bridge Labelfish/connection string')"
+      ],
       "env": {}
     },
     "github": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@modelcontextprotocol/server-github"],
+      "args": [
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {}
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=fldiayolmgphysdwgsuk"
     }
   }
 }

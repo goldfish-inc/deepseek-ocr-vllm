@@ -1,0 +1,38 @@
+name: EBISU Docs Check
+
+on:
+  pull_request:
+    paths:
+      - 'sql/**'
+      - 'sql/oceanid-ebisu-schema/**'
+      - '.github/workflows/ci-docs-check.yml'
+      - 'docs/ebisu-data-dictionary.md'
+
+jobs:
+  docs_guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect schema changes
+        id: changes
+        run: |
+          base=${{ github.base_ref || 'origin/' }}
+          # Compute diff against base of PR
+          echo "Base ref: ${{ github.event.pull_request.base.sha }}"
+          git fetch origin ${{ github.event.pull_request.base.ref }}:base
+          CHANGED=$(git diff --name-only base...HEAD -- 'sql/**' 'sql/oceanid-ebisu-schema/**' | wc -l)
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Fail if schema changed without dictionary update
+        if: steps.changes.outputs.changed != '0'
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:base
+          if git diff --name-only base...HEAD -- 'docs/ebisu-data-dictionary.md' | grep -q 'ebisu-data-dictionary.md'; then
+            echo "Data dictionary updated."
+          else
+            echo "ERROR: Schema changed but docs/ebisu-data-dictionary.md was not updated." >&2
+            exit 1
+          fi

@@ -246,14 +246,44 @@
       "Bash(gh pr review:*)",
       "Bash(for:*)",
       "Bash(do sleep 30)",
-      "Bash(git for-each-ref:*)"
+      "Bash(git for-each-ref:*)",
+      "Bash(ONLY=FFA PREFER_EXT=xlsx /opt/homebrew/Caskroom/miniconda/base/bin/python:*)",
+      "Bash(ONLY=FFA /opt/homebrew/Caskroom/miniconda/base/bin/python:*)",
+      "Bash(tests/reconciliation/current/FFA_vessels_2025-08-26_stage.csv)",
+      "Bash(echo:*)",
+      "Bash(ONLY=ICCAT PREFER_EXT=csv /opt/homebrew/Caskroom/miniconda/base/bin/python:*)",
+      "Bash(if [ -f \"tests/reconciliation/current/$rfmo_vessels_2025-08-26_stage.csv\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(ls:*)",
+      "Bash(docker logs:*)",
+      "Bash(brew install:*)",
+      "Bash(make:*)",
+      "Bash(duckdb:*)",
+      "Bash(du:*)",
+      "Bash(timeout 180 gh run watch:*)",
+      "Bash(pnpm build:*)",
+      "Bash(timeout 600 gh run:*)",
+      "mcp__github__create_issue",
+      "Bash(/tmp/quic-diagnostics/phase0/cloudflared-deploy.yaml)",
+      "Bash(/tmp/quic-diagnostics/phase0/cloudflared-logs.txt)",
+      "Bash(/tmp/quic-diagnostics/phase1/flannel-config.yaml)",
+      "Bash(/tmp/quic-diagnostics/phase1/flannel-interface.txt)",
+      "Bash(/tmp/quic-diagnostics/phase1/flannel-subnet.txt)",
+      "Bash(/tmp/quic-diagnostics/phase1/k3s-flannel-config.json)",
+      "Bash(/tmp/quic-diagnostics/phase1/host-udp-test.txt)",
+      "Bash(/tmp/quic-diagnostics/phase3/k3s-service.txt)",
+      "Bash(/tmp/quic-diagnostics/phase3/override.conf.backup)"
     ],
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "sentry",
     "postgresql",
-    "github"
+    "github",
+    "supabase"
   ]
 }

@@ -317,8 +317,8 @@ const graphqlRateLimit = new cloudflare.RateLimit("graphql-rate-limit", {
     threshold: 120, // requests per period
     period: 60, // seconds
     action: {
-        mode: "simulate", // Start with simulate, change to "ban" after testing
-        timeout: 60, // ban duration in seconds
+        mode: "ban", // enforce after testing simulate in preview
+        timeout: 120, // ban duration in seconds
     },
     match: {
         request: {
@@ -333,6 +333,19 @@ const graphqlRateLimit = new cloudflare.RateLimit("graphql-rate-limit", {
     },
     description: "PostGraphile API rate limit: 120 req/min per IP",
     disabled: false,
+});
+
+// Block GET requests to /graphql entirely (GraphQL GET not supported)
+const graphqlGetFilter = new cloudflare.Filter("graphql-get-filter", {
+    zoneId: cloudflareZoneId,
+    expression: '(http.host eq "graph.boathou.se" and http.request.method eq "GET" and http.request.uri.path eq "/graphql")',
+});
+
+const graphqlGetBlock = new cloudflare.FirewallRule("graphql-get-block", {
+    zoneId: cloudflareZoneId,
+    filterId: graphqlGetFilter.id,
+    action: "block",
+    description: "Block GET /graphql",
 });
 
 // =============================================================================

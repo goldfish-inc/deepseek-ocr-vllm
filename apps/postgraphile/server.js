@@ -68,7 +68,7 @@ if (relaxTLS) {
 const ConnectionFilterPlugin = require('postgraphile-plugin-connection-filter')
 
 app.use(
-  postgraphile(dbConfig, 'public', {
+  postgraphile(dbConfig, ['public','ebisu'], {
     dynamicJson: true,
     // Production-safe defaults
     graphiql: false,

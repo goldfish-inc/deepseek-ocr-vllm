@@ -1,0 +1,24 @@
+{
+  "name": "ebisu-database",
+  "version": "1.0.0",
+  "description": "Ebisu Marine Database - Comprehensive marine data management system",
+  "scripts": {
+    "db:up": "docker-compose -f docker/docker-compose.yml up -d",
+    "db:down": "docker-compose -f docker/docker-compose.yml down",
+    "db:reset": "docker-compose -f docker/docker-compose.yml down -v && docker-compose -f docker/docker-compose.yml up -d",
+    "db:logs": "docker logs -f ebisu-db",
+    "db:connect": "docker exec -it ebisu-db psql -U ebisu_user -d ebisu",
+    "drizzle:generate": "drizzle-kit generate:pg --config=drizzle-schemas/drizzle.config.ts",
+    "drizzle:push": "drizzle-kit push:pg --config=drizzle-schemas/drizzle.config.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.4",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.7",
+    "drizzle-kit": "^0.20.6",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

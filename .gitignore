@@ -99,3 +99,8 @@ data/raw/vessels/
 tests/reconciliation/baseline/
 tests/reconciliation/current/
 tests/reconciliation/diffs/
+
+# Large data files
+data/mvp/*.csv
+data/mvp/*.duckdb
+data/mvp/*.parquet
