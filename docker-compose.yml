@@ -1,0 +1,73 @@
+services:
+  # PostgreSQL 17 with PostGIS - matches CrunchyBridge
+  postgres:
+    image: postgis/postgis:17-3.5
+    platform: linux/amd64
+    container_name: oceanid-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vessels
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # NOTE: Migrations must be applied manually via make pg.dev.migrate
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # PostGraphile - GraphQL API for the platform
+  postgraphile:
+    image: graphile/postgraphile:latest
+    platform: linux/amd64
+    container_name: oceanid-postgraphile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/vessels
+    ports:
+      - '5001:5000'
+    command:
+      [
+        '--connection',
+        'postgres://postgres:postgres@postgres:5432/vessels',
+        '--schema',
+        'public,curated',
+        '--enhance-graphiql',
+        '--watch',
+        '--dynamic-json',
+        '--no-ignore-rbac'
+      ]
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:5000/graphql']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Optional: PgAdmin for visual DB management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    platform: linux/amd64
+    container_name: oceanid-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@oceanid.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - '5050:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  default:
+    name: oceanid-network
