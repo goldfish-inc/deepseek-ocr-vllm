@@ -119,9 +119,16 @@ spec:
           env:
             - name: ARGILLA_HOME_PATH
               value: /data
-            - name: ARGILLA_DATABASE_URL
-              value: "postgresql://argilla:$(POSTGRES_PASSWORD)@argilla-postgres:5432/argilla"
-            - name: POSTGRES_PASSWORD
+            # PostgreSQL connection (Argilla constructs URL from components)
+            - name: ARGILLA_DATABASE_HOST
+              value: argilla-postgres
+            - name: ARGILLA_DATABASE_PORT
+              value: "5432"
+            - name: ARGILLA_DATABASE_NAME
+              value: argilla
+            - name: ARGILLA_DATABASE_USER
+              value: argilla
+            - name: ARGILLA_DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: argilla-secrets
