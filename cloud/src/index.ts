@@ -405,40 +405,26 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
     });
 }
 
-// PostGraphile API protection with dual authentication (users + services)
+// PostGraphile API protection with service-token-only authentication
 // CORS is handled by PostGraphile itself (apps/postgraphile/server.js)
-const postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
-    zoneId: cloudflareZoneId,
-    name: "PostGraphile GraphQL API",
-    domain: "graph.boathou.se",
-    type: "self_hosted",
-    sessionDuration: "24h",
-});
-
-// Policy 1: Allow Goldfish team members via GitHub SSO
-new cloudflare.AccessPolicy("postgraphile-access-github", {
-    applicationId: postgraphileAccessApp.id,
-    zoneId: cloudflareZoneId,
-    name: "Goldfish Team (GitHub SSO)",
-    precedence: 1,
-    decision: "allow",
-    includes: [
-        {
-            githubs: [{
-                name: "goldfish-inc",
-            }],
-        } as any,
-    ],
-});
-
-// Policy 2: Allow backend services via service tokens (bypass interactive auth)
+// No GraphiQL playground (disabled in PostGraphile config) → no need for browser auth
 const postgraphileServiceTokenId = cfg.get("postgraphileServiceTokenId");
+let postgraphileAccessApp: cloudflare.AccessApplication | undefined;
 if (postgraphileServiceTokenId) {
+    postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
+        zoneId: cloudflareZoneId,
+        name: "PostGraphile GraphQL API",
+        domain: "graph.boathou.se",
+        type: "self_hosted",
+        sessionDuration: "24h",
+    });
+
+    // Service token bypass for platform components only
     new cloudflare.AccessPolicy("postgraphile-access-service-token", {
         applicationId: postgraphileAccessApp.id,
         zoneId: cloudflareZoneId,
-        name: "Backend Services (Service Token)",
-        precedence: 2,
+        name: "Platform Components (Service Token)",
+        precedence: 1,
         decision: "bypass",
         includes: [
             { serviceTokens: [postgraphileServiceTokenId] } as any,
@@ -455,7 +441,7 @@ export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
-export const postgraphileAccessAppId = postgraphileAccessApp.id;
+export const postgraphileAccessAppId = postgraphileAccessApp?.id;
 export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
