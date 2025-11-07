@@ -1,0 +1,144 @@
+---
+# ConfigMap containing the import script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argilla-import-scripts
+  namespace: apps
+data:
+  import_datasets.py: |
+    #!/usr/bin/env python3
+    """
+    Server-side Argilla dataset importer
+    Imports datasets from Hugging Face into Argilla
+    """
+    import os
+    import sys
+    import argilla as rg
+    from datasets import load_dataset
+    from huggingface_hub import HfApi
+
+    # Configuration from environment
+    ARGILLA_API_URL = os.environ["ARGILLA_API_URL"]
+    ARGILLA_API_KEY = os.environ["ARGILLA_API_KEY"]
+    HF_TOKEN = os.environ["HF_TOKEN"]
+    DATASET_ID = os.environ.get("HF_DATASET_ID", "goldfish-inc/deepseekocr-output")
+    WORKSPACE = os.environ.get("ARGILLA_WORKSPACE", "argilla")
+
+    print(f"🚀 Argilla Dataset Importer")
+    print(f"   API URL: {ARGILLA_API_URL}")
+    print(f"   Dataset: {DATASET_ID}")
+    print(f"   Workspace: {WORKSPACE}")
+
+    # Verify HF access
+    print(f"\n🔍 Verifying Hugging Face access...")
+    api = HfApi(token=HF_TOKEN)
+    user = api.whoami()
+    print(f"✓ Authenticated as: {user['name']}")
+
+    try:
+        dataset_info = api.dataset_info(DATASET_ID)
+        print(f"✓ Dataset accessible: {DATASET_ID}")
+        print(f"  Private: {dataset_info.private}")
+    except Exception as e:
+        print(f"❌ Cannot access dataset: {e}")
+        sys.exit(1)
+
+    # Connect to Argilla
+    print(f"\n🔌 Connecting to Argilla...")
+    client = rg.Argilla(api_url=ARGILLA_API_URL, api_key=ARGILLA_API_KEY)
+    print(f"✓ Connected")
+
+    # Load dataset from HF
+    print(f"\n📥 Loading dataset from Hugging Face...")
+    try:
+        dataset = load_dataset(DATASET_ID, token=HF_TOKEN)
+        print(f"✓ Dataset loaded")
+        print(f"  Splits: {list(dataset.keys())}")
+        total_records = sum(len(split) for split in dataset.values())
+        print(f"  Total records: {total_records}")
+    except Exception as e:
+        print(f"❌ Failed to load dataset: {e}")
+        sys.exit(1)
+
+    # Show dataset structure
+    first_split = list(dataset.keys())[0]
+    print(f"\n📊 Dataset structure (from '{first_split}'):")
+    print(f"  Features: {list(dataset[first_split].features.keys())}")
+
+    if len(dataset[first_split]) > 0:
+        print(f"\n  Sample record:")
+        sample = dataset[first_split][0]
+        for key in list(sample.keys())[:5]:
+            value = str(sample[key])[:80] + "..." if len(str(sample[key])) > 80 else str(sample[key])
+            print(f"    {key}: {value}")
+
+    print(f"\n✅ Import validation complete!")
+    print(f"   Ready to import {total_records} records to Argilla")
+    print(f"\n💡 Next: Configure Argilla dataset schema based on structure above")
+
+---
+# CronJob for scheduled imports (disabled by default)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: argilla-dataset-importer
+  namespace: apps
+spec:
+  schedule: "0 2 * * *"  # Daily at 2am UTC
+  suspend: true  # Start disabled - enable when ready
+  jobTemplate:
+    metadata:
+      labels:
+        app: argilla-importer
+    spec:
+      template:
+        metadata:
+          labels:
+            app: argilla-importer
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: importer
+            image: python:3.11-slim
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -e
+              echo "📦 Installing dependencies..."
+              pip install --quiet argilla datasets huggingface_hub
+              echo "✓ Dependencies installed"
+              echo ""
+              python /scripts/import_datasets.py
+            env:
+            - name: ARGILLA_API_URL
+              value: "http://argilla:6900"
+            - name: ARGILLA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: argilla-secrets
+                  key: ADMIN_API_KEY
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: argilla-secrets
+                  key: HF_TOKEN
+            - name: HF_DATASET_ID
+              value: "goldfish-inc/deepseekocr-output"
+            - name: ARGILLA_WORKSPACE
+              value: "argilla"
+            volumeMounts:
+            - name: import-scripts
+              mountPath: /scripts
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 1Gi
+          volumes:
+          - name: import-scripts
+            configMap:
+              name: argilla-import-scripts
+              defaultMode: 0755
