@@ -429,7 +429,7 @@ new cloudflare.AccessPolicy("postgraphile-access-service-token", {
     applicationId: postgraphileAccessApp.id,
     zoneId: cloudflareZoneId,
     name: "Platform Components (Service Token)",
-    precedence: 1,
+    precedence: 10,
     decision: "bypass",
     includes: [
         { serviceTokens: [postgraphileServiceToken.id] } as any,
