@@ -250,24 +250,23 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
 // ESC config: argillaPostgresPassword, argillaAuthSecret, argillaAdminPassword, argillaAdminApiKey, argillaRedisUrl
 (() => {
     const cfg = new pulumi.Config();
-    const postgresPassword = cfg.getSecret("argillaPostgresPassword");
-    const authSecret = cfg.getSecret("argillaAuthSecret");
-    const adminPassword = cfg.getSecret("argillaAdminPassword");
-    const adminApiKey = cfg.getSecret("argillaAdminApiKey");
-    const redisUrl = cfg.getSecret("argillaRedisUrl");
-    if (postgresPassword && authSecret && adminPassword && adminApiKey && redisUrl) {
-        new k8s.core.v1.Secret("argilla-secrets", {
-            metadata: { name: "argilla-secrets", namespace: "apps" },
-            type: "Opaque",
-            stringData: {
-                POSTGRES_PASSWORD: postgresPassword,
-                AUTH_SECRET_KEY: authSecret,
-                ADMIN_PASSWORD: adminPassword,
-                ADMIN_API_KEY: adminApiKey,
-                REDIS_URL: redisUrl,
-            },
-        }, { provider: k8sProvider, parent: appsNamespace });
-    }
+    const postgresPassword = cfg.requireSecret("argillaPostgresPassword");
+    const authSecret = cfg.requireSecret("argillaAuthSecret");
+    const adminPassword = cfg.requireSecret("argillaAdminPassword");
+    const adminApiKey = cfg.requireSecret("argillaAdminApiKey");
+    const redisUrl = cfg.requireSecret("argillaRedisUrl");
+
+    new k8s.core.v1.Secret("argilla-secrets", {
+        metadata: { name: "argilla-secrets", namespace: "apps" },
+        type: "Opaque",
+        stringData: {
+            POSTGRES_PASSWORD: postgresPassword,
+            AUTH_SECRET_KEY: authSecret,
+            ADMIN_PASSWORD: adminPassword,
+            ADMIN_API_KEY: adminApiKey,
+            REDIS_URL: redisUrl,
+        },
+    }, { provider: k8sProvider, parent: appsNamespace });
 })();
 
 
