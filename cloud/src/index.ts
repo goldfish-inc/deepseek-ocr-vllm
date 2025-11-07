@@ -321,12 +321,13 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
 // - Block GET requests entirely (GraphQL doesn't support GET introspection)
 // - Rate limit POST requests to prevent abuse
 
-const graphqlProtectionRuleset = new cloudflare.Ruleset("graphql-protection-ruleset", {
+// Firewall rule to block GET requests to /graphql
+const graphqlBlockRuleset = new cloudflare.Ruleset("graphql-block-ruleset", {
     zoneId: cloudflareZoneId,
-    name: "PostGraphile API Protection",
-    description: "WAF rules for graph.boathou.se/graphql endpoint",
+    name: "PostGraphile GET Block",
+    description: "Block GET requests to /graphql endpoint",
     kind: "zone",
-    phase: "http_ratelimit",
+    phase: "http_request_firewall_custom",
     rules: [
         {
             action: "block",
@@ -334,13 +335,24 @@ const graphqlProtectionRuleset = new cloudflare.Ruleset("graphql-protection-rule
             description: "Block GET /graphql (introspection disabled)",
             enabled: true,
         },
+    ],
+});
+
+// Rate limiting rule for POST requests to /graphql
+const graphqlRateLimitRuleset = new cloudflare.Ruleset("graphql-ratelimit-ruleset", {
+    zoneId: cloudflareZoneId,
+    name: "PostGraphile Rate Limit",
+    description: "Rate limit for /graphql endpoint",
+    kind: "zone",
+    phase: "http_ratelimit",
+    rules: [
         {
             action: "block",
             expression: '(http.host eq "graph.boathou.se" and http.request.uri.path eq "/graphql")',
-            description: "Rate limit POST /graphql: 120 req/min per IP",
+            description: "Rate limit /graphql: 120 req/min per IP",
             enabled: true,
             ratelimit: {
-                characteristics: ["ip.src"],
+                characteristics: ["cf.colo.id", "ip.src"],
                 period: 60,
                 requestsPerPeriod: 120,
                 mitigationTimeout: 120,
@@ -413,7 +425,8 @@ export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
-export const graphqlProtectionRulesetId = graphqlProtectionRuleset.id;
+export const graphqlBlockRulesetId = graphqlBlockRuleset.id;
+export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
 // PULUMI ESC
