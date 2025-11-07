@@ -22,6 +22,7 @@ import { DbBootstrap } from "./components/dbBootstrap";
 import { TailscaleOperator } from "./components/tailscaleOperator";
 import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
 import { PrometheusOperator } from "./components/prometheusOperator";
+import { K3sNetworkReconfiguration } from "./components/k3sNetworkReconfiguration";
 
 // =============================================================================
 // CLUSTER RESOURCES
@@ -54,6 +55,37 @@ const privateKeys = {
 
 // Feature flags
 const enableMigration = cfg.getBoolean("enableMigration") ?? true;
+const enableNetworkReconfig = cfg.getBoolean("enableNetworkReconfig") ?? false;
+
+// =============================================================================
+// K3S NETWORK RECONFIGURATION
+// =============================================================================
+// Reconfigure K3s to use eth0 for VPS nodes (direct) and tailscale0 for private nodes
+// This fixes the double-encapsulation issue where Flannel VXLAN runs over Tailscale WireGuard
+
+const tethysNetworkReconfig = enableNetworkReconfig
+    ? new K3sNetworkReconfiguration("tethys-network", {
+        nodeName: "tethys",
+        nodeIp: cfg.require("tethysIp"),
+        sshPrivateKey: privateKeys.tethys,
+        k3sNodeIp: cfg.require("tethysIp"),
+        flannelIface: cfg.require("tethysFlannelIface"),
+        serviceType: "server",
+        restartService: true,
+    })
+    : undefined;
+
+const styxNetworkReconfig = enableNetworkReconfig
+    ? new K3sNetworkReconfiguration("styx-network", {
+        nodeName: "styx",
+        nodeIp: cfg.require("styxIp"),
+        sshPrivateKey: privateKeys.styx,
+        k3sNodeIp: cfg.require("styxIp"),
+        flannelIface: cfg.require("styxFlannelIface"),
+        serviceType: "agent",
+        restartService: true,
+    }, { dependsOn: tethysNetworkReconfig ? [tethysNetworkReconfig] : [] })
+    : undefined;
 
 // Create load balancer for multi-control-plane high availability
 // NOTE: Assumes K3s cluster is already provisioned by cloud stack
