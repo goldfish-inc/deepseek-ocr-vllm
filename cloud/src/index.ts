@@ -8,6 +8,7 @@ import { GitHubRunner } from "./components/githubRunner";
 // =============================================================================
 // OCEANID CLOUD INFRASTRUCTURE
 // =============================================================================
+// API token updated with Firewall Services:Edit permission (2025-11-07)
 // This project manages cloud resources only (Cloudflare, CrunchyBridge, ESC)
 // NO kubeconfig required - safe to run in GitHub Actions
 //
