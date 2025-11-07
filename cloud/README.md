@@ -30,13 +30,32 @@ Service token **"PostGraphile Backend Services"** (non-expiring):
 
 ```bash
 CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access
-CF-Access-Client-Secret: <stored in Pulumi ESC>
+CF-Access-Client-Secret: <stored in Pulumi ESC or 1Password>
+```
+
+**Initial Setup - Store Client Secret:**
+
+The client secret must be stored for backend services to authenticate. Choose one:
+
+```bash
+# Option 1: Store in Pulumi ESC (recommended for CI/CD)
+pulumi config set --secret postgraphileAccessClientSecret "<secret-from-cloudflare>"
+
+# Option 2: Store in 1Password (recommended for local dev)
+op item create --category=password --title="PostGraphile Access Service Token" \
+  --vault="Development" \
+  client_id="7d9a2003d9c5fbd626a5f55e7eab1398.access" \
+  client_secret="<secret-from-cloudflare>"
 ```
 
 To retrieve the client secret:
 
 ```bash
-pulumi config get cfAccessServiceTokenSecret --show-secrets
+# From Pulumi ESC
+pulumi config get postgraphileAccessClientSecret
+
+# From 1Password
+op read "op://Development/PostGraphile Access Service Token/client_secret"
 ```
 
 **Backend Integration:**
@@ -48,12 +67,29 @@ CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access
 CF-Access-Client-Secret: <value from Pulumi ESC>
 ```
 
+**Testing Authentication:**
+
+Use the provided test script to validate Cloudflare Access configuration:
+
+```bash
+# Get secret from Pulumi ESC
+./cloud/test-postgraphile-access.sh "$(pulumi config get postgraphileAccessClientSecret)"
+
+# Or from 1Password
+./cloud/test-postgraphile-access.sh "$(op read 'op://Development/PostGraphile Access Service Token/client_secret')"
+```
+
+The test script validates:
+1. ✅ Unauthenticated requests are blocked (HTTP 302)
+2. ✅ Authenticated requests succeed (HTTP 200 with GraphQL response)
+3. ✅ Invalid credentials are rejected (HTTP 403)
+
 **Example (curl):**
 
 ```bash
 curl https://graph.boathou.se/graphql \
   -H "CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access" \
-  -H "CF-Access-Client-Secret: $(pulumi config get cfAccessServiceTokenSecret --show-secrets)" \
+  -H "CF-Access-Client-Secret: $(pulumi config get postgraphileAccessClientSecret)" \
   -H "Content-Type: application/json" \
   -d '{"query": "{ __typename }"}'
 ```
