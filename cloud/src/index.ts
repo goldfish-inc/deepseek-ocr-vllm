@@ -315,45 +315,38 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
 });
 
 // =============================================================================
-// CLOUDFLARE RATE LIMITING
+// CLOUDFLARE WAF RULESETS (Modern API)
 // =============================================================================
 // Protect PostGraphile /graphql endpoint from abuse
-// GET blocked (introspection disabled), POST rate-limited per IP
+// - Block GET requests entirely (GraphQL doesn't support GET introspection)
+// - Rate limit POST requests to prevent abuse
 
-const graphqlRateLimit = new cloudflare.RateLimit("graphql-rate-limit", {
+const graphqlProtectionRuleset = new cloudflare.Ruleset("graphql-protection-ruleset", {
     zoneId: cloudflareZoneId,
-    threshold: 120, // requests per period
-    period: 60, // seconds
-    action: {
-        mode: "ban", // enforce after testing simulate in preview
-        timeout: 120, // ban duration in seconds
-    },
-    match: {
-        request: {
-            urlPattern: `graph.boathou.se/graphql`,
-            methods: ["POST"],
+    name: "PostGraphile API Protection",
+    description: "WAF rules for graph.boathou.se/graphql endpoint",
+    kind: "zone",
+    phase: "http_ratelimit",
+    rules: [
+        {
+            action: "block",
+            expression: '(http.host eq "graph.boathou.se" and http.request.method eq "GET" and http.request.uri.path eq "/graphql")',
+            description: "Block GET /graphql (introspection disabled)",
+            enabled: true,
         },
-        response: {
-            // Rate limit all responses (don't differentiate by status)
-            statuses: [200, 201, 300, 301, 302, 400, 401, 403, 404, 405, 429, 500, 502, 503],
-            originTraffic: true,
+        {
+            action: "block",
+            expression: '(http.host eq "graph.boathou.se" and http.request.uri.path eq "/graphql")',
+            description: "Rate limit POST /graphql: 120 req/min per IP",
+            enabled: true,
+            ratelimit: {
+                characteristics: ["ip.src"],
+                period: 60,
+                requestsPerPeriod: 120,
+                mitigationTimeout: 120,
+            },
         },
-    },
-    description: "PostGraphile API rate limit: 120 req/min per IP",
-    disabled: false,
-});
-
-// Block GET requests to /graphql entirely (GraphQL GET not supported)
-const graphqlGetFilter = new cloudflare.Filter("graphql-get-filter", {
-    zoneId: cloudflareZoneId,
-    expression: '(http.host eq "graph.boathou.se" and http.request.method eq "GET" and http.request.uri.path eq "/graphql")',
-});
-
-const graphqlGetBlock = new cloudflare.FirewallRule("graphql-get-block", {
-    zoneId: cloudflareZoneId,
-    filterId: graphqlGetFilter.id,
-    action: "block",
-    description: "Block GET /graphql",
+    ],
 });
 
 // =============================================================================
@@ -420,7 +413,7 @@ export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
-export const graphqlRateLimitId = graphqlRateLimit.id;
+export const graphqlProtectionRulesetId = graphqlProtectionRuleset.id;
 
 // =============================================================================
 // PULUMI ESC
