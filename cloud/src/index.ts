@@ -344,7 +344,7 @@ const graphqlRateLimitRuleset = new cloudflare.Ruleset("graphql-ratelimit-rulese
                 characteristics: ["cf.colo.id", "ip.src"],
                 period: 10, // Free tier only allows 10s
                 requestsPerPeriod: 20, // 20/10s = 120/60s
-                mitigationTimeout: 120,
+                mitigationTimeout: 10, // Free tier only allows 10s
             },
         },
     ],
