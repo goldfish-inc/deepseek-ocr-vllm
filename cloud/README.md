@@ -16,6 +16,110 @@ This Pulumi project manages **cloud-only resources** for the Oceanid platform. I
 - Kubernetes cluster resources (see `../cluster/` for K3s bootstrap)
 - Application workloads (managed by Flux GitOps in `../clusters/`)
 
+## Cloudflare WAF Protection
+
+### PostGraphile API Protection (graph.boathou.se/graphql)
+
+The `/graphql` endpoint is protected by Cloudflare WAF rules to prevent abuse:
+
+**Protection Layers:**
+
+1. **GET Request Blocking** (via deprecated Filter + FirewallRule)
+   - Resource: `cloudflare:index:Filter` (graphql-get-filter)
+   - Resource: `cloudflare:index:FirewallRule` (graphql-get-block)
+   - Blocks all GET requests to prevent GraphQL introspection
+
+2. **Rate Limiting** (via modern Ruleset API)
+   - Resource: `cloudflare:index:Ruleset` (graphql-ratelimit-ruleset)
+   - Phase: `http_ratelimit`
+   - Rate: 20 requests per 10 seconds per IP+datacenter (= 120 req/min)
+   - Mitigation: 10 second block when exceeded
+
+**Free Tier Constraints:**
+
+Cloudflare free tier enforces these limits on rate limiting rulesets:
+
+- `period`: Must be **10 seconds** (not 60)
+- `requestsPerPeriod`: Calculated to maintain desired rate (20/10s = 120/min)
+- `mitigationTimeout`: Must be **10 seconds** (not configurable)
+- `characteristics`: Must include `["cf.colo.id", "ip.src"]` (datacenter + IP)
+
+**Configuration:**
+
+```typescript
+// cloud/src/index.ts
+const graphqlRateLimitRuleset = new cloudflare.Ruleset("graphql-ratelimit-ruleset", {
+    zoneId: cloudflareZoneId,
+    name: "PostGraphile Rate Limit",
+    description: "Rate limit for /graphql endpoint (20 req/10s = 120 req/min)",
+    kind: "zone",
+    phase: "http_ratelimit",
+    rules: [{
+        action: "block",
+        expression: '(http.host eq "graph.boathou.se" and http.request.uri.path eq "/graphql")',
+        description: "Rate limit /graphql: 20 req/10s per IP+colo",
+        enabled: true,
+        ratelimit: {
+            characteristics: ["cf.colo.id", "ip.src"],
+            period: 10,              // Free tier max
+            requestsPerPeriod: 20,   // 20/10s = 120/min
+            mitigationTimeout: 10,   // Free tier max
+        },
+    }],
+});
+```
+
+### API Token Permissions
+
+The Cloudflare API token requires these permissions:
+
+- **Zone → DNS → Edit** (for DNS records)
+- **Zone → SSL and Certificates → Edit** (for Access apps)
+- **Zone → Zone → Edit** (for zone configuration)
+- **Zone → Zone Settings → Edit** (for zone settings)
+- **Zone → Firewall Services → Edit** (for deprecated Filter/FirewallRule)
+- **Zone → Zone WAF → Edit** (for modern Ruleset API)
+- **Account → Access: Apps and Policies → Edit** (for Zero Trust)
+
+**Token Location:** 1Password → Development vault → "Cloudflare Max Permission"
+
+### Migration from Deprecated APIs
+
+**Previous (Deprecated):**
+- `cloudflare.RateLimit` - Removed June 2025, requires paid plan
+- `cloudflare.Filter` + `cloudflare.FirewallRule` - Deprecated June 2025
+
+**Current (Modern):**
+- `cloudflare.Ruleset` with `phase: "http_ratelimit"` - Free tier compatible
+- Separate phases for firewall (`http_request_firewall_custom`) and rate limiting
+
+**Why Two Resource Types:**
+
+We use both deprecated and modern APIs due to a Cloudflare limitation:
+
+1. **Deprecated Filter/FirewallRule** (GET blocking)
+   - Already deployed, cannot be replaced without deleting
+   - Attempting to create new `http_request_firewall_custom` ruleset fails with: "A similar configuration with rules already exists"
+   - Will migrate to modern Ruleset API before June 2025 deprecation
+
+2. **Modern Ruleset** (Rate limiting)
+   - New resource, no migration conflict
+   - Free tier compatible (deprecated RateLimit requires paid plan)
+   - Future-proof until 2026+
+
+**Future Migration Path:**
+
+Before June 2025, delete the deprecated resources and recreate using modern Ruleset:
+
+```bash
+# 1. Delete deprecated resources via Pulumi
+pulumi state delete 'urn:pulumi:prod::oceanid-cloud::cloudflare:index/filter:Filter::graphql-get-filter'
+pulumi state delete 'urn:pulumi:prod::oceanid-cloud::cloudflare:index/firewallRule:FirewallRule::graphql-get-block'
+
+# 2. Update code to use Ruleset for GET blocking
+# 3. Deploy via GitHub Actions
+```
+
 ## Stack Configuration
 
 **Stack:** `ryan-taylor/oceanid-cloud/prod`
