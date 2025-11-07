@@ -405,6 +405,48 @@ if (enableGpuAccess && cfAccessServiceTokenId) {
     });
 }
 
+// PostGraphile API protection with dual authentication (users + services)
+// CORS is handled by PostGraphile itself (apps/postgraphile/server.js)
+const postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
+    zoneId: cloudflareZoneId,
+    name: "PostGraphile GraphQL API",
+    domain: "graph.boathou.se",
+    type: "self_hosted",
+    sessionDuration: "24h",
+});
+
+// Policy 1: Allow Goldfish team members via GitHub SSO
+new cloudflare.AccessPolicy("postgraphile-access-github", {
+    applicationId: postgraphileAccessApp.id,
+    zoneId: cloudflareZoneId,
+    name: "Goldfish Team (GitHub SSO)",
+    precedence: 1,
+    decision: "allow",
+    includes: [
+        {
+            github: {
+                name: "goldfish-inc",
+                teams: ["all"], // Allow all org members
+            },
+        } as any,
+    ],
+});
+
+// Policy 2: Allow backend services via service tokens (bypass interactive auth)
+const postgraphileServiceTokenId = cfg.get("postgraphileServiceTokenId");
+if (postgraphileServiceTokenId) {
+    new cloudflare.AccessPolicy("postgraphile-access-service-token", {
+        applicationId: postgraphileAccessApp.id,
+        zoneId: cloudflareZoneId,
+        name: "Backend Services (Service Token)",
+        precedence: 2,
+        decision: "bypass",
+        includes: [
+            { serviceTokens: [postgraphileServiceTokenId] } as any,
+        ],
+    });
+}
+
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
@@ -414,6 +456,7 @@ export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
+export const postgraphileAccessAppId = postgraphileAccessApp.id;
 export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
