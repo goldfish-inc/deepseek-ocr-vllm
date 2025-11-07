@@ -54,6 +54,21 @@ the **@ebisu globalDB** (maritime intelligence platform).
 
 See [CLAUDE.md](CLAUDE.md) for AI assistant guidelines and [docs/RESOURCE_OWNERSHIP.md](docs/RESOURCE_OWNERSHIP.md) for resource ownership contract.
 
+### Observability Split
+
+Observability (dashboards, alerts, SLOs) is being moved to a dedicated project/repository to decouple runtime telemetry from this infra/data repo. In this repo we will retain only:
+- WAF and tunnel configs under `cloud/` (security controls)
+- Any base ServiceMonitor/metrics endpoints required for cluster health
+
+The `dashboards/` directory remains for now as legacy artifacts and will be migrated to the new observability project.
+
+### Key Docs
+
+- EBISU Pipeline Workflows (Ingress/Egress): docs/EBISU_PIPELINE_WORKFLOWS.md
+- Collision Review UI RFC (separate project): docs/RFC_UI_COLLISION_REVIEW.md
+- EBISU Data Dictionary: docs/ebisu-data-dictionary.md
+- EBISU Implementation Summary: docs/EBISU_IMPLEMENTATION_SUMMARY.md
+
 ## Getting Started
 
 ```bash

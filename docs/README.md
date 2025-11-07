@@ -23,4 +23,11 @@ This index highlights what SMEs and operators need for launch. Legacy architectu
 - Operations overview: docs/operations/overview.md
 - ML backend & ingest: docs/operations/ml-backend-and-ingest.md
 
+## EBISU (Production)
+
+- Pipeline workflows (ingress/egress): docs/EBISU_PIPELINE_WORKFLOWS.md
+- Data dictionary: docs/ebisu-data-dictionary.md
+- Implementation summary & runbook: docs/EBISU_IMPLEMENTATION_SUMMARY.md
+- Collision Review UI RFC (separate project): docs/RFC_UI_COLLISION_REVIEW.md
+
 If you need any of the archived architecture or migration docs later, retrieve them from git history.
