@@ -327,23 +327,23 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
 
 // Rate limiting rule for all requests to /graphql
 // Free tier constraints: period must be 10s (not 60s)
-// Adjusted from 120 req/60s to 20 req/10s (maintains same rate)
+// Reduced to 5 req/10s (30 req/min) to prevent data exfiltration
 const graphqlRateLimitRuleset = new cloudflare.Ruleset("graphql-ratelimit-ruleset", {
     zoneId: cloudflareZoneId,
     name: "PostGraphile Rate Limit",
-    description: "Rate limit for /graphql endpoint (20 req/10s = 120 req/min)",
+    description: "Rate limit for /graphql endpoint (5 req/10s = 30 req/min)",
     kind: "zone",
     phase: "http_ratelimit",
     rules: [
         {
             action: "block",
             expression: '(http.host eq "graph.boathou.se" and http.request.uri.path eq "/graphql")',
-            description: "Rate limit /graphql: 20 req/10s per IP+colo",
+            description: "Rate limit /graphql: 5 req/10s per IP+colo",
             enabled: true,
             ratelimit: {
                 characteristics: ["cf.colo.id", "ip.src"],
                 period: 10, // Free tier only allows 10s
-                requestsPerPeriod: 20, // 20/10s = 120/60s
+                requestsPerPeriod: 5, // 5/10s = 30/60s (reduced from 120/min for security)
                 mitigationTimeout: 10, // Free tier only allows 10s
             },
         },
