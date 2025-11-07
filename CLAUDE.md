@@ -58,6 +58,26 @@ pulumi config set --secret labelStudioPat "value"
 
 **Key secrets**: `labelStudioPat`, `labelStudioDbUrl`, `postgresPassword`, AWS creds
 
+### 1Password Vaults
+**CRITICAL**: Use ONLY these vaults for secrets. Never search entire `op` inventory.
+
+**Authorized vaults**:
+- **Development**: UUID `ddqqn2cxmgi4xl4rris4mztwea`
+- **Infrastructure**: UUID `umiwex27w4s2blyi5uplrhsjge`
+
+**Access pattern**:
+```bash
+# Correct - specify vault by UUID
+op read "op://ddqqn2cxmgi4xl4rris4mztwea/ItemName/credential"
+
+# Wrong - generic search across all vaults
+op item list | grep something
+```
+
+**Hugging Face token**:
+- Setup via `hf auth login` (preferred)
+- OR stored in Development vault: UUID `5zmjz55o2bnv7fq6tfgpvzi3je`
+
 ### Database
 **Crunchy Bridge** (Ebisu): DB `labelfish`, user `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
 **ESC key**: `oceanid-cluster:labelStudioDbUrl`
