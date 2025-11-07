@@ -261,13 +261,13 @@ spec:
               memory: 2Gi
           livenessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /health
               port: 6900
             initialDelaySeconds: 60
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /health
               port: 6900
             initialDelaySeconds: 30
             periodSeconds: 10
