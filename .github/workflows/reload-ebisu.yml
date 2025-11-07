@@ -1,0 +1,77 @@
+name: Reload EBISU
+
+'on':
+  workflow_dispatch:
+    inputs:
+      parquet_path:
+        description: Optional Parquet path (default data/mvp/vessels_mvp.parquet)
+        required: false
+
+jobs:
+  reload:
+    runs-on: ubuntu-latest
+    env:
+      CB_HOST: ${{ secrets.CRUNCHY_BRIDGE_HOST }}
+      CB_PORT: ${{ secrets.CRUNCHY_BRIDGE_PORT }}
+      CB_USER: ${{ secrets.CRUNCHY_BRIDGE_USER }}
+      CB_PASS: ${{ secrets.CRUNCHY_BRIDGE_PASSWORD }}
+      CB_DB: ${{ secrets.CRUNCHY_BRIDGE_DATABASE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+
+      - name: Install DuckDB CLI
+        run: |
+          curl -L -o duckdb.zip https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip
+          unzip -o duckdb.zip
+          chmod +x duckdb
+
+      - name: Resolve Parquet path
+        id: p
+        run: |
+          P=${{ github.event.inputs.parquet_path }}
+          if [ -z "$P" ]; then P="data/mvp/vessels_mvp.parquet"; fi
+          echo "path=$P" >> $GITHUB_OUTPUT
+
+      - name: Stage Parquet → stage.vessels_load
+        run: |
+          make cb.stage.load PARQUET='${{ steps.p.outputs.path }}' DUCKDB=./duckdb
+
+      - name: Normalize (process batch) and apply views
+        run: |
+          make cb.ebisu.process
+          make cb.schema
+
+      - name: Run quality gates
+        run: |
+          make cb.test.schema
+
+      - name: Summary
+        run: |
+          echo '### EBISU reload summary' >> $GITHUB_STEP_SUMMARY
+          psql "postgresql://${CB_USER}:${CB_PASS}@${CB_HOST}:${CB_PORT:-5432}/${CB_DB}?sslmode=require" -XtAc "\
+          SELECT 'vessels' AS k, COUNT(*) FROM ebisu.vessels UNION ALL \
+          SELECT 'history', COUNT(*) FROM ebisu.vessel_reported_history UNION ALL \
+          SELECT 'sources', COUNT(*) FROM ebisu.original_sources_vessels UNION ALL \
+          SELECT 'vessel_sources', COUNT(*) FROM ebisu.vessel_sources UNION ALL \
+          SELECT 'source_identifiers', COUNT(*) FROM ebisu.vessel_source_identifiers UNION ALL \
+          SELECT 'collisions', COUNT(*) FROM ebisu.load_collisions UNION ALL \
+          SELECT 'open_collision_reviews', COUNT(*) FROM public.ui_collision_review_queue WHERE status IN ('NEW'::ebisu.review_status_enum, 'ACKNOWLEDGED'::ebisu.review_status_enum)\
+          " | sed 's/|/ | /g' >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          echo '### Top unresolved collisions (by count)' >> $GITHUB_STEP_SUMMARY
+          psql "postgresql://${CB_USER}:${CB_PASS}@${CB_HOST}:${CB_PORT:-5432}/${CB_DB}?sslmode=require" -XtAc "\
+          SELECT 'open_top' AS k, (id_type || ':' || id_value || ' (' || collisions_count || ')') \
+          FROM public.ui_collision_review_queue \
+          WHERE status IN ('NEW'::ebisu.review_status_enum, 'ACKNOWLEDGED'::ebisu.review_status_enum) \
+          ORDER BY collisions_count DESC, last_detected DESC \
+          LIMIT 5\
+          " | sed 's/|/ | /g' >> $GITHUB_STEP_SUMMARY
