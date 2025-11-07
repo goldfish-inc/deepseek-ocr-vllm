@@ -290,6 +290,13 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
                 },
             },
             {
+                hostname: "label.boathou.se",
+                service: "http://argilla.apps.svc.cluster.local:6900",
+                originRequest: {
+                    noTlsVerify: true,
+                },
+            },
+            {
                 hostname: "graph.boathou.se",
                 service: "http://postgraphile.apps.svc.cluster.local:8080",
                 originRequest: {

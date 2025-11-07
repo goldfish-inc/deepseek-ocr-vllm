@@ -246,6 +246,28 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
     }
 })();
 
+// Argilla secrets (workspace DB + admin account)
+// ESC config: argillaPostgresPassword, argillaAuthSecret, argillaAdminPassword, argillaAdminApiKey
+(() => {
+    const cfg = new pulumi.Config();
+    const postgresPassword = cfg.getSecret("argillaPostgresPassword");
+    const authSecret = cfg.getSecret("argillaAuthSecret");
+    const adminPassword = cfg.getSecret("argillaAdminPassword");
+    const adminApiKey = cfg.getSecret("argillaAdminApiKey");
+    if (postgresPassword && authSecret && adminPassword && adminApiKey) {
+        new k8s.core.v1.Secret("argilla-secrets", {
+            metadata: { name: "argilla-secrets", namespace: "apps" },
+            type: "Opaque",
+            stringData: {
+                POSTGRES_PASSWORD: postgresPassword,
+                AUTH_SECRET_KEY: authSecret,
+                ADMIN_PASSWORD: adminPassword,
+                ADMIN_API_KEY: adminApiKey,
+            },
+        }, { provider: k8sProvider, parent: appsNamespace });
+    }
+})();
+
 
 // Verification: DB ingest check (stage.table_ingest)
 // Temporarily disabled to avoid blocking deploys. Re-enable behind config in future.
