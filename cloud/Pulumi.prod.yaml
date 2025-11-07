@@ -54,10 +54,6 @@ config:
   oceanid-cloud:k3sToken:
     secure: AAABAI5gtCygDEnOS1GIGxZuc2IdGVv/T/j2nxefiy6ptGI3FY/cXHf+VGpAhQHBeu8I08IO/hi8fVT7/QiVBzV6jmzmEcQ2EuQ/6UKklhlyKkMFDuK7y5npDDuIbXEPncoiuSDv0ArQztV3Zhq/islQUf874a21FAOfBNYlGlo0dE1PqhAtT/sMTc8=
   oceanid-cloud:cloudflareAccountId: 8fa97474778c8a894925c148ca829739
-  oceanid-cloud:postgraphileServiceTokenId:
-    secure: AAABAChnNXad3TxovJtSwc0cAmcsWHU1vKNXhW3J4ZK46cj6GQuJHS8B1ryqrIjyl0BPvpOuJ38FVhZVJ9TTrtb/wYk9Mww=
-  oceanid-cloud:postgraphileServiceTokenSecret:
-    secure: AAABADLEzyE/wQG3ZirDySz6HWkcKU4mINkSaiQKcCYwT8wZA9YdF1IIOkd6H45ONL5WzmpP65dHvNb/UO6Yxj9lLNcSdMXzj4RGO79oqUJujiuAAvJENEGZSlwv+Sx0
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
