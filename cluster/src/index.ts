@@ -278,8 +278,8 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
     }
 })();
 
-// Argilla secrets (workspace DB + admin account + Upstash Redis)
-// ESC config: argillaPostgresPassword, argillaAuthSecret, argillaAdminPassword, argillaAdminApiKey, argillaRedisUrl
+// Argilla secrets (workspace DB + admin account + Upstash Redis + Hugging Face)
+// ESC config: argillaPostgresPassword, argillaAuthSecret, argillaAdminPassword, argillaAdminApiKey, argillaRedisUrl, huggingFaceToken
 (() => {
     const cfg = new pulumi.Config();
     const postgresPassword = cfg.requireSecret("argillaPostgresPassword");
@@ -287,6 +287,7 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
     const adminPassword = cfg.requireSecret("argillaAdminPassword");
     const adminApiKey = cfg.requireSecret("argillaAdminApiKey");
     const redisUrl = cfg.requireSecret("argillaRedisUrl");
+    const huggingFaceToken = cfg.requireSecret("huggingFaceToken");
 
     new k8s.core.v1.Secret("argilla-secrets", {
         metadata: { name: "argilla-secrets", namespace: "apps" },
@@ -297,6 +298,7 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
             ADMIN_PASSWORD: adminPassword,
             ADMIN_API_KEY: adminApiKey,
             REDIS_URL: redisUrl,
+            HF_TOKEN: huggingFaceToken,
         },
     }, { provider: k8sProvider, parent: appsNamespace });
 })();
