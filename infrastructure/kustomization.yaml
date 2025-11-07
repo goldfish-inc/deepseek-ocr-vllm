@@ -7,5 +7,5 @@ resources:
   # See TAILSCALE_DAEMONSET_INCIDENT_2025-10-13.md and RECOVERY_PLAN_2025-10-13.md
   # - tailscale-daemonset.yaml
   - egress-gateway.yaml
-  - egress-network-policy.yaml
+  # Disabled: egress-network-policy.yaml.disabled
 # PKO is managed by Pulumi components, not Flux
