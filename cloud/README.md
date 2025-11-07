@@ -24,12 +24,19 @@ This Pulumi project manages **cloud-only resources** for the Oceanid platform. I
 
 The PostGraphile API uses Cloudflare Access with service-token-only authentication. No browser or public access is allowed.
 
-**Credentials (Pulumi-managed):**
+**Credentials (Manually Managed in Cloudflare Dashboard):**
+
+Service token **"PostGraphile Backend Services"** (non-expiring):
 
 ```bash
-# Retrieve current service token credentials
-pulumi stack output postgraphileServiceTokenClientId
-pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
+CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access
+CF-Access-Client-Secret: <stored in Pulumi ESC>
+```
+
+To retrieve the client secret:
+
+```bash
+pulumi config get cfAccessServiceTokenSecret --show-secrets
 ```
 
 **Backend Integration:**
@@ -37,49 +44,39 @@ pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
 All services calling `https://graph.boathou.se` must include these headers:
 
 ```bash
-CF-Access-Client-Id: b76bc9ad88b109b7ce279e30131e0442.access
-CF-Access-Client-Secret: c7e65f9849cde566badd5abeb3565bcf6d916a3250d34b35ff8313d5f98e746d
+CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access
+CF-Access-Client-Secret: <value from Pulumi ESC>
 ```
 
 **Example (curl):**
 
 ```bash
 curl https://graph.boathou.se/graphql \
-  -H "CF-Access-Client-Id: b76bc9ad88b109b7ce279e30131e0442.access" \
-  -H "CF-Access-Client-Secret: c7e65f9849cde566badd5abeb3565bcf6d916a3250d34b35ff8313d5f98e746d" \
+  -H "CF-Access-Client-Id: 7d9a2003d9c5fbd626a5f55e7eab1398.access" \
+  -H "CF-Access-Client-Secret: $(pulumi config get cfAccessServiceTokenSecret --show-secrets)" \
   -H "Content-Type: application/json" \
   -d '{"query": "{ __typename }"}'
 ```
 
 **Resources:**
 
-- `cloudflare:index:AccessServiceToken` - `postgraphile-service-token` (1 year duration)
+- Service Token: **PostGraphile Backend Services** (manually managed in Cloudflare dashboard)
+  - Token UUID: `9d715496-cf2d-4631-be19-93dc1c712f54`
+  - Duration: Non-expiring (expires 2125-10-14)
+  - Client ID stored in `Pulumi.prod.yaml:postgraphileServiceTokenId`
 - `cloudflare:index:AccessApplication` - `postgraphile-access-app` (graph.boathou.se)
 - `cloudflare:index:AccessPolicy` - `postgraphile-access-service-token` (precedence: 10)
 
-**Token Rotation:**
+**Token Management:**
 
-Service tokens are managed by Pulumi. To rotate:
+Service token is managed manually in Cloudflare dashboard to allow non-expiring duration. Pulumi references the existing token by UUID instead of creating/managing it.
 
-```bash
-# Delete and recreate the service token
-pulumi destroy --target cloudflare:index/accessServiceToken:AccessServiceToken::postgraphile-service-token
-pulumi up  # Creates new token with new credentials
-
-# Get new credentials
-pulumi stack output postgraphileServiceTokenClientId
-pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
-```
-
-**Configuration (cloud/src/index.ts:408-437):**
+**Configuration (cloud/src/index.ts:408-434):**
 
 ```typescript
-// Create service token for PostGraphile API access
-const postgraphileServiceToken = new cloudflare.AccessServiceToken("postgraphile-service-token", {
-    accountId: cloudflareAccountId,
-    name: "PostGraphile Platform Components",
-    duration: "8760h", // 1 year
-});
+// Use existing non-expiring service token "PostGraphile Backend Services"
+// Managed manually in Cloudflare dashboard for indefinite lifetime
+const postgraphileServiceTokenId = cfg.require("postgraphileServiceTokenId");
 
 const postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
     zoneId: cloudflareZoneId,
@@ -94,10 +91,10 @@ new cloudflare.AccessPolicy("postgraphile-access-service-token", {
     applicationId: postgraphileAccessApp.id,
     zoneId: cloudflareZoneId,
     name: "Platform Components (Service Token)",
-    precedence: 10,  // Unique precedence (GPU uses 1)
+    precedence: 10,
     decision: "bypass",
     includes: [
-        { serviceTokens: [postgraphileServiceToken.id] } as any,
+        { serviceTokens: [postgraphileServiceTokenId] } as any,
     ],
 });
 ```
