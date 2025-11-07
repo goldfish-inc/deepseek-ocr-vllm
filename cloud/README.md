@@ -16,7 +16,91 @@ This Pulumi project manages **cloud-only resources** for the Oceanid platform. I
 - Kubernetes cluster resources (see `../cluster/` for K3s bootstrap)
 - Application workloads (managed by Flux GitOps in `../clusters/`)
 
-## Cloudflare WAF Protection
+## Cloudflare Access & WAF Protection
+
+### PostGraphile Authentication (graph.boathou.se)
+
+**Service Token Authentication:**
+
+The PostGraphile API uses Cloudflare Access with service-token-only authentication. No browser or public access is allowed.
+
+**Credentials (Pulumi-managed):**
+
+```bash
+# Retrieve current service token credentials
+pulumi stack output postgraphileServiceTokenClientId
+pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
+```
+
+**Backend Integration:**
+
+All services calling `https://graph.boathou.se` must include these headers:
+
+```bash
+CF-Access-Client-Id: b76bc9ad88b109b7ce279e30131e0442.access
+CF-Access-Client-Secret: c7e65f9849cde566badd5abeb3565bcf6d916a3250d34b35ff8313d5f98e746d
+```
+
+**Example (curl):**
+
+```bash
+curl https://graph.boathou.se/graphql \
+  -H "CF-Access-Client-Id: b76bc9ad88b109b7ce279e30131e0442.access" \
+  -H "CF-Access-Client-Secret: c7e65f9849cde566badd5abeb3565bcf6d916a3250d34b35ff8313d5f98e746d" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ __typename }"}'
+```
+
+**Resources:**
+
+- `cloudflare:index:AccessServiceToken` - `postgraphile-service-token` (1 year duration)
+- `cloudflare:index:AccessApplication` - `postgraphile-access-app` (graph.boathou.se)
+- `cloudflare:index:AccessPolicy` - `postgraphile-access-service-token` (precedence: 10)
+
+**Token Rotation:**
+
+Service tokens are managed by Pulumi. To rotate:
+
+```bash
+# Delete and recreate the service token
+pulumi destroy --target cloudflare:index/accessServiceToken:AccessServiceToken::postgraphile-service-token
+pulumi up  # Creates new token with new credentials
+
+# Get new credentials
+pulumi stack output postgraphileServiceTokenClientId
+pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
+```
+
+**Configuration (cloud/src/index.ts:408-437):**
+
+```typescript
+// Create service token for PostGraphile API access
+const postgraphileServiceToken = new cloudflare.AccessServiceToken("postgraphile-service-token", {
+    accountId: cloudflareAccountId,
+    name: "PostGraphile Platform Components",
+    duration: "8760h", // 1 year
+});
+
+const postgraphileAccessApp = new cloudflare.AccessApplication("postgraphile-access-app", {
+    zoneId: cloudflareZoneId,
+    name: "PostGraphile GraphQL API",
+    domain: "graph.boathou.se",
+    type: "self_hosted",
+    sessionDuration: "24h",
+});
+
+// Service token bypass for platform components only
+new cloudflare.AccessPolicy("postgraphile-access-service-token", {
+    applicationId: postgraphileAccessApp.id,
+    zoneId: cloudflareZoneId,
+    name: "Platform Components (Service Token)",
+    precedence: 10,  // Unique precedence (GPU uses 1)
+    decision: "bypass",
+    includes: [
+        { serviceTokens: [postgraphileServiceToken.id] } as any,
+    ],
+});
+```
 
 ### PostGraphile API Protection (graph.boathou.se/graphql)
 
@@ -383,13 +467,16 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUr
 Current exports:
 
 ```typescript
-export const clusterId: pulumi.Output<string>          // CrunchyBridge cluster ID
-export const clusterHost: pulumi.Output<string>        // Database hostname
-export const clusterStatus: pulumi.Output<string>      // Cluster state (ready/provisioning)
-export const connectionUrl: pulumi.Output<string>      // PostgreSQL connection URL (secret)
-export const k3sDnsRecord: pulumi.Output<string>       // k3s.boathou.se record ID
-export const gpuDnsRecord: pulumi.Output<string>       // gpu.boathou.se record ID
-export const labelStudioAccessId: pulumi.Output<string> // Access app ID
+export const clusterId: pulumi.Output<string>                          // CrunchyBridge cluster ID
+export const clusterHost: pulumi.Output<string>                        // Database hostname
+export const clusterStatus: pulumi.Output<string>                      // Cluster state (ready/provisioning)
+export const connectionUrl: pulumi.Output<string>                      // PostgreSQL connection URL (secret)
+export const k3sDnsRecord: pulumi.Output<string>                       // k3s.boathou.se record ID
+export const gpuDnsRecord: pulumi.Output<string>                       // gpu.boathou.se record ID
+export const labelStudioAccessId: pulumi.Output<string>                // Access app ID
+export const postgraphileAccessAppId: pulumi.Output<string>            // PostGraphile Access app ID
+export const postgraphileServiceTokenClientId: pulumi.Output<string>   // Service token client ID
+export const postgraphileServiceTokenClientSecret: pulumi.Output<string> // Service token secret
 ```
 
 View outputs:
@@ -397,6 +484,8 @@ View outputs:
 ```bash
 pulumi stack output clusterId
 pulumi stack output connectionUrl --show-secrets
+pulumi stack output postgraphileServiceTokenClientId
+pulumi stack output postgraphileServiceTokenClientSecret --show-secrets
 ```
 
 ## Resource Protection
