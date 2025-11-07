@@ -198,7 +198,7 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              export ARGILLA_DATABASE_URL="postgresql://${ARGILLA_DATABASE_USER}:${ARGILLA_DATABASE_PASSWORD}@${ARGILLA_DATABASE_HOST}:${ARGILLA_DATABASE_PORT}/${ARGILLA_DATABASE_NAME}"
+              export ARGILLA_DATABASE_URL="postgresql://${ARGILLA_DATABASE_USER}:${ARGILLA_DATABASE_PASSWORD}@${ARGILLA_DATABASE_HOST}:${ARGILLA_DATABASE_PORT}/${ARGILLA_DATABASE_NAME}?sslmode=disable"
               exec python -m argilla_server start
           ports:
             - containerPort: 6900
