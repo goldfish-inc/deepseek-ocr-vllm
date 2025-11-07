@@ -1,4 +1,69 @@
 ---
+# Redis for Argilla job queue
+apiVersion: v1
+kind: Service
+metadata:
+  name: argilla-redis
+  namespace: apps
+  labels:
+    app: argilla-redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: argilla-redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argilla-redis
+  namespace: apps
+  labels:
+    app: argilla-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argilla-redis
+  template:
+    metadata:
+      labels:
+        app: argilla-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
 # Elasticsearch for Argilla search engine
 apiVersion: v1
 kind: Service
@@ -209,6 +274,8 @@ spec:
             # Elasticsearch connection
             - name: ARGILLA_ELASTICSEARCH
               value: http://argilla-elasticsearch:9200
+            - name: ARGILLA_REDIS_URL
+              value: redis://argilla-redis:6379/0
             # PostgreSQL connection components (used to construct DATABASE_URL)
             - name: ARGILLA_DATABASE_HOST
               value: argilla-postgres
