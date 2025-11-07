@@ -195,6 +195,11 @@ spec:
       containers:
         - name: argilla
           image: argilla/argilla-server:v2.8.0
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              export ARGILLA_DATABASE_URL="postgresql://${ARGILLA_DATABASE_USER}:${ARGILLA_DATABASE_PASSWORD}@${ARGILLA_DATABASE_HOST}:${ARGILLA_DATABASE_PORT}/${ARGILLA_DATABASE_NAME}"
+              exec python -m argilla_server
           ports:
             - containerPort: 6900
               name: http
@@ -204,7 +209,7 @@ spec:
             # Elasticsearch connection
             - name: ARGILLA_ELASTICSEARCH
               value: http://argilla-elasticsearch:9200
-            # PostgreSQL connection (Argilla constructs URL from components)
+            # PostgreSQL connection components (used to construct DATABASE_URL)
             - name: ARGILLA_DATABASE_HOST
               value: argilla-postgres
             - name: ARGILLA_DATABASE_PORT
