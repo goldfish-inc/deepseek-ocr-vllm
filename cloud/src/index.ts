@@ -424,10 +424,9 @@ new cloudflare.AccessPolicy("postgraphile-access-github", {
     decision: "allow",
     includes: [
         {
-            github: {
+            githubs: [{
                 name: "goldfish-inc",
-                teams: ["all"], // Allow all org members
-            },
+            }],
         } as any,
     ],
 });
