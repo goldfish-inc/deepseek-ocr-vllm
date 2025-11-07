@@ -48,17 +48,19 @@ supabase.load: parquet ## Load $(PARQUET) into Supabase Postgres (requires SUPAB
 
 # CrunchyBridge env: CB_HOST, CB_PORT (default 5432), CB_USER, CB_PASS, CB_DB
 cb.load.parquet: parquet ## Load $(PARQUET) into CrunchyBridge via DuckDB (CTAS)
-	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
-	$(DUCKDB) -c "INSTALL postgres; LOAD postgres; \
-	ATTACH 'pg' (TYPE POSTGRES, HOST '$$CB_HOST', PORT $${CB_PORT:-5432}, USER '$$CB_USER', PASSWORD '$$CB_PASS', DATABASE '$$CB_DB'); \
-	CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM read_parquet('$(PARQUET)');"
+    @if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+    CONN_URL="postgresql://$${CB_USER}:$${CB_PASS}@$${CB_HOST}:$${CB_PORT:-5432}/$${CB_DB}?sslmode=require"; \
+    $(DUCKDB) -c "INSTALL postgres; LOAD postgres; \
+    ATTACH 'pg' (TYPE POSTGRES, CONNECTION '$$CONN_URL'); \
+    CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM read_parquet('$(PARQUET)');"
 
 cb.load.md: ## Copy MotherDuck md.vessels → CrunchyBridge (requires MOTHERDUCK_TOKEN + CB_* env)
 	@if [[ -z "$$MOTHERDUCK_TOKEN" ]]; then echo "MOTHERDUCK_TOKEN not set"; exit 1; fi
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
-	$(DUCKDB) -c "INSTALL motherduck; LOAD motherduck; SET motherduck_token='$$MOTHERDUCK_TOKEN'; ATTACH 'md:vessels_demo' AS md; \
-	INSTALL postgres; LOAD postgres; ATTACH 'pg' (TYPE POSTGRES, HOST '$$CB_HOST', PORT $${CB_PORT:-5432}, USER '$$CB_USER', PASSWORD '$$CB_PASS', DATABASE '$$CB_DB'); \
-	CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM md.vessels;"
+    CONN_URL="postgresql://$${CB_USER}:$${CB_PASS}@$${CB_HOST}:$${CB_PORT:-5432}/$${CB_DB}?sslmode=require"; \
+    $(DUCKDB) -c "INSTALL motherduck; LOAD motherduck; SET motherduck_token='$$MOTHERDUCK_TOKEN'; ATTACH 'md:vessels_demo' AS md; \
+    INSTALL postgres; LOAD postgres; ATTACH 'pg' (TYPE POSTGRES, CONNECTION '$$CONN_URL'); \
+    CREATE OR REPLACE TABLE pg.vessels AS SELECT * FROM md.vessels;"
 
 cb.index: ## Add PK + indexes to CrunchyBridge vessels table (deprecated: use cb.schema)
 	@echo "DEPRECATED: Use 'make cb.schema' instead for full schema setup (extensions, indexes, functions, views)"
@@ -68,11 +70,15 @@ cb.index: ## Add PK + indexes to CrunchyBridge vessels table (deprecated: use cb
 	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_imo_idx ON vessels(imo);"
 	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "CREATE INDEX IF NOT EXISTS vessels_mmsi_idx ON vessels(mmsi);"
 
-cb.schema: ## Apply full schema (extensions, indexes, functions, views) from sql/vessels_lookup.sql
+
+cb.schema: ## Apply full schema (extensions, indexes, functions, views) from SQL files
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
 	@if [[ ! -f sql/vessels_lookup.sql ]]; then echo "sql/vessels_lookup.sql not found"; exit 1; fi
 	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/vessels_lookup.sql
-	@echo "Schema applied successfully (extensions, indexes, functions, views)"
+	@if [[ -f sql/ebisu_admin.sql ]]; then \
+	  PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/ebisu_admin.sql; \
+	fi
+	@echo "Schema applied successfully (views/functions + admin objects)"
 
 cb.normalize: ## Normalize vessels column names to lowercase
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
@@ -82,6 +88,34 @@ cb.normalize: ## Normalize vessels column names to lowercase
 
 cb.full: cb.load.parquet cb.normalize cb.schema ## Full pipeline: load parquet → normalize columns → apply schema
 	@echo "Full Crunchy Bridge setup complete"
+
+.PHONY: cb.stage.load cb.ebisu.process cb.ebisu.full
+cb.stage.load: parquet ## Stage Parquet rows into stage.vessels_load (adds batch metadata)
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	SUPABASE_PG="postgresql+psycopg2://$${CB_USER}:$${CB_PASS}@$${CB_HOST}:$${CB_PORT:-5432}/$${CB_DB}?sslmode=require" \
+		$(PY) scripts/load_supabase.py $(PARQUET) --stage
+
+cb.ebisu.process: ## Run ebisu.process_vessel_load for latest batch
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	@if [[ ! -f sql/ebisu_transform.sql || ! -f sql/ebisu_stage.sql ]]; then echo "ebisu SQL not found"; exit 1; fi
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/ebisu_stage.sql
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/ebisu_transform.sql
+	# Determine latest batch and process
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -tAc "SELECT coalesce(max(batch_id)::text,'') FROM stage.load_batches;" | {
+		read BID; \
+		if [[ -z "$$BID" ]]; then echo 'No batch found in stage.load_batches'; exit 1; fi; \
+		echo "Processing batch $$BID"; \
+		PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -c "SELECT ebisu.process_vessel_load('$$BID'::uuid);"; \
+	}
+
+cb.ebisu.full: cb.stage.load cb.ebisu.process cb.schema ## Stage → Normalize → Views/Functions
+	@echo "EBISU end-to-end refresh completed"
+
+.PHONY: cb.test.schema
+cb.test.schema: ## Run EBISU schema quality assertions (fails on violations)
+	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
+	@if [[ ! -f sql/tests/quality_assertions.sql ]]; then echo "sql/tests/quality_assertions.sql not found"; exit 1; fi
+	PGPASSWORD=$$CB_PASS psql -h $$CB_HOST -p $${CB_PORT:-5432} -U $$CB_USER -d $$CB_DB -v ON_ERROR_STOP=1 -f sql/tests/quality_assertions.sql
 
 graphql.cb: ## Start PostGraphile against CrunchyBridge (read-only recommended)
 	@if [[ -z "$$CB_HOST" || -z "$$CB_USER" || -z "$$CB_PASS" || -z "$$CB_DB" ]]; then echo "Set CB_HOST, CB_USER, CB_PASS, CB_DB (CB_PORT optional)"; exit 1; fi
