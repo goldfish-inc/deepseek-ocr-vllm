@@ -1,0 +1,23 @@
+name = "vessel-ner-argilla-sync"
+main = "src/workers/argilla-sync.ts"
+compatibility_date = "2025-01-07"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "8fa97474778c8a894925c148ca829739"
+
+# Queue consumer
+[[queues.consumers]]
+queue = "argilla-sync"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "argilla-sync-dlq"
+
+# Environment variables
+[vars]
+ARGILLA_API_URL = "http://argilla.apps.svc.cluster.local:6900"
+MOTHERDUCK_DATABASE = "vessel_intelligence"
+
+# Secrets
+# MOTHERDUCK_TOKEN
+# ARGILLA_API_KEY

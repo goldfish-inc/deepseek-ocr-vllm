@@ -1,0 +1,33 @@
+name = "vessel-ner-ocr-processor"
+main = "src/workers/ocr-processor.ts"
+compatibility_date = "2025-01-07"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "8fa97474778c8a894925c148ca829739"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "VESSEL_PDFS"
+bucket_name = "vessel-pdfs"
+
+# Queue consumer
+[[queues.consumers]]
+queue = "pdf-processing"
+max_batch_size = 1
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "pdf-processing-dlq"
+
+# Queue producer (for entity-extraction)
+[[queues.producers]]
+queue = "entity-extraction"
+binding = "ENTITY_EXTRACTION_QUEUE"
+
+# Environment variables
+[vars]
+DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr"
+MOTHERDUCK_DATABASE = "vessel_intelligence"
+
+# Secrets (same as main worker)
+# MOTHERDUCK_TOKEN
+# HF_TOKEN

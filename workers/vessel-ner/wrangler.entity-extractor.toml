@@ -1,0 +1,29 @@
+name = "vessel-ner-entity-extractor"
+main = "src/workers/entity-extractor.ts"
+compatibility_date = "2025-01-07"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "8fa97474778c8a894925c148ca829739"
+
+# Queue consumer
+[[queues.consumers]]
+queue = "entity-extraction"
+max_batch_size = 5
+max_batch_timeout = 60
+max_retries = 3
+dead_letter_queue = "entity-extraction-dlq"
+
+# Queue producer (for argilla-sync)
+[[queues.producers]]
+queue = "argilla-sync"
+binding = "ARGILLA_SYNC_QUEUE"
+
+# Environment variables
+[vars]
+MOTHERDUCK_DATABASE = "vessel_intelligence"
+DGX_SPARK_ENDPOINT = "https://ollama-api.boathou.se"
+
+# Secrets
+# MOTHERDUCK_TOKEN
+# AIG_AUTH_TOKEN (AI Gateway auth for Ollama endpoint)
+# NOTE: No ANTHROPIC_API_KEY needed - using DGX Spark Ollama (100% private, $0 cost)

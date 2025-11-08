@@ -1,0 +1,50 @@
+name = "vessel-ner-pipeline"
+main = "src/index.ts"
+compatibility_date = "2025-01-07"
+compatibility_flags = ["nodejs_compat"]
+
+# Account ID (Cloudflare account)
+account_id = "8fa97474778c8a894925c148ca829739"
+
+# ============================================================================
+# R2 BUCKETS
+# ============================================================================
+
+[[r2_buckets]]
+binding = "VESSEL_PDFS"
+bucket_name = "vessel-pdfs"
+
+# ============================================================================
+# QUEUES
+# ============================================================================
+
+[[queues.producers]]
+queue = "pdf-processing"
+binding = "PDF_PROCESSING_QUEUE"
+
+[[queues.producers]]
+queue = "entity-extraction"
+binding = "ENTITY_EXTRACTION_QUEUE"
+
+[[queues.producers]]
+queue = "argilla-sync"
+binding = "ARGILLA_SYNC_QUEUE"
+
+# Queue consumers defined in separate worker configs
+
+# ============================================================================
+# SECRETS (set via: wrangler secret put <NAME>)
+# ============================================================================
+# MOTHERDUCK_TOKEN - MotherDuck API token
+# ANTHROPIC_API_KEY - Claude API key
+# HF_TOKEN - HuggingFace token for DeepSeek OCR Space
+# ARGILLA_API_KEY - Argilla admin API key
+
+# ============================================================================
+# ENVIRONMENT VARIABLES
+# ============================================================================
+
+[vars]
+DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr"
+ARGILLA_API_URL = "http://argilla.apps.svc.cluster.local:6900"
+MOTHERDUCK_DATABASE = "vessel_intelligence"
