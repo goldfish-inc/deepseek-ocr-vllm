@@ -69,7 +69,7 @@ ssh spark-291b 'curl -s http://localhost:11434/api/tags | jq ".models[0].name"'
 **Service Token:**
 - **ID**: `f4c14d9b-611e-48bb-b696-40f4425e64e4`
 - **Client ID**: `a1ad143d0d633ec38d44fd230a285fc8.access`
-- **Secret**: Stored in 1Password (vault: Development, UUID: 5zmjz55o2bnv7fq6tfgpvzi3je)
+- **Secret**: Stored in Pulumi ESC (`dgx-spark:accessClientSecret`)
 
 **Known Issues:**
 - Requests to `https://ollama.goldfish.io/api/tags` return HTTP 403
@@ -109,6 +109,28 @@ The tunnel configuration is managed via Cloudflare API:
 ollama.goldfish.io → 75a07d1a-0bc7-485f-86b2-ce676d7d1c35.cfargotunnel.com (CNAME, Proxied)
 ```
 
+## CI/CD
+
+This repository includes an automated workflow for Spark tunnel deployment:
+
+- Workflow: `.github/workflows/spark-ollama.yml`
+- Triggers: changes under `infrastructure/spark/**`, manual dispatch
+- Strategy: deploys on a self-hosted GitHub runner installed on the DGX host (label: `spark`)
+- Secrets: All secrets stored in Pulumi ESC (following `docs/SECRETS_MANAGEMENT.md`)
+  - `PULUMI_CONFIG_PASSPHRASE` (GitHub Secret - required to decrypt ESC)
+  - `dgx-spark:cloudflareTunnelToken` (Pulumi ESC)
+  - `dgx-spark:accessClientId` (Pulumi ESC)
+  - `dgx-spark:accessClientSecret` (Pulumi ESC)
+
+Runner setup (once on DGX):
+
+1. Install a self-hosted runner and add label `spark`.
+2. Ensure `cloudflared` is installed at `/usr/local/bin/cloudflared`.
+3. Verify `sudo` access for the runner user to manage `systemd`.
+4. Ensure Pulumi CLI is installed (workflow auto-installs if missing).
+
+Manual dispatch can skip the remote Access probe while #289 is active.
+
 ## Architecture
 
 ```
@@ -139,14 +161,20 @@ ollama.goldfish.io → 75a07d1a-0bc7-485f-86b2-ce676d7d1c35.cfargotunnel.com (CN
 
 ## Secrets Management
 
-**Tunnel Token:**
-- Store in Pulumi ESC: `dgx-spark:cloudflareTunnelToken`
-- Value: `eyJhIjoiOGZhOTc0NzQ3NzhjOGE4OTQ5MjVjMTQ4Y2E4Mjk3MzkiLCJ0IjoiNzVhMDdkMWEtMGJjNy00ODVmLTg2YjItY2U2NzZkN2QxYzM1IiwicyI6Ilp4WXcrbnBZaDBFamk1WEtKcWo4U1VQSTFmMThubHVWMXd6NG8yb2JpdE09In0=`
+All secrets are stored in Pulumi ESC following `docs/SECRETS_MANAGEMENT.md`:
 
-**Service Token Secret:**
-- Store in 1Password: Development vault
-- Item: "DGX Spark Ollama Tunnel Access"
-- Secret: `b0a39081611c6e21bc50d5fd092e5be914f5dc17d95054e94d7b904b5269457d`
+**Tunnel Token:**
+- Pulumi ESC key: `dgx-spark:cloudflareTunnelToken`
+- Access: `pulumi config get dgx-spark:cloudflareTunnelToken --cwd cloud`
+
+**Access Service Token:**
+- Pulumi ESC keys: `dgx-spark:accessClientId`, `dgx-spark:accessClientSecret`
+- Access: `pulumi config get dgx-spark:accessClientId --cwd cloud`
+
+**Security:**
+- Do not commit or paste secret values in docs or code
+- Rotate immediately if exposure is suspected
+- All secrets encrypted at rest in Pulumi ESC
 
 ## Maintenance
 

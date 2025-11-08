@@ -1,0 +1,99 @@
+name: spark-ollama
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/spark/**'
+      - '.github/workflows/spark-ollama.yml'
+  pull_request:
+    paths:
+      - 'infrastructure/spark/**'
+      - '.github/workflows/spark-ollama.yml'
+  workflow_dispatch:
+    inputs:
+      skip_access_probe:
+        description: 'Skip remote Access probe (useful while #289 is open)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: spark-ollama-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  package:
+    name: Package artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create artifact
+        run: |
+          tar -czf spark-ollama.tar.gz -C infrastructure/spark .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spark-ollama
+          path: spark-ollama.tar.gz
+
+  deploy:
+    name: Deploy to DGX Spark (self-hosted)
+    # Requires a self-hosted runner installed on the DGX host, labeled: spark
+    runs-on: [self-hosted, spark]
+    needs: package
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pulumi CLI
+        run: |
+          if ! command -v pulumi >/dev/null 2>&1; then
+            curl -fsSL https://get.pulumi.com | sh
+            echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Deploy tunnel service
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        run: |
+          bash infrastructure/spark/deploy.sh
+
+      - name: Local smoke (Ollama)
+        run: |
+          curl -fsS http://localhost:11434/api/tags | jq -r '.models[0].name' || {
+            echo 'Local Ollama probe failed'; exit 1; }
+
+  access-probe:
+    name: Remote access probe (ollama.goldfish.io)
+    runs-on: [self-hosted, spark]
+    needs: deploy
+    if: ${{ github.event_name != 'pull_request' && inputs.skip_access_probe != true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probe via Cloudflare Access token
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+        run: |
+          # Get Access credentials from Pulumi ESC
+          CF_ACCESS_CLIENT_ID=$(pulumi config get dgx-spark:accessClientId --cwd cloud)
+          CF_ACCESS_CLIENT_SECRET=$(pulumi config get dgx-spark:accessClientSecret --cwd cloud)
+
+          if [[ -z "$CF_ACCESS_CLIENT_ID" || -z "$CF_ACCESS_CLIENT_SECRET" ]]; then
+            echo "No Access credentials in ESC; skipping probe."; exit 0; fi
+
+          set -x
+          curl -fsS \
+            -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
+            -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" \
+            https://ollama.goldfish.io/api/tags | jq -r '.models[0].name'
