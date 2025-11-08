@@ -1,13 +1,14 @@
 # Oceanid Cloud Infrastructure
 
-This Pulumi project manages **cloud-only resources** for the Oceanid platform. It runs in GitHub Actions with OIDC authentication and requires **no kubeconfig**.
+This Pulumi project manages **cloud-only resources** for the Oceanid platform. It runs in GitHub Actions with OIDC authentication and requires **no kubeconfig**. For how this stack fits into the broader CI/CD flow (cluster Pulumi + Flux + device runners), read [docs/operations/cicd-architecture.md](../docs/operations/cicd-architecture.md). For onboarding new tunnels/devices, follow [docs/operations/device-onboarding-cicd.md](../docs/operations/device-onboarding-cicd.md).
 
 ## Scope
 
 **Managed Resources:**
 
 - **Cloudflare DNS**: CNAME records for K3s API endpoint and GPU node access
-- **Cloudflare Access**: Zero Trust application gateways (Label Studio, etc.)
+- **Cloudflare Access**: Zero Trust application gateways (annotation UI, GPU endpoints, etc.)
+- **Cloudflare Workers**: Ollama API proxy with AI Gateway-style authentication
 - **CrunchyBridge**: Managed PostgreSQL 17 database cluster
 - **Pulumi ESC**: Shared secrets and configuration environment
 
@@ -18,11 +19,64 @@ This Pulumi project manages **cloud-only resources** for the Oceanid platform. I
 
 ## Cloudflare Access & WAF Protection
 
-### PostGraphile Authentication (graph.boathou.se)
+### PostGraphile API Architecture (Two-Endpoint Pattern)
+
+Oceanid exposes the PostGraphile GraphQL API through **two separate endpoints** with different authentication models:
+
+| Endpoint | Audience | Authentication | Use Case |
+|----------|----------|----------------|----------|
+| `/api/graphql` (Vercel BFF) | **Frontend (browsers)** | Supabase session | Vessel search UI, authenticated users |
+| `graph.boathou.se` (K8s) | **Backend services** | Cloudflare Access service token | CSV workers, annotation sink, internal tooling |
+
+**Why two endpoints?**
+
+- **Security**: Browser clients cannot securely store service tokens (exposed in client code)
+- **Isolation**: Service-to-service traffic separated from user traffic
+- **Performance**: Vercel BFF caches, K8s endpoint has persistent connection pool
+- **Flexibility**: Different rate limits, monitoring, and access policies per audience
+
+#### Frontend Endpoint: `/api/graphql` (Vercel BFF)
+
+**Architecture:**
+```
+Browser → /api/graphql (Vercel) → Supabase auth validation → PostGraphile → CrunchyBridge
+```
+
+**Authentication:**
+- Supabase session token sent via `Authorization: Bearer <token>` header
+- BFF validates JWT signature and expiration
+- User ID forwarded to PostGraphile for row-level security (RLS)
+- No database credentials exposed to browser
+
+**Client Setup:**
+
+```ts
+import { graphileClient } from '@/lib/graphile-client'
+
+// Client automatically includes Supabase auth token
+const vessels = await graphileClient.request(gql`
+  query SearchVessels($q: String!) {
+    searchVessels(q: $q, limitN: 10) {
+      entityId
+      imo
+      mmsi
+      vesselName
+    }
+  }
+`, { q: 'TAISEI' })
+```
+
+**Abuse Protections:**
+- Request size limit: 100KB
+- Timeout: 30 seconds
+- GraphiQL disabled in production
+- Method restriction: POST only
+
+#### Backend Endpoint: `graph.boathou.se` (Service-to-Service)
 
 **Service Token Authentication:**
 
-The PostGraphile API uses Cloudflare Access with service-token-only authentication. No browser or public access is allowed.
+The K8s PostGraphile instance uses Cloudflare Access with service-token-only authentication. No browser or public access is allowed.
 
 **Credentials (Manually Managed in Cloudflare Dashboard):**
 
@@ -106,6 +160,98 @@ curl https://graph.boathou.se/graphql \
 **Token Management:**
 
 Service token is managed manually in Cloudflare dashboard to allow non-expiring duration. Pulumi references the existing token by UUID instead of creating/managing it.
+
+### Ollama API Proxy (ollama-api.boathou.se)
+
+**Architecture:**
+```
+Client → ollama-api.boathou.se → Cloudflare Worker → ollama.goldfish.io (tunnel) → DGX Spark (192.168.2.110:11434)
+```
+
+**Authentication:**
+
+The Ollama Worker uses AI Gateway-style authentication with a bearer token:
+
+```bash
+curl https://ollama-api.boathou.se/api/tags \
+  -H "cf-aig-authorization: Bearer $(pulumi config get aigAuthToken)"
+```
+
+**Credentials (Pulumi ESC):**
+
+The auth token is stored in Pulumi ESC as `aigAuthToken`:
+
+```bash
+# Retrieve token
+pulumi config get aigAuthToken
+
+# Set token (if rotating)
+pulumi config set --secret aigAuthToken "<new-token>"
+```
+
+**Endpoints:**
+
+- **GET /api/tags** - List available models
+- **POST /v1/chat/completions** - OpenAI-compatible chat completions
+- **POST /api/generate** - Native Ollama generation
+
+**Security Features:**
+
+- Token-based authentication (rejects requests without `cf-aig-authorization` header)
+- CORS enabled for browser access
+- Rate limiting via Cloudflare (inherited from zone settings)
+- Worker deployed with ES modules format (modern standard)
+
+**Resources:**
+
+- `cloudflare:index:WorkerScript` - `ollamaProxy` (ollama-proxy)
+- `cloudflare:index:WorkerRoute` - `ollamaProxyRoute` (ollama-api.boathou.se/*)
+- `cloudflare:index:Record` - `ollama-api-cname` (ollama-api.boathou.se → ollama-proxy.goldfish-inc.workers.dev)
+
+**Configuration (cloud/src/index.ts:410-525):**
+
+```typescript
+const enableOllamaProxy = cfg.getBoolean("enableOllamaProxy") ?? true;
+const aigAuthToken = cfg.requireSecret("aigAuthToken");
+const ollamaOrigin = cfg.get("ollamaOrigin") || "https://ollama.goldfish.io";
+
+const ollamaProxyWorker = new cloudflare.WorkerScript("ollamaProxy", {
+    name: "ollama-proxy",
+    content: ollamaProxyScript,  // ES modules format
+    accountId: cloudflareAccountId,
+    module: true,
+    compatibilityDate: "2025-01-07",
+    plainTextBindings: [
+        { name: "OLLAMA_ORIGIN", text: ollamaOrigin },
+    ],
+    secretTextBindings: [
+        { name: "AIG_AUTH_TOKEN", text: aigAuthToken },
+    ],
+});
+```
+
+**Testing:**
+
+```bash
+# Test authentication
+./cloud/test-ollama-worker.sh
+
+# Or manually
+TOKEN=$(pulumi config get aigAuthToken)
+
+# List models
+curl https://ollama-api.boathou.se/api/tags \
+  -H "cf-aig-authorization: Bearer $TOKEN"
+
+# Chat completion
+curl https://ollama-api.boathou.se/v1/chat/completions \
+  -H "cf-aig-authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.3:70b",
+    "messages": [{"role": "user", "content": "What is 2+2?"}]
+  }'
+```
 
 **Configuration (cloud/src/index.ts:408-434):**
 
@@ -383,11 +529,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "go
 # CrunchyBridge Postgres URL for migrations
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:postgres_url "postgres://<user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres" --secret
 
-# Label Studio DB password (manual provisioning only)
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerPassword "<strong_password>" --secret
-```
-
-Workflows:
+# Workflows
 
 - `train-ner.yml` reads `hfAccessToken`, prefers `hfDatasetRepoNER` (fallback `hfDatasetRepo`), and `hfModelRepo` from ESC.
 - `database-migrations.yml` reads `postgres_url` from ESC and applies SQL migrations (V3–V6). It ensures extensions: `pgcrypto`, `postgis`, `btree_gist`.
@@ -410,90 +552,12 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:grafanaRemoteWr
 
 Then run the workflow (default dashboard: `dashboards/oceanid-sink.json`).
 
-## Label Studio DB (labelfish) — Manual provisioning on ebisu
-
-Recommended (keeps CI safe and LS isolated from staging/curated):
-
-```bash
-# 1) Create database in CrunchyBridge "ebisu" (example owner shown)
-cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres -- -c \
-  "CREATE DATABASE labelfish OWNER u_ogfzdegyvvaj3g4iyuvlu5yxmi;"
-
-# 2) Apply bootstrap SQL
-cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres --database labelfish \
-  < ../sql/labelstudio/labelfish_schema.sql
-
-# 3) Store LS connection URL in ESC for the cluster stack
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl \
-  "postgres://labelfish_owner:<password>@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish" --secret
-```
-
-Notes:
-
-- The cluster stack requires `labelStudioDbUrl` and sets `DATABASE_URL` for the Label Studio deployment.
-- You can also provision the DB via IaC by setting `oceanid-cloud:enableLabelStudioDb=true` and running `pulumi up` locally (not in GitHub Actions). Default is `false` for safety.
-
 ## Database Provisioning (Manual Only)
 
-### Label Studio Database (`labelfish`)
+All application data now lives inside either CrunchyBridge (staging/curated pipelines) or
+in-cluster services such as Argilla. Earlier Label Studio database instructions have been
+removed to avoid confusion.
 
-**IMPORTANT:** Database provisioning is **disabled by default** and uses `command.local.Command`, which requires psql installed locally. It **will not run in GitHub Actions**.
-
-#### Safety Guarantees
-
-1. **Cluster never recreated on push**: `enableCrunchyBridgeProvisioning: true` with `protect: true` prevents deletion
-2. **Database never created on push**: `enableLabelStudioDb` defaults to `false`
-3. **Idempotent**: Safe to run multiple times (uses `IF NOT EXISTS` patterns)
-
-#### Manual Provisioning Steps
-
-```bash
-cd cloud/
-
-# 1. Set admin URL (must have CREATEDB privilege)
-# Get from: cb uri <cluster-id> or use existing admin credentials
-pulumi config set --secret oceanid-cloud:crunchyAdminUrl "postgres://<admin_user>:<pass>@p.<cluster-id>.db.postgresbridge.com:5432/postgres"
-
-# 2. Generate strong password and store in ESC
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cloud:labelStudioOwnerPassword "$(openssl rand -base64 32)" --secret
-
-# 3. Enable database provisioning (local only)
-pulumi config set oceanid-cloud:enableLabelStudioDb true
-
-# 4. Run Pulumi locally (requires psql in PATH)
-pulumi up
-
-# 5. Disable flag to prevent accidental re-runs
-pulumi config set oceanid-cloud:enableLabelStudioDb false
-
-# 6. Store connection URL in ESC for cluster stack
-pulumi stack output labelStudioDbUrl --show-secrets
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl "<url_from_above>" --secret
-```
-
-**Config Key Scoping:**
-
-- `oceanid-cloud:crunchyAdminUrl` - Admin credentials (CREATEDB privilege) for database provisioning
-- `oceanid-cloud:labelStudioOwnerPassword` - Password for `labelfish_owner` role
-- `oceanid-cluster:labelStudioDbUrl` - Runtime connection URL for Label Studio (used by cluster stack)
-
-#### What Gets Created
-
-- Database: `labelfish`
-- Roles: `labelfish_owner`, `labelfish_rw`, `labelfish_ro`
-- Schema: `labelfish` (isolated from staging/curated)
-- Extensions: `pgcrypto`, `citext`, `pg_trgm`, `btree_gist`
-- Sane defaults: UTC timezone, statement/lock timeouts, search_path
-
-#### Verification
-
-```bash
-# Check database exists
-/opt/homebrew/opt/postgresql@17/bin/psql "$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl --show-secrets --value string)" -c "\l"
-
-# Check schema and roles
-/opt/homebrew/opt/postgresql@17/bin/psql "$(esc env get default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl --show-secrets --value string)" -c "\dn" -c "\du"
-```
 
 ## Stack Outputs
 
@@ -506,10 +570,16 @@ export const clusterStatus: pulumi.Output<string>                      // Cluste
 export const connectionUrl: pulumi.Output<string>                      // PostgreSQL connection URL (secret)
 export const k3sDnsRecord: pulumi.Output<string>                       // k3s.boathou.se record ID
 export const gpuDnsRecord: pulumi.Output<string>                       // gpu.boathou.se record ID
-export const labelStudioAccessId: pulumi.Output<string>                // Access app ID
+export const argillaDnsRecord: pulumi.Output<string>                   // label.boathou.se record ID
+export const graphDnsRecord: pulumi.Output<string>                     // graph.boathou.se record ID
+export const nautilusDnsRecord: pulumi.Output<string>                  // nautilus.boathou.se record ID
+export const nautilusAccessAppId: pulumi.Output<string>                // Access app ID
+export const nautilusAccessPolicyId: pulumi.Output<string>             // Zero Trust policy ID
+export const gpuAccessAppId: pulumi.Output<string> | undefined         // GPU Access app ID (if service token configured)
 export const postgraphileAccessAppId: pulumi.Output<string>            // PostGraphile Access app ID
-export const postgraphileServiceTokenClientId: pulumi.Output<string>   // Service token client ID
-export const postgraphileServiceTokenClientSecret: pulumi.Output<string> // Service token secret
+export const ollamaProxyWorkerId: pulumi.Output<string> | undefined    // Ollama proxy worker script ID (ollama-proxy)
+export const ollamaApiDnsRecord: pulumi.Output<string> | undefined     // ollama-api.boathou.se record ID
+export const graphqlRateLimitRulesetId: pulumi.Output<string>          // Rate limit ruleset ID for /graphql
 ```
 
 View outputs:
