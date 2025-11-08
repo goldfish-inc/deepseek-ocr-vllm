@@ -10,7 +10,7 @@ data:
     #!/usr/bin/env python3
     """
     Server-side Argilla dataset importer
-    Imports datasets from Hugging Face into Argilla
+    Imports OCR datasets from Hugging Face into Argilla for annotation
     """
     import os
     import sys
@@ -24,10 +24,12 @@ data:
     HF_TOKEN = os.environ["HF_TOKEN"]
     DATASET_ID = os.environ.get("HF_DATASET_ID", "goldfish-inc/deepseekocr-output")
     WORKSPACE = os.environ.get("ARGILLA_WORKSPACE", "argilla")
+    ARGILLA_DATASET_NAME = os.environ.get("ARGILLA_DATASET_NAME", "deepseekocr-output")
 
     print(f"🚀 Argilla Dataset Importer")
     print(f"   API URL: {ARGILLA_API_URL}")
-    print(f"   Dataset: {DATASET_ID}")
+    print(f"   HF Dataset: {DATASET_ID}")
+    print(f"   Argilla Dataset: {ARGILLA_DATASET_NAME}")
     print(f"   Workspace: {WORKSPACE}")
 
     # Verify HF access
@@ -52,30 +54,98 @@ data:
     # Load dataset from HF
     print(f"\n📥 Loading dataset from Hugging Face...")
     try:
-        dataset = load_dataset(DATASET_ID, token=HF_TOKEN)
-        print(f"✓ Dataset loaded")
-        print(f"  Splits: {list(dataset.keys())}")
-        total_records = sum(len(split) for split in dataset.values())
-        print(f"  Total records: {total_records}")
+        hf_dataset = load_dataset(DATASET_ID, token=HF_TOKEN)
+        first_split = list(hf_dataset.keys())[0]
+        total_records = len(hf_dataset[first_split])
+        print(f"✓ Dataset loaded: {total_records} records")
     except Exception as e:
         print(f"❌ Failed to load dataset: {e}")
         sys.exit(1)
 
-    # Show dataset structure
-    first_split = list(dataset.keys())[0]
-    print(f"\n📊 Dataset structure (from '{first_split}'):")
-    print(f"  Features: {list(dataset[first_split].features.keys())}")
+    # Create or get Argilla dataset
+    print(f"\n📋 Creating Argilla dataset schema...")
 
-    if len(dataset[first_split]) > 0:
-        print(f"\n  Sample record:")
-        sample = dataset[first_split][0]
-        for key in list(sample.keys())[:5]:
-            value = str(sample[key])[:80] + "..." if len(str(sample[key])) > 80 else str(sample[key])
-            print(f"    {key}: {value}")
+    # Define dataset settings
+    settings = rg.Settings(
+        fields=[
+            rg.TextField(
+                name="ocr_text",
+                title="OCR Output",
+                description="Extracted text from PDF (DeepSeek-OCR)",
+                use_markdown=True
+            ),
+        ],
+        questions=[
+            rg.TextQuestion(
+                name="corrected_text",
+                title="Corrected Text",
+                description="Review and correct the OCR output if needed",
+                required=False
+            ),
+            rg.LabelQuestion(
+                name="quality",
+                title="OCR Quality",
+                description="Rate the quality of the OCR extraction",
+                labels=["excellent", "good", "needs_correction", "poor"],
+                required=True
+            ),
+        ],
+        metadata=[
+            rg.TermsMetadataProperty(name="pdf_name", title="PDF Name"),
+            rg.IntegerMetadataProperty(name="page_number", title="Page Number"),
+            rg.TermsMetadataProperty(name="timestamp", title="Processing Time"),
+        ],
+        guidelines="Review OCR-extracted text from IUU vessel list PDFs. Correct any errors in vessel names, identifiers (IMO, MMSI), or other critical data.",
+    )
 
-    print(f"\n✅ Import validation complete!")
-    print(f"   Ready to import {total_records} records to Argilla")
-    print(f"\n💡 Next: Configure Argilla dataset schema based on structure above")
+    # Create dataset
+    try:
+        argilla_dataset = rg.Dataset(
+            name=ARGILLA_DATASET_NAME,
+            workspace=WORKSPACE,
+            settings=settings,
+        )
+        argilla_dataset.create()
+        print(f"✓ Dataset '{ARGILLA_DATASET_NAME}' created")
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            print(f"ℹ️  Dataset '{ARGILLA_DATASET_NAME}' already exists, using existing")
+            argilla_dataset = client.datasets(name=ARGILLA_DATASET_NAME, workspace=WORKSPACE)
+        else:
+            print(f"❌ Failed to create dataset: {e}")
+            sys.exit(1)
+
+    # Convert HF records to Argilla records
+    print(f"\n📤 Converting and uploading records...")
+    argilla_records = []
+
+    for idx, hf_record in enumerate(hf_dataset[first_split]):
+        argilla_record = rg.Record(
+            fields={
+                "ocr_text": hf_record["clean_text"] or hf_record["text"],
+            },
+            metadata={
+                "pdf_name": hf_record["pdf_name"],
+                "page_number": hf_record["page_number"],
+                "timestamp": hf_record["timestamp"],
+            },
+        )
+        argilla_records.append(argilla_record)
+
+        # Progress indicator
+        if (idx + 1) % 50 == 0:
+            print(f"  Converted {idx + 1}/{total_records} records...")
+
+    # Upload to Argilla
+    print(f"\n⬆️  Uploading {len(argilla_records)} records to Argilla...")
+    try:
+        argilla_dataset.records.log(argilla_records)
+        print(f"✅ Successfully imported {len(argilla_records)} records!")
+        print(f"\n🎉 Dataset ready for annotation at:")
+        print(f"   {ARGILLA_API_URL}/dataset/{ARGILLA_DATASET_NAME}/annotation-mode")
+    except Exception as e:
+        print(f"❌ Failed to upload records: {e}")
+        sys.exit(1)
 
 ---
 # CronJob for scheduled imports (disabled by default)
