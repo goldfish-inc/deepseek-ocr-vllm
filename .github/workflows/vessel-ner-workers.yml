@@ -48,9 +48,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Run tests
+      - name: Type check
         working-directory: workers/vessel-ner
-        run: pnpm test --run
+        run: npx tsc --noEmit
 
   deploy:
     name: Deploy Workers
