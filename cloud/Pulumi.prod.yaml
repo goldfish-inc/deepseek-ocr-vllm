@@ -57,6 +57,16 @@ config:
   oceanid-cloud:postgraphileServiceTokenId: 9d715496-cf2d-4631-be19-93dc1c712f54
   oceanid-cloud:postgraphileAccessClientSecret:
     secure: AAABAKgYE6SvxgPfBHB3jgbDETTRX5UP97n+3yw5Cj3GIEmOCEO7Ft11jB/0lz3Fcym2GmoPW23mXwVKr+3eO7HCdlsNVireGzmqICr2XPDIQuXfz8c2CAF8jykRy+PV
+  oceanid-cloud:supabaseAnonKey:
+    secure: AAABAAGQthMXXWS8E7utY/Q8Tp5dYc24jYlAW0CUMl1JuJPFFkULIMWcj+0omPw4vzOiR9iKZrRNkrCnvUMUHobFp+yAqrN6hgtQeAp466T/zvj96TuFUmihWvyTjG9MG8GtoW0Cpydi7zQfj3JIL/Z2VBSlNCOhlV8XJbsRFa1T3KeiOSFvzvuXNO+i8fLD1tS+EE/0+T0f2ubVtJfLoqhD2M7sDacGf+pGwboe/UESJBBVo8GebMRUKuxaTuoGs59DMZZzuRipPS9rNhLnqAGMnT56B3OqBhb7ngDjti0wqsTvzD6FM/m+K2fKLuuI
+  oceanid-cloud:motherduckToken:
+    secure: AAABANpplElG5X8ErOPA/HN2MZAp3uPCsVUvg/aZjeDrhnGPF6I57SzivXBTK782I2nBmcARrV5D8deE1DFapK3DsiHqA659nkYK3H3a17CqznXhMgziQ0JzcoPIzCkz5A==
+  oceanid-cloud:claudeApiKey:
+    secure: AAABAKKFOZ8OwJgMhGMnzTNLS/GJ21r9NdzEHgjPX7Rh8pyQxwi6cF6L72r+8Hw9US2Q4mI89ymM6M+jAk9achz/UbNhN61qYTxt0cqTReexn6ycDTZnB6GgRnCbRT/XnSCM2J+09fPPr1DjrO5izd6pMXTKRk99BeteWiqucD5VmqH7VwC3/e7sd7c=
+  oceanid-cloud:argillaApiKey:
+    secure: AAABAPU+NB7474SfY7/Zxy8upVqz02y3svflN/KfUcDbPyPh1GgmNj5wcrHS1oQhtyzlltaAIcXV1v6SuOvgpVnvln2rYhws3IRRG3YL3QicEWirw4oWAZ5e1lljcbk6
+  dgx-spark:cloudflareTunnelToken:
+    secure: AAABAARmCfMFmKIrCdD4ltcpEccFqg9Iry9rntpnKQTd0bLTow/4nU+WBHwxwjGGcl1BKjnwqW1qWwlNExbkV6miT2d+ttYdgViH6zpojB48Z+z/ogIcrjI8vOmowf7WVLAzFBjWmeQ6o6YmWvo5nqNEYSBPbzatb/rCYXXB9XNNrX314/swuPZxo4JeH33Tb/Fkkaf8jMU5ttktDeG+yCWOxLnI7NM/QhMZjXMZwRSZJ18gwyzZbE4FnbSUC3MtyWJCwfTXtzyatTDolRYz5lLGcy8=
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
