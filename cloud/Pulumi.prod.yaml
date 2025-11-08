@@ -75,6 +75,7 @@ config:
   dgx-spark:accessAppId: 5c17729f-c6d4-4722-8920-42f2f197c40c
   dgx-spark:accessPolicyId: 429a4389-dd8f-4506-af63-2f4a7d43b482
   oceanid-cloud:aigAuthToken: ${pulumiConfig.oceanid-cluster:oceanid-cloud:aigAuthToken}
+  oceanid-cloud:enableOllamaProxy: "true"
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
