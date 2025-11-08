@@ -58,38 +58,11 @@ export const connectionUrl: pulumi.Output<string> | undefined = cluster?.id.appl
 );
 
 // =============================================================================
-// LABEL STUDIO DATABASE
-// =============================================================================
-// IMPORTANT: Database provisioning uses command.local.Command and MUST run locally.
-// Set enableLabelStudioDb=true ONLY when running locally (not in GitHub Actions).
-// Default is false to prevent database creation on every push.
-
-const enableLabelStudioDb = cfg.getBoolean("enableLabelStudioDb") ?? false;
-let labelStudioDb: PostgresDatabase | undefined;
-
-if (enableLabelStudioDb) {
-    // Admin URL for CrunchyBridge cluster (must have CREATEDB privilege)
-    // This is scoped to oceanid-cloud project, separate from cluster runtime URLs
-    const adminUrl = cfg.requireSecret("crunchyAdminUrl");
-    const labelStudioOwnerPassword = cfg.requireSecret("labelStudioOwnerPassword");
-
-    labelStudioDb = new PostgresDatabase("labelfish", {
-        adminUrl,
-        databaseName: "labelfish",
-        ownerRole: "labelfish_owner",
-        ownerPassword: labelStudioOwnerPassword,
-        bootstrapSqlPath: "sql/labelstudio/labelfish_schema.sql",
-    });
-}
-
-export const labelStudioDbUrl: pulumi.Output<string> | undefined = labelStudioDb?.outputs.connectionUrl;
-export const labelStudioDbReady: pulumi.Output<boolean> | undefined = labelStudioDb?.outputs.ready;
-
-// =============================================================================
 // CLEANDATA DATABASE (for CSV ingestion, staging, curation pipeline)
 // =============================================================================
 // Separate database for our data pipeline (stage.*, curated.*, control.*, etc.)
-// This keeps Label Studio's internal data separate from our cleaned data
+// Annotation tooling (Argilla) stores workspace data in-cluster, so this DB is
+// dedicated to ingestion and curation rather than SME review state.
 
 const enableCleandataDb = cfg.getBoolean("enableCleandataDb") ?? false;
 let cleandataDb: PostgresDatabase | undefined;
@@ -237,15 +210,15 @@ const gpuCname = new cloudflare.Record("gpu-cname", {
     comment: "GPU access for oceanid-cluster host connector",
 }, { protect: true });
 
-// label studio tunnel (adopted from existing)
-const labelCname = new cloudflare.Record("label-cname", {
+// argilla annotation ui tunnel (adopted from existing)
+const argillaCname = new cloudflare.Record("label-cname", {
     zoneId: cloudflareZoneId,
     name: "label.boathou.se",
     type: "CNAME",
     content: "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc.cfargotunnel.com",
     proxied: true,
     ttl: 1,
-    comment: "Label Studio for oceanid-cluster via main tunnel",
+    comment: "Argilla annotation UI for oceanid-cluster via main tunnel",
 });
 
 // postgraphile graphql api
@@ -438,6 +411,7 @@ new cloudflare.AccessPolicy("postgraphile-access-service-token", {
 // Proxies to ollama.goldfish.io tunnel, validates cf-aig-authorization header
 const enableOllamaProxy = cfg.getBoolean("enableOllamaProxy") ?? true;
 let ollamaProxyWorker: cloudflare.WorkerScript | undefined;
+let ollamaApiCname: cloudflare.Record | undefined;
 
 if (enableOllamaProxy) {
     if (!cloudflareAccountId) {
@@ -536,12 +510,22 @@ export default {
         pattern: "ollama-api.goldfish.io/*",
         scriptName: ollamaProxyWorker.name,
     }, { dependsOn: [ollamaProxyWorker] });
+
+    // DNS record for Worker (proxied through Cloudflare)
+    ollamaApiCname = new cloudflare.Record("ollama-api-cname", {
+        zoneId: "a81f75a1931dcac429c50f2ee5252955", // goldfish.io
+        name: "ollama-api",
+        type: "CNAME",
+        content: "ollama-proxy.goldfish-inc.workers.dev",
+        proxied: true,
+        comment: "Ollama proxy worker (AI Gateway-style auth)",
+    });
 }
 
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
-export const labelDnsRecord = labelCname.id;
+export const argillaDnsRecord = argillaCname.id;
 export const graphDnsRecord = graphCname.id;
 export const nautilusDnsRecord = nautilusCname.id;
 export const nautilusAccessAppId = nautilusAccessApp.id;
@@ -549,69 +533,10 @@ export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
 export const postgraphileAccessAppId = postgraphileAccessApp.id;
 export const ollamaProxyWorkerId = ollamaProxyWorker?.id;
+export const ollamaApiDnsRecord = ollamaApiCname?.id;
 export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
 // PULUMI ESC
 // =============================================================================
 // ESC environment remains default/oceanid-cluster (shared with bootstrap project)
-
-// =============================================================================
-// LABEL STUDIO: "Create Oceanid" header button via Cloudflare Worker (optional)
-// =============================================================================
-
-const enableLsHeaderButton = cfg.getBoolean("enableLsHeaderButton") ?? false;
-const projectBootstrapperUrl = cfg.get("projectBootstrapperUrl");
-
-if (enableLsHeaderButton) {
-    if (!cloudflareAccountId) {
-        throw new Error("cloudflareAccountId not set; required for Workers");
-    }
-    if (!projectBootstrapperUrl) {
-        throw new Error("projectBootstrapperUrl not set; required to create Oceanid projects");
-    }
-
-    const workerName = "ls-header-injector";
-    const workerScriptContent = `
-export default {
-  async fetch(req, env, ctx) {
-    const url = new URL(req.url);
-    const res = await fetch(req);
-    const ct = res.headers.get('content-type') || '';
-    // Only rewrite HTML for Project list and overview pages
-    if (!ct.includes('text/html') || !/^\/projects(\/.*)?$/.test(url.pathname)) {
-      return res;
-    }
-    const bootstrapUrl = ${JSON.stringify(projectBootstrapperUrl)};
-    class ButtonInjector {
-      element(el) {
-        el.after(\`<button id="create-oceanid" style="margin-left:8px" class="ls-button primary">Create Oceanid</button>\`, { html: true });
-        el.after(\`<button id="create-oceanid-tabert" style="margin-left:4px" class="ls-button">TaBERT (exp)</button>\`, { html: true });
-      }
-    }
-    class ScriptInjector {
-      element(el) {
-        el.append(\`<script>(function(){\\n  async function go(tabert){\\n    const d=new Date().toISOString().slice(0,10);\\n    const title=prompt('Project title','Oceanid NER '+d);\\n    if(!title) return;\\n    const r=await fetch('${projectBootstrapperUrl}/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title, description: tabert?'TABERT experimental':'', tabert})});\\n    try{const data=await r.json(); if(data.project_url){ location.href=data.project_url; } else { alert('Failed: '+JSON.stringify(data)); }}catch(e){ alert('Failed to parse response'); }\\n  }\\n  addEventListener('click', function(e){\\n    const t=e.target;\\n    if(t && t.id==='create-oceanid'){ e.preventDefault(); go(false); }\\n    if(t && t.id==='create-oceanid-tabert'){ e.preventDefault(); go(true); }\\n  }, true);\\n})();</script>\`, { html: true });
-      }
-    }
-    return new HTMLRewriter()
-      .on('a[href="/projects/create"]', new ButtonInjector())
-      .on('body', new ScriptInjector())
-      .transform(res);
-  }
-}
-`;
-
-    const lsHeaderWorker = new cloudflare.WorkerScript("lsHeaderInjector", {
-        name: workerName,
-        content: workerScriptContent,
-        accountId: cloudflareAccountId,
-    });
-
-    // Route all Label Studio HTML through the worker
-    new cloudflare.WorkerRoute("lsHeaderRoute", {
-        zoneId: cloudflareZoneId,
-        pattern: "label.boathou.se/*",
-        scriptName: lsHeaderWorker.name,
-    }, { dependsOn: [lsHeaderWorker] });
-}
