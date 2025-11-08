@@ -509,13 +509,13 @@ export default {
 
     new cloudflare.WorkerRoute("ollamaProxyRoute", {
         zoneId: cloudflareZoneId,
-        pattern: "ollama-api.goldfish.io/*",
+        pattern: "ollama-api.boathou.se/*", // Must match zone
         scriptName: ollamaProxyWorker.name,
     }, { dependsOn: [ollamaProxyWorker] });
 
     // DNS record for Worker (proxied through Cloudflare)
     ollamaApiCname = new cloudflare.Record("ollama-api-cname", {
-        zoneId: "a81f75a1931dcac429c50f2ee5252955", // goldfish.io
+        zoneId: cloudflareZoneId, // boathou.se zone
         name: "ollama-api",
         type: "CNAME",
         content: "ollama-proxy.goldfish-inc.workers.dev",
