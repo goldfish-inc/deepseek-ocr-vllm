@@ -1,0 +1,12 @@
+name = "ollama-proxy"
+main = "ollama-proxy.ts"
+compatibility_date = "2025-01-07"
+workers_dev = false
+
+[[routes]]
+pattern = "ollama-api.goldfish.io/*"
+zone_name = "goldfish.io"
+
+# Secrets (set via: wrangler secret put <NAME>)
+# - OLLAMA_ORIGIN: https://ollama.goldfish.io
+# - AIG_AUTH_TOKEN: <random-bearer-token>

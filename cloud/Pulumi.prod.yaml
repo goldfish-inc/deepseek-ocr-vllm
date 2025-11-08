@@ -55,6 +55,7 @@ config:
     secure: AAABAI5gtCygDEnOS1GIGxZuc2IdGVv/T/j2nxefiy6ptGI3FY/cXHf+VGpAhQHBeu8I08IO/hi8fVT7/QiVBzV6jmzmEcQ2EuQ/6UKklhlyKkMFDuK7y5npDDuIbXEPncoiuSDv0ArQztV3Zhq/islQUf874a21FAOfBNYlGlo0dE1PqhAtT/sMTc8=
   oceanid-cloud:cloudflareAccountId: 8fa97474778c8a894925c148ca829739
   oceanid-cloud:postgraphileServiceTokenId: 9d715496-cf2d-4631-be19-93dc1c712f54
+  oceanid-cloud:sparkAccessServiceTokenId: f4c14d9b-611e-48bb-b696-40f4425e64e4
   oceanid-cloud:postgraphileAccessClientSecret:
     secure: AAABAKgYE6SvxgPfBHB3jgbDETTRX5UP97n+3yw5Cj3GIEmOCEO7Ft11jB/0lz3Fcym2GmoPW23mXwVKr+3eO7HCdlsNVireGzmqICr2XPDIQuXfz8c2CAF8jykRy+PV
   oceanid-cloud:supabaseAnonKey:
@@ -66,7 +67,15 @@ config:
   oceanid-cloud:argillaApiKey:
     secure: AAABAPU+NB7474SfY7/Zxy8upVqz02y3svflN/KfUcDbPyPh1GgmNj5wcrHS1oQhtyzlltaAIcXV1v6SuOvgpVnvln2rYhws3IRRG3YL3QicEWirw4oWAZ5e1lljcbk6
   dgx-spark:cloudflareTunnelToken:
-    secure: AAABAARmCfMFmKIrCdD4ltcpEccFqg9Iry9rntpnKQTd0bLTow/4nU+WBHwxwjGGcl1BKjnwqW1qWwlNExbkV6miT2d+ttYdgViH6zpojB48Z+z/ogIcrjI8vOmowf7WVLAzFBjWmeQ6o6YmWvo5nqNEYSBPbzatb/rCYXXB9XNNrX314/swuPZxo4JeH33Tb/Fkkaf8jMU5ttktDeG+yCWOxLnI7NM/QhMZjXMZwRSZJ18gwyzZbE4FnbSUC3MtyWJCwfTXtzyatTDolRYz5lLGcy8=
+    secure: AAABALeogv47jDGsPLSJnVuyc9olKHxg/SZnp0Q63eBHoDaKFRds/GZdLnam0ucD5SxK5oPqarzEbA+Z7yGkURCYYsL6kRqhmAcCRDGKIyqVYBZNU+uI2cxXUMD+bEMaZ4GIHvSWvUl3my565lI7Qmxg4tsURw66LkF+r4Uh6uSKOZZX6rtBBb5MGwy2OcHogfh2FE+akMYXQNd2BmTOmi+L6FRXp8bWQG8jekDorGSG+ZcczYTSdpUcJIUEc9TaCT641LCfr2Bu7vx70Tz+wQZbMT8=
+  dgx-spark:accessClientId:
+    secure: AAABAEWmQRwhMn6JsxIvk3iAt4nogZ0QV+HJfvuWGEU1MKlP1wCdblMBiujs9FK7p5xreXrbQc0m9uZ8N/bgSVxquMeESBU=
+  dgx-spark:accessClientSecret:
+    secure: AAABAKPcESiVKBRbVhv9VYjLQprK2/i6HJg//CoMNKGcmRnYeG4a0irwTbb3GgTUCN/awy4+8uGQnTvt5+o+PgW25lM/nqHfLRh0jghsS3Rvki2oyJCtaax3nrqwBULv
+  dgx-spark:accessAppId: 5c17729f-c6d4-4722-8920-42f2f197c40c
+  dgx-spark:accessPolicyId: 429a4389-dd8f-4506-af63-2f4a7d43b482
+  oceanid-cloud:aigAuthToken:
+    secure: AAABAO0uaahTQ/Fl9zHrfZxvqRIcPXqP6EiD4KbUNDhr1WVO1vQ1dLPPuBv4vnyDi352Efmx4jL/isIG7FTAJRSsL4TWwQYUH9dPrtb8olU0ryK8elIahPFrLP350/nj
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster

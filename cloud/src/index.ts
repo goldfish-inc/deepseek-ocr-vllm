@@ -18,6 +18,7 @@ import { GitHubRunner } from "./components/githubRunner";
 
 const cfg = new pulumi.Config();
 const cloudflareAccountId = cfg.get("cloudflareAccountId");
+const sparkAccessServiceTokenId = cfg.get("sparkAccessServiceTokenId") ?? cfg.get("cfAccessServiceTokenId");
 
 // =============================================================================
 // CRUNCHYBRIDGE POSTGRESQL 17 DATABASE
@@ -433,6 +434,110 @@ new cloudflare.AccessPolicy("postgraphile-access-service-token", {
     ],
 });
 
+// Spark Ollama: Worker proxy with AI Gateway-style authentication
+// Proxies to ollama.goldfish.io tunnel, validates cf-aig-authorization header
+const enableOllamaProxy = cfg.getBoolean("enableOllamaProxy") ?? true;
+let ollamaProxyWorker: cloudflare.WorkerScript | undefined;
+
+if (enableOllamaProxy) {
+    if (!cloudflareAccountId) {
+        throw new Error("cloudflareAccountId not set; required for Workers");
+    }
+
+    const aigAuthToken = cfg.requireSecret("aigAuthToken");
+    const ollamaOrigin = cfg.get("ollamaOrigin") || "https://ollama.goldfish.io";
+
+    const ollamaProxyScript = `
+export default {
+  async fetch(request, env) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'cf-aig-authorization, Content-Type, Authorization',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+
+    const authHeader = request.headers.get('cf-aig-authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing cf-aig-authorization header' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const match = authHeader.match(/^Bearer\\s+(.+)$/i);
+    if (!match || match[1] !== env.AIG_AUTH_TOKEN) {
+      return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const url = new URL(request.url);
+    const targetUrl = new URL(url.pathname + url.search, env.OLLAMA_ORIGIN);
+
+    const proxyHeaders = new Headers(request.headers);
+    proxyHeaders.delete('cf-aig-authorization');
+    proxyHeaders.set('Host', new URL(env.OLLAMA_ORIGIN).hostname);
+
+    const proxyRequest = new Request(targetUrl.toString(), {
+      method: request.method,
+      headers: proxyHeaders,
+      body: request.body,
+      redirect: 'manual',
+    });
+
+    try {
+      const response = await fetch(proxyRequest);
+      const proxyResponse = new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      });
+
+      proxyResponse.headers.set('Access-Control-Allow-Origin', '*');
+      proxyResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+      return proxyResponse;
+    } catch (error) {
+      return new Response(\`Proxy error: \${error}\`, {
+        status: 502,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+  },
+};
+`;
+
+    ollamaProxyWorker = new cloudflare.WorkerScript("ollamaProxy", {
+        name: "ollama-proxy",
+        content: ollamaProxyScript,
+        accountId: cloudflareAccountId,
+        plainTextBindings: [
+            {
+                name: "OLLAMA_ORIGIN",
+                text: ollamaOrigin,
+            },
+        ],
+        secretTextBindings: [
+            {
+                name: "AIG_AUTH_TOKEN",
+                text: aigAuthToken,
+            },
+        ],
+    });
+
+    new cloudflare.WorkerRoute("ollamaProxyRoute", {
+        zoneId: cloudflareZoneId,
+        pattern: "ollama-api.goldfish.io/*",
+        scriptName: ollamaProxyWorker.name,
+    }, { dependsOn: [ollamaProxyWorker] });
+}
+
 // Export all resource IDs
 export const k3sDnsRecord = k3sCname.id;
 export const gpuDnsRecord = gpuCname.id;
@@ -443,6 +548,7 @@ export const nautilusAccessAppId = nautilusAccessApp.id;
 export const nautilusAccessPolicyId = nautilusAccessPolicy.id;
 export const gpuAccessAppId = gpuAccessApp?.id;
 export const postgraphileAccessAppId = postgraphileAccessApp.id;
+export const ollamaProxyWorkerId = ollamaProxyWorker?.id;
 export const graphqlRateLimitRulesetId = graphqlRateLimitRuleset.id;
 
 // =============================================================================
