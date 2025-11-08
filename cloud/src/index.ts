@@ -444,8 +444,22 @@ export default {
     }
 
     const match = authHeader.match(/^Bearer\\s+(.+)$/i);
+    // Debug: Log token comparison (first/last 4 chars only for security)
+    const receivedToken = match ? match[1] : 'NO_MATCH';
+    const expectedToken = env.AIG_AUTH_TOKEN || 'NO_ENV_VAR';
+    console.log(\`Auth debug: received=\${receivedToken.substring(0,4)}...\${receivedToken.substring(receivedToken.length-4)}, expected=\${expectedToken.substring(0,4)}...\${expectedToken.substring(expectedToken.length-4)}, match=\${match && match[1] === env.AIG_AUTH_TOKEN}\`);
+
     if (!match || match[1] !== env.AIG_AUTH_TOKEN) {
-      return new Response(JSON.stringify({ error: 'Invalid authentication token' }), {
+      return new Response(JSON.stringify({
+        error: 'Invalid authentication token',
+        debug: {
+          hasMatch: !!match,
+          receivedLength: receivedToken.length,
+          expectedLength: expectedToken.length,
+          receivedPrefix: receivedToken.substring(0, 4),
+          expectedPrefix: expectedToken.substring(0, 4)
+        }
+      }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' }
       });
