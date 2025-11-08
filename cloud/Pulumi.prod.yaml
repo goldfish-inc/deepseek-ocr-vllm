@@ -74,8 +74,7 @@ config:
     secure: AAABAKPcESiVKBRbVhv9VYjLQprK2/i6HJg//CoMNKGcmRnYeG4a0irwTbb3GgTUCN/awy4+8uGQnTvt5+o+PgW25lM/nqHfLRh0jghsS3Rvki2oyJCtaax3nrqwBULv
   dgx-spark:accessAppId: 5c17729f-c6d4-4722-8920-42f2f197c40c
   dgx-spark:accessPolicyId: 429a4389-dd8f-4506-af63-2f4a7d43b482
-  oceanid-cloud:aigAuthToken:
-    secure: AAABAO0uaahTQ/Fl9zHrfZxvqRIcPXqP6EiD4KbUNDhr1WVO1vQ1dLPPuBv4vnyDi352Efmx4jL/isIG7FTAJRSsL4TWwQYUH9dPrtb8olU0ryK8elIahPFrLP350/nj
+  oceanid-cloud:aigAuthToken: ${pulumiConfig.oceanid-cluster:oceanid-cloud:aigAuthToken}
 # Pulumi ESC Environment (shared secrets with cluster stack)
 environment:
   - default/oceanid-cluster
