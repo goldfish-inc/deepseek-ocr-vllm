@@ -422,6 +422,7 @@ if (enableOllamaProxy) {
     const ollamaOrigin = cfg.get("ollamaOrigin") || "https://ollama.goldfish.io";
 
     const ollamaProxyScript = `
+// Force Worker update to refresh secret bindings from ESC
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
