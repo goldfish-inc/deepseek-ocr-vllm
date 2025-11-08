@@ -491,6 +491,8 @@ export default {
         name: "ollama-proxy",
         content: ollamaProxyScript,
         accountId: cloudflareAccountId,
+        module: true, // Enable ES modules format
+        compatibilityDate: "2025-01-07",
         plainTextBindings: [
             {
                 name: "OLLAMA_ORIGIN",
