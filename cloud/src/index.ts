@@ -423,7 +423,7 @@ if (enableOllamaProxy) {
 
     const ollamaProxyScript = `
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -478,12 +478,12 @@ export default {
 
       return proxyResponse;
     } catch (error) {
-      return new Response(\`Proxy error: \${error}\`, {
+      return new Response('Proxy error: ' + error, {
         status: 502,
         headers: { 'Content-Type': 'text/plain' }
       });
     }
-  },
+  }
 };
 `;
 
