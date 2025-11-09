@@ -46,11 +46,12 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --filter vessel-ner-pipeline
+        working-directory: workers/vessel-ner
+        run: pnpm install --no-frozen-lockfile
 
       - name: Type check
         working-directory: workers/vessel-ner
-        run: pnpm exec tsc --noEmit
+        run: npx tsc --noEmit
 
   deploy:
     name: Deploy Workers
@@ -75,7 +76,8 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile --filter vessel-ner-pipeline
+        working-directory: workers/vessel-ner
+        run: pnpm install --no-frozen-lockfile
 
       - name: Deploy workers
         working-directory: workers/vessel-ner
