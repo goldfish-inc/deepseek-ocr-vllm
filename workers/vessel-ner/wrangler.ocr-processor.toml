@@ -27,6 +27,8 @@ binding = "ENTITY_EXTRACTION_QUEUE"
 [vars]
 DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr"
 MOTHERDUCK_DATABASE = "vessel_intelligence"
+MD_QUERY_PROXY_URL = "https://md.boathou.se"
+USE_DIRECT_UPLOAD = "true"  # Feature flag: Use direct HTTP FormData upload to Gradio Space
 
 # Secrets (same as main worker)
 # MOTHERDUCK_TOKEN

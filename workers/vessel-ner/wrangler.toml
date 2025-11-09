@@ -36,7 +36,7 @@ binding = "ARGILLA_SYNC_QUEUE"
 # SECRETS (set via: pnpm exec wrangler secret put <NAME>)
 # ============================================================================
 # MOTHERDUCK_TOKEN - MotherDuck API token
-# ANTHROPIC_API_KEY - Claude API key
+# No Claude key required; NER runs via Spark + Ollama Worker
 # HF_TOKEN - HuggingFace token for DeepSeek OCR Space
 # ARGILLA_API_KEY - Argilla admin API key
 
@@ -48,3 +48,5 @@ binding = "ARGILLA_SYNC_QUEUE"
 DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr"
 ARGILLA_API_URL = "http://argilla.apps.svc.cluster.local:6900"
 MOTHERDUCK_DATABASE = "vessel_intelligence"
+MD_QUERY_PROXY_URL = "https://md.boathou.se" # Team-hosted SQL proxy URL (POST {database, query})
+USE_DIRECT_UPLOAD = "true"  # Feature flag: Use direct HTTP FormData upload to Gradio Space
