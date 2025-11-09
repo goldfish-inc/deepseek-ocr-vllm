@@ -1,0 +1,14 @@
+{
+  "name": "md-query-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "duckdb": "^1.0.0",
+    "express": "^4.19.2"
+  }
+}

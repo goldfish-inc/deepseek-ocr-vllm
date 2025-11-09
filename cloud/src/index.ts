@@ -136,24 +136,14 @@ if (enableK3sProvisioning) {
         // "calypso": clusterCfg.requireSecret("calypso_ssh_key"),  // Not needed in cloud stack
     };
 
-    // Load K3s and S3 values directly from ESC environment
+    // Load K3s token directly from ESC environment
     const k3sToken = pulumi.output(process.env.K3S_TOKEN || cfg.requireSecret("k3sToken"));
-    const s3AccessKey = pulumi.output(process.env.S3_ACCESS_KEY || cfg.requireSecret("s3AccessKey"));
-    const s3SecretKey = pulumi.output(process.env.S3_SECRET_KEY || cfg.requireSecret("s3SecretKey"));
 
     k3sCluster = new K3sCluster("oceanid", {
         nodes,
         k3sToken,
         k3sVersion: cfg.get("k3sVersion") || "v1.33.4+k3s1",
         privateKeys,
-        enableEtcdBackups: true,
-        backupS3Bucket: cfg.get("etcdBackupS3Bucket") || "oceanid-cluster-etcd-backups",
-        s3Credentials: {
-            accessKey: s3AccessKey,
-            secretKey: s3SecretKey,
-            region: cfg.get("s3Region") || "us-east-1",
-            endpoint: cfg.get("s3Endpoint"),
-        },
     });
 }
 
@@ -232,6 +222,17 @@ const graphCname = new cloudflare.Record("graph-cname", {
     comment: "PostGraphile GraphQL API for vessels data via main tunnel",
 });
 
+// md-query-proxy for MotherDuck SQL queries
+const mdCname = new cloudflare.Record("md-cname", {
+    zoneId: cloudflareZoneId,
+    name: "md.boathou.se",
+    type: "CNAME",
+    content: "6ff4dfd7-2b77-4a4f-84d9-3241bea658dc.cfargotunnel.com",
+    proxied: true,
+    ttl: 1,
+    comment: "MotherDuck query proxy for vessel-ner Workers via main tunnel",
+});
+
 // nautilus documentation site (cloudflare pages)
 const nautilusCname = new cloudflare.Record("nautilus-dns", {
     zoneId: cloudflareZoneId,
@@ -274,6 +275,13 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
             {
                 hostname: "graph.boathou.se",
                 service: "http://postgraphile.apps.svc.cluster.local:8080",
+                originRequest: {
+                    noTlsVerify: true,
+                },
+            },
+            {
+                hostname: "md.boathou.se",
+                service: "http://md-query-proxy.apps.svc.cluster.local:8080",
                 originRequest: {
                     noTlsVerify: true,
                 },
