@@ -47,7 +47,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: workers/vessel-ner
-        run: pnpm install --no-frozen-lockfile --ignore-workspace
+        run: pnpm install --no-frozen-lockfile
 
       - name: Type check
         working-directory: workers/vessel-ner
@@ -76,6 +76,7 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        working-directory: workers/vessel-ner
         run: pnpm install --no-frozen-lockfile
 
       - name: Deploy workers
