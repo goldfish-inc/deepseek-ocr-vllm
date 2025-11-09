@@ -6,17 +6,17 @@ echo "🚀 Deploying Vessel NER Pipeline..."
 
 # Deploy main worker (HTTP handlers)
 echo "📦 Deploying main worker..."
-wrangler deploy --config wrangler.toml
+pnpm wrangler deploy --config wrangler.toml
 
 # Deploy queue consumers
 echo "📦 Deploying OCR processor..."
-wrangler deploy --config wrangler.ocr-processor.toml
+pnpm wrangler deploy --config wrangler.ocr-processor.toml
 
 echo "📦 Deploying entity extractor..."
-wrangler deploy --config wrangler.entity-extractor.toml
+pnpm wrangler deploy --config wrangler.entity-extractor.toml
 
 echo "📦 Deploying Argilla sync..."
-wrangler deploy --config wrangler.argilla-sync.toml
+pnpm wrangler deploy --config wrangler.argilla-sync.toml
 
 echo "✅ All workers deployed successfully!"
 echo ""
