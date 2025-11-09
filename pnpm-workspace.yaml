@@ -3,3 +3,4 @@ packages:
   - cloud/sdks/crunchybridge
   - cluster
   - policy
+  - workers/vessel-ner
