@@ -7,7 +7,7 @@ Cloud-native NER extraction pipeline for vessel intelligence documents.
 ```
 PDF Upload → R2 Storage → DeepSeek OCR (HF Space) → MotherDuck (parquet)
    ↓
-Claude NER → MotherDuck entities → Argilla (K3s cluster) → SME Review
+DGX Spark (Llama 3.3 70B) → MotherDuck entities → Argilla (K3s cluster) → SME Review
    ↓
 MotherDuck entity_corrections → (optional) CrunchyBridge Postgres
 ```
