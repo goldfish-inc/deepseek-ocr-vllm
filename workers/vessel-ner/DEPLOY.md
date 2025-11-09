@@ -1,5 +1,26 @@
 ## Vessel NER Pipeline - Complete Deployment Guide
 
+### Workspace Context
+
+This project lives under a pnpm workspace root, so installs and binaries resolve from the workspace root. Always run commands via `pnpm exec wrangler` (or `pnpm run <script>`) to ensure consistent resolution locally and in CI. The GitHub workflow (`.github/workflows/vessel-ner-workers.yml`) uses pnpm and `pnpm exec wrangler` accordingly.
+
+### Runbook: CI vs Local
+
+- CI (GitHub Actions)
+  - Node: `24.x`, pnpm: `9.12.2`
+  - Working dir: `workers/vessel-ner`
+  - Install: `pnpm install --no-frozen-lockfile`
+  - Deploy: `bash deploy.sh`
+  - Verify: `pnpm exec wrangler deployments list --name vessel-ner-entity-extractor | head -5`
+  - Auth: secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+
+- Local
+  - `cd workers/vessel-ner && pnpm install`
+  - Authenticate: `pnpm exec wrangler login` or export `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+  - Deploy: `./deploy.sh`
+  - Verify: `pnpm exec wrangler deployments list --name vessel-ner-entity-extractor | head -5`
+  - Logs: `pnpm exec wrangler tail vessel-ner-pipeline`
+
 ### ✅ What's Implemented
 
 **Project Structure**:
@@ -35,17 +56,17 @@ workers/vessel-ner/
 cd /Users/rt/Developer/oceanid/workers/vessel-ner
 
 # Create R2 bucket
-wrangler r2 bucket create vessel-pdfs
+pnpm exec wrangler r2 bucket create vessel-pdfs
 
 # Create queues
-wrangler queues create pdf-processing
-wrangler queues create entity-extraction
-wrangler queues create argilla-sync
+pnpm exec wrangler queues create pdf-processing
+pnpm exec wrangler queues create entity-extraction
+pnpm exec wrangler queues create argilla-sync
 
 # Create dead letter queues (for failed messages)
-wrangler queues create pdf-processing-dlq
-wrangler queues create entity-extraction-dlq
-wrangler queues create argilla-sync-dlq
+pnpm exec wrangler queues create pdf-processing-dlq
+pnpm exec wrangler queues create entity-extraction-dlq
+pnpm exec wrangler queues create argilla-sync-dlq
 ```
 
 ### Step 2: Set Secrets
@@ -53,42 +74,42 @@ wrangler queues create argilla-sync-dlq
 ```bash
 # MotherDuck token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
-  wrangler secret put MOTHERDUCK_TOKEN
+  pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
 # Claude API key
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  wrangler secret put ANTHROPIC_API_KEY
+  pnpm exec wrangler secret put ANTHROPIC_API_KEY
 
 # HuggingFace token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
-  wrangler secret put HF_TOKEN
+  pnpm exec wrangler secret put HF_TOKEN
 
 # Argilla API key (from K8s cluster)
 sshpass -p "TaylorRules" ssh root@157.173.210.123 \
   'kubectl -n apps get secret argilla-secrets -o jsonpath="{.data.ADMIN_API_KEY}"' | \
-  base64 -d | wrangler secret put ARGILLA_API_KEY
+  base64 -d | pnpm exec wrangler secret put ARGILLA_API_KEY
 
 # Set secrets for each worker
 for worker in vessel-ner-ocr-processor vessel-ner-entity-extractor vessel-ner-argilla-sync; do
   echo "Setting secrets for $worker..."
 
   op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
-    wrangler secret put MOTHERDUCK_TOKEN --name $worker
+    pnpm exec wrangler secret put MOTHERDUCK_TOKEN --name $worker
 
   if [[ "$worker" == *"entity-extractor"* ]]; then
     op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-      wrangler secret put ANTHROPIC_API_KEY --name $worker
+      pnpm exec wrangler secret put ANTHROPIC_API_KEY --name $worker
   fi
 
   if [[ "$worker" == *"ocr-processor"* ]]; then
     op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
-      wrangler secret put HF_TOKEN --name $worker
+      pnpm exec wrangler secret put HF_TOKEN --name $worker
   fi
 
   if [[ "$worker" == *"argilla-sync"* ]]; then
     sshpass -p "TaylorRules" ssh root@157.173.210.123 \
       'kubectl -n apps get secret argilla-secrets -o jsonpath="{.data.ADMIN_API_KEY}"' | \
-      base64 -d | wrangler secret put ARGILLA_API_KEY --name $worker
+      base64 -d | pnpm exec wrangler secret put ARGILLA_API_KEY --name $worker
   fi
 done
 ```
@@ -100,10 +121,10 @@ done
 ./deploy.sh
 
 # Or deploy individually
-wrangler deploy --config wrangler.toml
-wrangler deploy --config wrangler.ocr-processor.toml
-wrangler deploy --config wrangler.entity-extractor.toml
-wrangler deploy --config wrangler.argilla-sync.toml
+pnpm exec wrangler deploy --config wrangler.toml
+pnpm exec wrangler deploy --config wrangler.ocr-processor.toml
+pnpm exec wrangler deploy --config wrangler.entity-extractor.toml
+pnpm exec wrangler deploy --config wrangler.argilla-sync.toml
 ```
 
 ---
@@ -136,19 +157,19 @@ curl -X POST https://vessel-ner-pipeline.<your-subdomain>.workers.dev/upload \
 
 ```bash
 # Watch logs for main worker
-wrangler tail vessel-ner-pipeline
+pnpm exec wrangler tail vessel-ner-pipeline
 
 # Watch OCR processor
-wrangler tail vessel-ner-ocr-processor
+pnpm exec wrangler tail vessel-ner-ocr-processor
 
 # Watch entity extractor
-wrangler tail vessel-ner-entity-extractor
+pnpm exec wrangler tail vessel-ner-entity-extractor
 
 # Watch Argilla sync
-wrangler tail vessel-ner-argilla-sync
+pnpm exec wrangler tail vessel-ner-argilla-sync
 
 # Check queue depth
-wrangler queues list
+pnpm exec wrangler queues list
 ```
 
 ### Test 4: Verify Argilla
@@ -175,22 +196,22 @@ sshpass -p "TaylorRules" ssh root@157.173.210.123 \
 ### Logs
 ```bash
 # Real-time logs for all workers
-wrangler tail vessel-ner-pipeline
-wrangler tail vessel-ner-ocr-processor
-wrangler tail vessel-ner-entity-extractor
-wrangler tail vessel-ner-argilla-sync
+pnpm exec wrangler tail vessel-ner-pipeline
+pnpm exec wrangler tail vessel-ner-ocr-processor
+pnpm exec wrangler tail vessel-ner-entity-extractor
+pnpm exec wrangler tail vessel-ner-argilla-sync
 
 # Filter by event type
-wrangler tail vessel-ner-pipeline --format json | jq 'select(.event == "pdf_uploaded")'
+pnpm exec wrangler tail vessel-ner-pipeline --format json | jq 'select(.event == "pdf_uploaded")'
 ```
 
 ### Queue Metrics
 ```bash
 # List queues with message counts
-wrangler queues list
+pnpm exec wrangler queues list
 
 # View dead letter queue (failed messages)
-wrangler queues consumer list pdf-processing-dlq
+pnpm exec wrangler queues consumer list pdf-processing-dlq
 ```
 
 ---

@@ -19,6 +19,16 @@ MotherDuck entity_corrections → (optional) CrunchyBridge Postgres
 - Wrangler CLI v4.46+ (already installed)
 - 1Password CLI (for secrets)
 
+## Workspace Context
+
+This directory lives under the monorepo root that contains `pnpm-workspace.yaml`. pnpm runs in workspace context here, even though `workers/vessel-ner` is not listed as a formal workspace member. Effects:
+
+- Dependencies install to the workspace root `node_modules`.
+- Binaries (like `wrangler`) resolve from the workspace root.
+- Always invoke binaries via `pnpm exec <bin>` or npm scripts via `pnpm run <script>`.
+
+CI is aligned with this model. See `.github/workflows/vessel-ner-workers.yml`, which installs with pnpm and runs `pnpm exec wrangler` for verification. Local and CI usage should match the examples below.
+
 ## Quick Start
 
 ### 1. Install Dependencies
@@ -32,12 +42,12 @@ pnpm install
 
 ```bash
 # Create R2 bucket
-wrangler r2 bucket create vessel-pdfs
+pnpm exec wrangler r2 bucket create vessel-pdfs
 
 # Create queues
-wrangler queues create pdf-processing
-wrangler queues create entity-extraction
-wrangler queues create argilla-sync
+pnpm exec wrangler queues create pdf-processing
+pnpm exec wrangler queues create entity-extraction
+pnpm exec wrangler queues create argilla-sync
 ```
 
 ### 3. Set Secrets
@@ -45,19 +55,19 @@ wrangler queues create argilla-sync
 ```bash
 # MotherDuck token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
-  wrangler secret put MOTHERDUCK_TOKEN
+  pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
 # Claude API key
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  wrangler secret put ANTHROPIC_API_KEY
+  pnpm exec wrangler secret put ANTHROPIC_API_KEY
 
 # HuggingFace token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
-  wrangler secret put HF_TOKEN
+  pnpm exec wrangler secret put HF_TOKEN
 
 # Argilla API key (from K8s secret)
 kubectl -n apps get secret argilla-secrets -o jsonpath='{.data.ADMIN_API_KEY}' | base64 -d | \
-  wrangler secret put ARGILLA_API_KEY
+  pnpm exec wrangler secret put ARGILLA_API_KEY
 ```
 
 ### 4. Deploy
@@ -67,9 +77,9 @@ kubectl -n apps get secret argilla-secrets -o jsonpath='{.data.ADMIN_API_KEY}' |
 pnpm deploy
 
 # Deploy queue consumers (separate workers)
-wrangler deploy --config wrangler.ocr-processor.toml
-wrangler deploy --config wrangler.entity-extractor.toml
-wrangler deploy --config wrangler.argilla-sync.toml
+pnpm exec wrangler deploy --config wrangler.ocr-processor.toml
+pnpm exec wrangler deploy --config wrangler.entity-extractor.toml
+pnpm exec wrangler deploy --config wrangler.argilla-sync.toml
 ```
 
 ## Development
@@ -144,14 +154,33 @@ Tables:
 
 ```bash
 # View worker logs
-wrangler tail vessel-ner-pipeline
+pnpm exec wrangler tail vessel-ner-pipeline
 
 # Check queue depth
-wrangler queues list
+pnpm exec wrangler queues list
 
 # R2 bucket usage
-wrangler r2 bucket usage vessel-pdfs
+pnpm exec wrangler r2 bucket usage vessel-pdfs
 ```
+
+## Runbook: CI vs Local
+
+Use the same commands locally that CI runs, just with credentials set via `wrangler login` or environment variables.
+
+- CI (GitHub Actions)
+  - Node: `24.x`, pnpm: `9.12.2`
+  - Working dir: `workers/vessel-ner`
+  - Install: `pnpm install --no-frozen-lockfile`
+  - Deploy: `bash deploy.sh`
+  - Verify: `pnpm exec wrangler deployments list --name vessel-ner-entity-extractor | head -5`
+  - Auth: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are provided as secrets
+
+- Local
+  - `cd workers/vessel-ner && pnpm install`
+  - Authenticate: run `pnpm exec wrangler login` (browser) or export `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+  - Deploy: `./deploy.sh`
+  - Verify: `pnpm exec wrangler deployments list --name vessel-ner-entity-extractor | head -5`
+  - Logs: `pnpm exec wrangler tail vessel-ner-pipeline`
 
 ## Next Steps
 

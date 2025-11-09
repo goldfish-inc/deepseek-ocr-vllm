@@ -33,7 +33,7 @@ binding = "ARGILLA_SYNC_QUEUE"
 # Queue consumers defined in separate worker configs
 
 # ============================================================================
-# SECRETS (set via: wrangler secret put <NAME>)
+# SECRETS (set via: pnpm exec wrangler secret put <NAME>)
 # ============================================================================
 # MOTHERDUCK_TOKEN - MotherDuck API token
 # ANTHROPIC_API_KEY - Claude API key

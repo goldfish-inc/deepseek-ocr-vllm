@@ -76,4 +76,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "Checking worker deployments..."
-          npx wrangler deployments list --name vessel-ner-entity-extractor | head -5
+          pnpm exec wrangler deployments list --name vessel-ner-entity-extractor | head -5

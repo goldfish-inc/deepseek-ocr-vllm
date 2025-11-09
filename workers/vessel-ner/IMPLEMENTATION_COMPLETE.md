@@ -91,17 +91,17 @@ MotherDuck entity_corrections → (optional) CrunchyBridge Postgres
 cd /Users/rt/Developer/oceanid/workers/vessel-ner
 
 # 1. Create infrastructure
-wrangler r2 bucket create vessel-pdfs
-wrangler queues create pdf-processing
-wrangler queues create entity-extraction
-wrangler queues create argilla-sync
-wrangler queues create pdf-processing-dlq
-wrangler queues create entity-extraction-dlq
-wrangler queues create argilla-sync-dlq
+pnpm exec wrangler r2 bucket create vessel-pdfs
+pnpm exec wrangler queues create pdf-processing
+pnpm exec wrangler queues create entity-extraction
+pnpm exec wrangler queues create argilla-sync
+pnpm exec wrangler queues create pdf-processing-dlq
+pnpm exec wrangler queues create entity-extraction-dlq
+pnpm exec wrangler queues create argilla-sync-dlq
 
 # 2. Set secrets (see DEPLOY.md for full commands)
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
-  wrangler secret put MOTHERDUCK_TOKEN
+  pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
 # ... (repeat for other secrets)
 
@@ -120,7 +120,7 @@ curl -X POST https://vessel-ner-pipeline.<your-subdomain>.workers.dev/upload \
   -F "pdf=@test.pdf"
 
 # Monitor logs
-wrangler tail vessel-ner-pipeline
+pnpm exec wrangler tail vessel-ner-pipeline
 ```
 
 ---

@@ -1,5 +1,9 @@
 # Vessel NER Pipeline - Setup Guide
 
+## Workspace Context
+
+This directory runs in pnpm workspace context because it’s under the monorepo root with `pnpm-workspace.yaml`. Dependencies and binaries resolve from the root `node_modules`, so use `pnpm exec wrangler` (or `pnpm run <script>`) for commands. CI is aligned with this approach in `.github/workflows/vessel-ner-workers.yml`.
+
 ## ✅ What's Been Created
 
 ### Project Structure
@@ -33,12 +37,12 @@ workers/vessel-ner/
 cd /Users/rt/Developer/oceanid/workers/vessel-ner
 
 # Create R2 bucket for PDFs
-wrangler r2 bucket create vessel-pdfs
+pnpm exec wrangler r2 bucket create vessel-pdfs
 
 # Create queues
-wrangler queues create pdf-processing
-wrangler queues create entity-extraction
-wrangler queues create argilla-sync
+pnpm exec wrangler queues create pdf-processing
+pnpm exec wrangler queues create entity-extraction
+pnpm exec wrangler queues create argilla-sync
 ```
 
 ### Step 2: Set Secrets from 1Password
@@ -46,20 +50,20 @@ wrangler queues create argilla-sync
 ```bash
 # MotherDuck token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
-  wrangler secret put MOTHERDUCK_TOKEN
+  pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
 # Claude API key
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  wrangler secret put ANTHROPIC_API_KEY
+  pnpm exec wrangler secret put ANTHROPIC_API_KEY
 
 # HuggingFace token (for DeepSeek OCR Space access)
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
-  wrangler secret put HF_TOKEN
+  pnpm exec wrangler secret put HF_TOKEN
 
 # Argilla API key (from K8s cluster)
 sshpass -p "TaylorRules" ssh root@157.173.210.123 \
   'kubectl -n apps get secret argilla-secrets -o jsonpath="{.data.ADMIN_API_KEY}"' | \
-  base64 -d | wrangler secret put ARGILLA_API_KEY
+  base64 -d | pnpm exec wrangler secret put ARGILLA_API_KEY
 ```
 
 ### Step 3: Test Basic Deployment
