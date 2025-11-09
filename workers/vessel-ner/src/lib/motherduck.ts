@@ -80,7 +80,7 @@ export class MotherDuckClient {
       throw new Error(`MotherDuck query failed: ${error}`);
     }
 
-    const result = await response.json();
+    const result = await response.json() as { data?: T[] };
     return result.data || [];
   }
 

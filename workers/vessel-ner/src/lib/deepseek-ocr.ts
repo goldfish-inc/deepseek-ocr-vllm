@@ -50,7 +50,7 @@ export class DeepSeekOcrClient {
 
       // Connect to private Gradio Space with auth
       const client = await Client.connect(spaceId, {
-        hf_token: this.hfToken,
+        hf_token: this.hfToken as `hf_${string}`,
       });
 
       // Convert ArrayBuffer to Blob for Gradio client

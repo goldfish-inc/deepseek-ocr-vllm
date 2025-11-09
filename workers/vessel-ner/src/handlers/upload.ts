@@ -9,11 +9,13 @@ import type { Context } from 'hono';
 export async function uploadHandler(c: Context) {
   try {
     const formData = await c.req.formData();
-    const file = formData.get('pdf') as File;
+    const fileEntry = formData.get('pdf');
 
-    if (!file) {
+    if (!fileEntry || typeof fileEntry === 'string') {
       return c.json({ error: 'No PDF file provided' }, 400);
     }
+
+    const file = fileEntry as File;
 
     // Validate PDF
     if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
