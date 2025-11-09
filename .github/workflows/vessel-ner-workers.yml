@@ -51,7 +51,7 @@ jobs:
 
       - name: Type check
         working-directory: workers/vessel-ner
-        run: npx tsc --noEmit
+        run: ./node_modules/.bin/tsc --noEmit
 
   deploy:
     name: Deploy Workers
