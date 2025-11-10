@@ -13,6 +13,33 @@ const db = new duckdb.Database(':memory:', { allow_unsigned_extensions: 'true' }
 
 // Initialize DuckDB connection
 const conn = db.connect();
+let currentAttachedDb = null; // tracks which MotherDuck database is attached as catalog 'md'
+
+function ensureAttached(database) {
+  return new Promise((resolve, reject) => {
+    // If already attached to this database, skip
+    if (currentAttachedDb === database) return resolve();
+
+    // Detach previous if exists, then attach requested DB as 'md'
+    conn.run('DETACH IF EXISTS md;', () => {
+      const attachSql = `ATTACH 'md:${database}' AS md (READ_ONLY FALSE);`;
+      conn.run(attachSql, (err) => {
+        if (err) return reject(err);
+        currentAttachedDb = database;
+        resolve();
+      });
+    });
+  });
+}
+
+function rewriteSqlForMd(sql) {
+  let s = sql;
+  // Prefix our known tables when they appear unqualified
+  s = s.replace(/\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(raw_ocr|entities|entity_corrections)\b/gi, (m, op, tbl) => `${op} md.${tbl}`);
+  s = s.replace(/\bFROM\s+(raw_ocr|entities|entity_corrections)\b/gi, (m, tbl) => `FROM md.${tbl}`);
+  s = s.replace(/\bJOIN\s+(raw_ocr|entities|entity_corrections)\b/gi, (m, tbl) => `JOIN md.${tbl}`);
+  return s;
+}
 
 async function init() {
   return new Promise((resolve, reject) => {
@@ -45,33 +72,38 @@ app.get('/health', (req, res) => {
 });
 
 // POST /query { database: string, query: string }
-app.post('/query', (req, res) => {
-  const { database, query } = req.body || {};
-  if (!database || !query) {
-    return res.status(400).json({ error: 'Missing database or query' });
-  }
-  if (!MOTHERDUCK_TOKEN) {
-    return res.status(500).json({ error: 'MOTHERDUCK_TOKEN not configured on proxy' });
-  }
+app.post('/query', async (req, res) => {
+  try {
+    const { database, query } = req.body || {};
+    if (!database || !query) {
+      return res.status(400).json({ error: 'Missing database or query' });
+    }
+    if (!MOTHERDUCK_TOKEN) {
+      return res.status(500).json({ error: 'MOTHERDUCK_TOKEN not configured on proxy' });
+    }
 
-  // Attach MotherDuck database as md
-  // We can ATTACH per request to ensure database selection is respected
-  const attachSql = `ATTACH 'md:${database}' AS md (READ_ONLY FALSE);`;
-  conn.run('DETACH IF EXISTS md;', (e0) => {
-    // Ignore detach error
-    conn.run(attachSql, (e1) => {
-      if (e1) {
-        return res.status(502).json({ error: `Failed to attach MotherDuck db: ${e1.message}` });
+    const start = Date.now();
+    await ensureAttached(database);
+    const rewritten = rewriteSqlForMd(query);
+    conn.all(rewritten, (err, rows) => {
+      if (err) return res.status(400).json({ error: err.message, elapsed_ms: Date.now() - start });
+
+      // Convert BigInt values (DuckDB returns BIGINT for COUNT, etc.) to strings for JSON compatibility
+      let safeRows = rows;
+      try {
+        safeRows = JSON.parse(
+          JSON.stringify(rows, (key, value) => (typeof value === 'bigint' ? value.toString() : value))
+        );
+      } catch (e) {
+        // As a fallback, return the raw rows (may still throw if BigInt present)
+        console.warn('[md-query-proxy] BigInt serialization fallback:', e);
       }
-      const start = Date.now();
-      conn.all(query, (e2, rows) => {
-        if (e2) {
-          return res.status(400).json({ error: e2.message });
-        }
-        res.json({ data: rows || [], elapsed_ms: Date.now() - start });
-      });
+
+      return res.json({ data: safeRows || [], elapsed_ms: Date.now() - start });
     });
-  });
+  } catch (e) {
+    return res.status(502).json({ error: String(e) });
+  }
 });
 
 init()

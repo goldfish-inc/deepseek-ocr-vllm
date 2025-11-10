@@ -19,7 +19,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: proxy
-          image: ghcr.io/goldfish-inc/oceanid/md-query-proxy:latest@sha256:3499849e95074d3d3f708651a6509124312ebf12daa73bdfcfa4f37d2a58ea8c
+          image: ghcr.io/goldfish-inc/oceanid/md-query-proxy:latest@sha256:24bf2e459ccf2f08b1324cb4b7d112d3d4b4daf65d534cea605c1e343396d3e5
           imagePullPolicy: Always
           env:
             - name: MOTHERDUCK_TOKEN
