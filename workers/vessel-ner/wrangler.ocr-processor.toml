@@ -26,10 +26,18 @@ binding = "ENTITY_EXTRACTION_QUEUE"
 # Environment variables
 [vars]
 DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr"
-MOTHERDUCK_DATABASE = "vessel_intelligence"
-MD_QUERY_PROXY_URL = "https://md.boathou.se"
-USE_DIRECT_UPLOAD = "true"  # Feature flag: Use direct HTTP FormData upload to Gradio Space
+USE_DIRECT_UPLOAD = "false"  # Feature flag: Use direct Gradio /call/ API instead of @gradio/client
 
-# Secrets (same as main worker)
-# MOTHERDUCK_TOKEN
-# HF_TOKEN
+# R2 Parquet output configuration
+R2_ENDPOINT = "https://8fa97474778c8a894925c148ca829739.r2.cloudflarestorage.com"
+R2_PARQUET_BUCKET = "vessel-parquet"
+
+# Provenance tracking
+HF_SPACE_COMMIT = "main"  # Update with actual commit SHA
+OCR_MODEL_VERSION = "deepseek-ocr-3b"
+OCR_IMAGE_DIGEST = "latest"
+
+# Secrets (set via: pnpm exec wrangler secret put <NAME>)
+# HF_TOKEN - HuggingFace API token
+# R2_ACCESS_KEY_ID - R2 API access key ID
+# R2_SECRET_ACCESS_KEY - R2 API secret access key
