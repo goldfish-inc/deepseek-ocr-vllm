@@ -2,11 +2,13 @@
  * Parquet Writer for MotherDuck Raw OCR Schema
  *
  * Writes OCR results to Parquet files in S3/R2 compatible with md_raw_ocr schema
+ * Uses parquet-wasm for WebAssembly-based Parquet writing compatible with Workers
  */
 
 import { S3Client } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import { ParquetWriter, ParquetSchema } from 'parquetjs-lite';
+import * as arrow from 'apache-arrow';
+import initWasm, { writeParquet, Table, WriterPropertiesBuilder, Compression } from 'parquet-wasm';
 
 export interface ParquetWriterConfig {
   s3Endpoint: string;
@@ -52,11 +54,12 @@ export interface RawPage {
 }
 
 /**
- * Parquet Writer for md_raw_ocr schema
+ * Parquet Writer for md_raw_ocr schema using parquet-wasm
  */
 export class MdRawOcrParquetWriter {
   private s3Client: S3Client;
   private bucket: string;
+  private wasmInitialized: Promise<void>;
 
   constructor(config: ParquetWriterConfig) {
     this.s3Client = new S3Client({
@@ -68,6 +71,9 @@ export class MdRawOcrParquetWriter {
       },
     });
     this.bucket = config.bucket;
+
+    // Initialize WASM module once
+    this.wasmInitialized = initWasm();
   }
 
   /**
@@ -75,32 +81,34 @@ export class MdRawOcrParquetWriter {
    * Path: md_raw_ocr/documents/date=YYYY-MM-DD/doc_id={doc_id}/run_id={run_id}/part-000.parquet
    */
   async writeDocuments(document: RawDocument): Promise<string> {
+    await this.wasmInitialized;
+
     const date = document.ingest_ts.toISOString().split('T')[0];
     const key = `md_raw_ocr/documents/date=${date}/doc_id=${document.doc_id}/run_id=${document.run_id}/part-000.parquet`;
 
-    // Define Parquet schema
-    const schema = new ParquetSchema({
-      doc_id: { type: 'UTF8', optional: false },
-      run_id: { type: 'INT64', optional: false },
-      ingest_ts: { type: 'TIMESTAMP_MILLIS', optional: false },
-      filename: { type: 'UTF8', optional: true },
-      r2_key: { type: 'UTF8', optional: true },
-      content_type: { type: 'UTF8', optional: true },
-      size_bytes: { type: 'INT64', optional: true },
-      doc_sha256: { type: 'UTF8', optional: false },
-      uploader: { type: 'UTF8', optional: true },
-      source_meta_json: { type: 'UTF8', optional: true },
-      hf_space_commit: { type: 'UTF8', optional: true },
-      ocr_model: { type: 'UTF8', optional: true },
-      ocr_image_digest: { type: 'UTF8', optional: true },
-      ocr_params_json: { type: 'UTF8', optional: true },
+    // Create Arrow table from document data
+    const table = arrow.tableFromArrays({
+      doc_id: [document.doc_id],
+      run_id: [document.run_id],
+      ingest_ts: [document.ingest_ts],
+      filename: [document.filename],
+      r2_key: [document.r2_key],
+      content_type: [document.content_type],
+      size_bytes: [document.size_bytes],
+      doc_sha256: [document.doc_sha256],
+      uploader: [document.uploader],
+      source_meta_json: [document.source_meta_json],
+      hf_space_commit: [document.hf_space_commit],
+      ocr_model: [document.ocr_model],
+      ocr_image_digest: [document.ocr_image_digest],
+      ocr_params_json: [document.ocr_params_json],
     });
 
-    // Write to in-memory buffer
-    const buffer = await this.writeToBuffer(schema, [document]);
+    // Convert to Parquet
+    const parquetBuffer = await this.writeToParquet(table);
 
     // Upload to S3/R2
-    await this.uploadToS3(key, buffer);
+    await this.uploadToS3(key, parquetBuffer);
 
     return key;
   }
@@ -114,65 +122,64 @@ export class MdRawOcrParquetWriter {
       throw new Error('Cannot write empty pages array');
     }
 
+    await this.wasmInitialized;
+
     const { doc_id, run_id } = pages[0];
     const key = `md_raw_ocr/pages/doc_id=${doc_id}/run_id=${run_id}/part-000.parquet`;
 
-    // Define Parquet schema
-    const schema = new ParquetSchema({
-      doc_id: { type: 'UTF8', optional: false },
-      run_id: { type: 'INT64', optional: false },
-      page_num: { type: 'INT32', optional: false },
-      page_width: { type: 'DOUBLE', optional: true },
-      page_height: { type: 'DOUBLE', optional: true },
-      text: { type: 'UTF8', optional: true },
-      text_sha256: { type: 'UTF8', optional: false },
-      page_image_sha256: { type: 'UTF8', optional: true },
-      ocr_confidence: { type: 'DOUBLE', optional: true },
-      blocks_json: { type: 'UTF8', optional: true },
-      lines_json: { type: 'UTF8', optional: true },
-      tables_json: { type: 'UTF8', optional: true },
-      figures_json: { type: 'UTF8', optional: true },
-      ocr_runtime_ms: { type: 'INT64', optional: true },
-      created_at: { type: 'TIMESTAMP_MILLIS', optional: false },
+    // Create Arrow table from pages data
+    const table = arrow.tableFromArrays({
+      doc_id: pages.map(p => p.doc_id),
+      run_id: pages.map(p => p.run_id),
+      page_num: Int32Array.from(pages.map(p => p.page_num)),
+      page_width: Float64Array.from(pages.map(p => p.page_width ?? 0)),
+      page_height: Float64Array.from(pages.map(p => p.page_height ?? 0)),
+      text: pages.map(p => p.text),
+      text_sha256: pages.map(p => p.text_sha256),
+      page_image_sha256: pages.map(p => p.page_image_sha256),
+      ocr_confidence: Float64Array.from(pages.map(p => p.ocr_confidence ?? 0)),
+      blocks_json: pages.map(p => p.blocks_json),
+      lines_json: pages.map(p => p.lines_json),
+      tables_json: pages.map(p => p.tables_json),
+      figures_json: pages.map(p => p.figures_json),
+      ocr_runtime_ms: pages.map(p => p.ocr_runtime_ms),
+      created_at: pages.map(p => p.created_at),
     });
 
-    // Write to in-memory buffer
-    const buffer = await this.writeToBuffer(schema, pages);
+    // Convert to Parquet
+    const parquetBuffer = await this.writeToParquet(table);
 
     // Upload to S3/R2
-    await this.uploadToS3(key, buffer);
+    await this.uploadToS3(key, parquetBuffer);
 
     return key;
   }
 
   /**
-   * Write Parquet data to in-memory buffer
+   * Convert Arrow table to Parquet using parquet-wasm
    */
-  private async writeToBuffer(schema: ParquetSchema, rows: any[]): Promise<Buffer> {
-    const buffers: Buffer[] = [];
+  private async writeToParquet(table: arrow.Table): Promise<Uint8Array> {
+    // Serialize Arrow table to IPC stream format
+    const ipcStream = arrow.tableToIPC(table, 'stream');
 
-    // Create a writable stream that collects chunks
-    const writableStream = new WritableStream({
-      write(chunk) {
-        buffers.push(Buffer.from(chunk));
-      },
-    });
+    // Convert to WASM Table
+    const wasmTable = Table.fromIPCStream(ipcStream);
 
-    const writer = await ParquetWriter.openStream(schema, writableStream);
+    // Configure Parquet writer with ZSTD compression
+    const writerProps = new WriterPropertiesBuilder()
+      .setCompression(Compression.ZSTD)
+      .build();
 
-    for (const row of rows) {
-      await writer.appendRow(row);
-    }
+    // Write Parquet and return Uint8Array
+    const parquetBuffer = writeParquet(wasmTable, writerProps);
 
-    await writer.close();
-
-    return Buffer.concat(buffers);
+    return parquetBuffer;
   }
 
   /**
    * Upload buffer to S3/R2
    */
-  private async uploadToS3(key: string, buffer: Buffer): Promise<void> {
+  private async uploadToS3(key: string, buffer: Uint8Array): Promise<void> {
     const upload = new Upload({
       client: this.s3Client,
       params: {

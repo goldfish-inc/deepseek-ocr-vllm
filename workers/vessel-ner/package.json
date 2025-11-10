@@ -16,10 +16,11 @@
     "wrangler": "^4.46.0"
   },
   "dependencies": {
-    "@gradio/client": "^1.10.0",
-    "hono": "^4.10.4",
     "@aws-sdk/client-s3": "^3.714.0",
     "@aws-sdk/lib-storage": "^3.714.0",
-    "parquetjs-lite": "^0.8.7"
+    "@gradio/client": "^1.10.0",
+    "apache-arrow": "^21.1.0",
+    "hono": "^4.10.4",
+    "parquet-wasm": "^0.7.1"
   }
 }
