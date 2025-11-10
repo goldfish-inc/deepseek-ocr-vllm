@@ -281,7 +281,7 @@ const tunnelConfig = new cloudflare.ZeroTrustTunnelCloudflaredConfig("main-tunne
             },
             {
                 hostname: "md.boathou.se",
-                service: "http://md-query-proxy.apps.svc.cluster.local:8080",
+                service: "http://md-query-proxy.apps.svc.cluster.local:80",
                 originRequest: {
                     noTlsVerify: true,
                 },
