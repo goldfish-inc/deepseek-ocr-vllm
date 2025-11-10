@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-WORKER_URL="${WORKER_URL:-https://vessel-ner.ryan-8fa.workers.dev}"
+WORKER_URL="${WORKER_URL:-https://vessel-ner-pipeline.ryan-8fa.workers.dev}"
 MD_PROXY_URL="${MD_PROXY_URL:-https://md.boathou.se}"
 MOTHERDUCK_DB="vessel_intelligence"
 
@@ -112,11 +112,19 @@ if [ -z "$VESSEL_NER_API_KEY" ]; then
   echo -e "${YELLOW}⚠${NC}  VESSEL_NER_API_KEY not set (trying without auth)"
 fi
 
-# Check for MotherDuck token
+# Get MotherDuck token from Pulumi ESC if not already set
 if [ -z "$MOTHERDUCK_TOKEN" ]; then
-  echo -e "${RED}✗${NC} MOTHERDUCK_TOKEN not set"
-  echo "   Set it with: export MOTHERDUCK_TOKEN=\$(op read 'op://Infrastructure/MotherDuck Service Token/credential')"
-  exit 1
+  echo "📥 Fetching MOTHERDUCK_TOKEN from Pulumi ESC..."
+  MOTHERDUCK_TOKEN=$(cd ../../cloud && pulumi config get oceanid-cloud:motherduckToken 2>&1)
+
+  if [ -z "$MOTHERDUCK_TOKEN" ] || echo "$MOTHERDUCK_TOKEN" | grep -q "error:"; then
+    echo -e "${RED}✗${NC} Failed to get MOTHERDUCK_TOKEN from Pulumi ESC"
+    echo "   Tried: pulumi config get oceanid-cloud:motherduckToken --cwd ../../cloud"
+    echo "   Error: $MOTHERDUCK_TOKEN"
+    exit 1
+  fi
+
+  echo -e "${GREEN}✓${NC} Got MOTHERDUCK_TOKEN from ESC"
 fi
 
 echo -e "${GREEN}✓${NC} Prerequisites OK"
@@ -131,10 +139,10 @@ PDF_FILENAME=$(basename "$TEST_PDF")
 if [ -n "$VESSEL_NER_API_KEY" ]; then
   UPLOAD_RESPONSE=$(curl -s -X POST "$WORKER_URL/upload" \
     -H "Authorization: Bearer $VESSEL_NER_API_KEY" \
-    -F "file=@$TEST_PDF")
+    -F "pdf=@$TEST_PDF")
 else
   UPLOAD_RESPONSE=$(curl -s -X POST "$WORKER_URL/upload" \
-    -F "file=@$TEST_PDF")
+    -F "pdf=@$TEST_PDF")
 fi
 
 echo "$UPLOAD_RESPONSE" | jq '.' 2>/dev/null || echo "$UPLOAD_RESPONSE"
