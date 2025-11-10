@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: md-query-proxy
+  namespace: apps
+  labels:
+    app: md-query-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: md-query-proxy
+  template:
+    metadata:
+      labels:
+        app: md-query-proxy
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      containers:
+        - name: proxy
+          image: ghcr.io/goldfish-inc/oceanid/md-query-proxy:latest@sha256:3499849e95074d3d3f708651a6509124312ebf12daa73bdfcfa4f37d2a58ea8c
+          imagePullPolicy: Always
+          env:
+            - name: MOTHERDUCK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: md-secrets
+                  key: MOTHERDUCK_TOKEN
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: md-query-proxy
+  namespace: apps
+spec:
+  selector:
+    app: md-query-proxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
