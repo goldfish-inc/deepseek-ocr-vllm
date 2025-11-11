@@ -7,7 +7,7 @@ on:
       trigger_source:
         description: "Source of dispatch (optional)"
         required: false
-        default: "label-studio"
+        default: "argilla"
   schedule:
     - cron: '0 3 * * *'  # daily at 03:00 UTC
 

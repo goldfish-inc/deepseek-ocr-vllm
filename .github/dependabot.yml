@@ -19,41 +19,6 @@ updates:
       majors:
         update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: "gomod"
-    directory: "/apps/ls-triton-adapter"
-    schedule:
-      interval: "daily"
-      time: "02:00"
-    open-pull-requests-limit: 25
-    rebase-strategy: auto
-    versioning-strategy: increase
-    commit-message:
-      prefix: "deps(go)"
-      include: "scope"
-    labels: ["dependencies", "go"]
-    groups:
-      minor-and-patch:
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
-      majors:
-        update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "gomod"
-    directory: "/apps/project-bootstrapper"
-    schedule:
-      interval: "daily"
-      time: "02:00"
-    open-pull-requests-limit: 25
-    rebase-strategy: auto
-    versioning-strategy: increase
-    commit-message:
-      prefix: "deps(go)"
-      include: "scope"
-    labels: ["dependencies", "go"]
-    groups:
-      minor-and-patch:
-        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
-      majors:
-        update-types: ["version-update:semver-major"]
 
   # NodeJS workspaces
   - package-ecosystem: "npm"
@@ -117,30 +82,6 @@ updates:
     schedule:
       interval: "daily"
       time: "05:00"
-    open-pull-requests-limit: 10
-    rebase-strategy: auto
-    versioning-strategy: increase
-    commit-message:
-      prefix: "deps(docker)"
-      include: "scope"
-    labels: ["dependencies", "docker"]
-  - package-ecosystem: "docker"
-    directory: "/apps/ls-triton-adapter"
-    schedule:
-      interval: "daily"
-      time: "05:10"
-    open-pull-requests-limit: 10
-    rebase-strategy: auto
-    versioning-strategy: increase
-    commit-message:
-      prefix: "deps(docker)"
-      include: "scope"
-    labels: ["dependencies", "docker"]
-  - package-ecosystem: "docker"
-    directory: "/apps/project-bootstrapper"
-    schedule:
-      interval: "daily"
-      time: "05:20"
     open-pull-requests-limit: 10
     rebase-strategy: auto
     versioning-strategy: increase
