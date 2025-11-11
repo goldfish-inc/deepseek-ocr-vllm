@@ -1,6 +1,7 @@
 # Focus: Database Stabilization and Tenant Enrichment
 
-Phase: 0–2 active. Tenant enrichment and Label Studio are out of scope here.
+Phase: 0–2 active. Tenant enrichment continues later; the Argilla/MotherDuck rollout is
+tracked via `VESSEL_NER_CLOUDFLARE_WORKPLAN.md`.
 
 ## Active Scope (Oceanid)
 
@@ -10,7 +11,7 @@ Phase: 0–2 active. Tenant enrichment and Label Studio are out of scope here.
 
 ## Out of Scope / Paused
 
-- Label Studio UI and `label.*` schema/migrations (blocked by CI guard)
+- Legacy Label Studio UI and `label.*`/`ls_*` schema/migrations (retired, see docs archive)
 - ML/Active Learning integration work beyond what’s needed to keep the pipeline healthy
 - Tenant enrichment orchestration (workers, per-tenant upserts) — tracked in @ocean
 

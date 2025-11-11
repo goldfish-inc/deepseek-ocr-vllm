@@ -1,5 +1,7 @@
 # DGX Spark Integration Plan
 
+> Archived: Docling/DistilBERT references retained for history. The active NER path uses DeepSeek OCR + Claude NER with Argilla review, Spark batch jobs with Ollama, and MotherDuck.
+
 **Equipment:** NVIDIA DGX Spark (multi-GPU, 4 TB RAM)
 **Purpose:** Capture everything we need so when the DGX shows up we can rack it, join the tailnet, and fold it into Oceanid without guesswork. for Oceanid training and batch inference workloads.
 **Audience:** ML Platform • DevOps • Data Engineering
@@ -9,7 +11,7 @@
 
 ## 1. Objectives
 
-1. Power heavyweight training (NER fine-tunes, Docling adaptation, synthetic data pipelines).
+1. Power heavyweight batch jobs (OCR at scale, Spark + Ollama enrichment, synthetic data pipelines).
 2. Accelerate batch inference (PDF pre-processing, large entity extraction jobs).
 3. Keep the existing K3s cluster stable; DGX complements Calypso rather than replacing it.
 4. Deliver reproducible, containerised workflows so SMEs see richer pre-annotations and faster turnaround times.
@@ -24,7 +26,7 @@
 | Week 1 | Base OS & drivers | DGX OS/Ubuntu, NVIDIA DGX stack, CUDA, Triton-compatible driver |
 | Week 2 | Tailscale + storage | DGX joined to tailnet, S3/CrunchyBridge access tested, dataset cache provisioned |
 | Week 3 | Container toolchain | Buildx/podman/conda alternatives established, image registry access confirmed |
-| Week 4 | Workload shakeout | Run benchmark training job + batch Docling pipeline, publish results |
+| Week 4 | Workload shakeout | Run benchmark job: DeepSeek OCR batching / Spark + Ollama enrichment, publish results |
 
 Timelines assume on-site power/network readiness. Adjust as needed.
 
@@ -62,8 +64,8 @@ Timelines assume on-site power/network readiness. Adjust as needed.
 - Register Triton access credentials for pushing models.
 
 ### Phase 5 – Workload validation
-- Run baseline training job (e.g., fine-tune DistilBERT on sample dataset) and document throughput.
-- Run Granite Docling batch conversion on a pilot PDF set; compare runtime vs current setup.
+- Run baseline batch job (Spark + Ollama enrichment over OCR outputs) and document throughput.
+- Run DeepSeek OCR batch conversion on a pilot PDF set; compare runtime vs current setup.
 - Push resulting model to shared registry; deploy on Calypso for inference.
 - Capture metrics dashboards (GPU utilisation, throughput) and add to Grafana.
 
@@ -101,7 +103,7 @@ Timelines assume on-site power/network readiness. Adjust as needed.
 
 1. DGX reachable via Tailscale with monitoring in Grafana.
 2. Training job results published (throughput, runtime, sample logs).
-3. Docling batch pipeline running reliably on DGX.
+3. DeepSeek OCR batch pipeline running reliably on DGX.
 4. Model handoff documented (DGX → Calypso Triton).
 5. No disruption to existing K3s workloads.
 
@@ -112,7 +114,7 @@ Timelines assume on-site power/network readiness. Adjust as needed.
 1. Kick off facility readiness checklist (power, cooling, networking).
 2. Align driver/CUDA versions with Calypso’s Triton deployment.
 3. Schedule installation window and assign on-site engineer.
-4. Draft container templates (training, docling) to run on DGX day-one.
+4. Draft container templates (OCR batching, Spark + Ollama enrichment) to run on DGX day-one.
 5. Prepare exec brief (below) to communicate value to leadership.
 
 ---

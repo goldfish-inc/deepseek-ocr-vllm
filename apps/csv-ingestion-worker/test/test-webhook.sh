@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for CSV ingestion worker
-# Simulates a Label Studio webhook with real RFMO vessel data
+# Simulates an Oceanid ingestion webhook with real RFMO vessel data
 
 # Colors for output
 GREEN='\033[0;32m'

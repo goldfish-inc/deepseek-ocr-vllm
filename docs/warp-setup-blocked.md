@@ -267,3 +267,4 @@ Once CIDRs are added to split tunnel policy:
 ---
 
 **Bottom Line**: Everything is configured correctly except the split tunnel policy. Adding 3 CIDRs via the dashboard will unblock kubectl access immediately.
+> Archived: This document references Label Studio flows. Argilla replaces LS; see `docs/operations/pipeline-overview.md` for the current pipeline.

@@ -50,13 +50,14 @@
 ### Secrets (Pulumi ESC)
 ```bash
 # Read
-pulumi config get labelStudioPat
+pulumi config get argillaAdminApiKey
 
 # Set (encrypted)
-pulumi config set --secret labelStudioPat "value"
+pulumi config set --secret argillaAdminApiKey "value"
 ```
 
-**Key secrets**: `labelStudioPat`, `labelStudioDbUrl`, `postgresPassword`, AWS creds
+**Key secrets**: `argillaPostgresPassword`, `argillaAuthSecret`, `argillaAdminPassword`,
+`argillaAdminApiKey`, `argillaRedisUrl`, `huggingFaceToken`, `postgresPassword`
 
 ### 1Password Vaults
 **CRITICAL**: Use ONLY these vaults for secrets. Never search entire `op` inventory.
@@ -79,9 +80,10 @@ op item list | grep something
 - OR stored in Development vault: UUID `5zmjz55o2bnv7fq6tfgpvzi3je`
 
 ### Database
-**Crunchy Bridge** (Ebisu): DB `labelfish`, user `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
-**ESC key**: `oceanid-cluster:labelStudioDbUrl`
-**Firewall**: `157.173.210.123/32` (Tailscale exit node)
+**Crunchy Bridge** (Ebisu): DB `cleandata`, user `postgres`
+**ESC key**: `oceanid-cluster:cleandataDbUrl`
+**Firewall**: `157.173.210.123/32` (Tethys egress)
+Argilla’s workspace DB/Elasticsearch run inside the cluster (no external firewall rules).
 
 ### Git
 **REQUIRED for push**: `GIT_SSH_COMMAND="ssh -i ~/.ssh/claude-code-gh" git push origin main`

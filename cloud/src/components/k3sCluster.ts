@@ -14,14 +14,6 @@ export interface K3sClusterArgs {
     k3sToken: pulumi.Input<string>;
     k3sVersion?: string;
     privateKeys: Record<string, pulumi.Input<string>>;
-    enableEtcdBackups?: boolean;
-    backupS3Bucket?: string;
-    s3Credentials?: {
-        accessKey: pulumi.Input<string>;
-        secretKey: pulumi.Input<string>;
-        region?: string;
-        endpoint?: string;
-    };
 }
 
 export interface K3sClusterOutputs {
@@ -42,14 +34,6 @@ export class K3sNode extends pulumi.ComponentResource {
             k3sToken: pulumi.Input<string>;
             k3sServerUrl?: pulumi.Input<string>;
             k3sVersion?: string;
-            enableEtcdBackups?: boolean;
-            backupS3Bucket?: string;
-            s3Credentials?: {
-                accessKey: pulumi.Input<string>;
-                secretKey: pulumi.Input<string>;
-                region?: string;
-                endpoint?: string;
-            };
         },
         opts?: pulumi.ComponentResourceOptions
     ) {
@@ -110,13 +94,6 @@ EOF
             : "";
 
 
-        // Configure etcd backups for all master nodes
-        const etcdBackupConfig = args.enableEtcdBackups && nodeConfig.role === "master" && args.backupS3Bucket
-            ? args.s3Credentials
-                ? pulumi.interpolate`--etcd-snapshot-schedule-cron="0 2 * * *" --etcd-snapshot-retention=7 --etcd-s3 --etcd-s3-bucket=${args.backupS3Bucket} --etcd-s3-region=${args.s3Credentials.region || "us-east-1"} ${args.s3Credentials.endpoint ? `--etcd-s3-endpoint=${args.s3Credentials.endpoint}` : ""}`
-                : pulumi.interpolate`--etcd-snapshot-schedule-cron="0 2 * * *" --etcd-snapshot-retention=7`
-            : "";
-
         const installK3s = new command.remote.Command(`${name}-install-k3s`, {
             connection: {
                 host: nodeConfig.ip,
@@ -134,15 +111,9 @@ EOF
                 export INSTALL_K3S_VERSION=${k3sVersion}
                 export K3S_TOKEN=${k3sToken}
 
-                # Set S3 credentials if provided
-                ${args.s3Credentials ? `
-                export AWS_ACCESS_KEY_ID="${args.s3Credentials.accessKey}"
-                export AWS_SECRET_ACCESS_KEY="${args.s3Credentials.secretKey}"
-                ` : ""}
-
                 # Install based on role
                 if [ "${nodeConfig.role}" = "master" ]; then
-                    curl -sfL https://get.k3s.io | sh -s - server ${k3sInstallArgs} ${etcdBackupConfig} ${labelArgs}
+                    curl -sfL https://get.k3s.io | sh -s - server ${k3sInstallArgs} ${labelArgs}
                 else
                     curl -sfL https://get.k3s.io | sh -s - agent ${k3sInstallArgs} ${labelArgs}
                 fi
@@ -275,7 +246,7 @@ export class K3sCluster extends pulumi.ComponentResource {
     constructor(name: string, args: K3sClusterArgs, opts?: pulumi.ComponentResourceOptions) {
         super("oceanid:infrastructure:K3sCluster", name, {}, opts);
 
-        const { nodes, k3sToken, k3sVersion, privateKeys, enableEtcdBackups, backupS3Bucket, s3Credentials } = args;
+        const { nodes, k3sToken, k3sVersion, privateKeys } = args;
 
         // Find master nodes
         const masterNodes = Object.entries(nodes).filter(([_, config]) => config.role === "master");
@@ -305,9 +276,6 @@ export class K3sCluster extends pulumi.ComponentResource {
             privateKey: primaryPrivateKey,
             k3sToken,
             k3sVersion,
-            enableEtcdBackups,
-            backupS3Bucket,
-            s3Credentials,
         }, { parent: this });
 
         // Create secondary master nodes
@@ -325,9 +293,6 @@ export class K3sCluster extends pulumi.ComponentResource {
                     k3sToken,
                     k3sServerUrl: masterServerUrl,
                     k3sVersion,
-                    enableEtcdBackups,
-                    backupS3Bucket,
-                    s3Credentials,
                 }, { parent: this, dependsOn: [primary] });
             }
         }
@@ -348,9 +313,6 @@ export class K3sCluster extends pulumi.ComponentResource {
                     k3sToken,
                     k3sServerUrl: masterServerUrl,
                     k3sVersion,
-                    enableEtcdBackups: false, // Workers don't need etcd backups
-                    backupS3Bucket: undefined,
-                    s3Credentials: undefined,
                 }, { parent: this, dependsOn: allMasters });
             }
         }

@@ -42,6 +42,28 @@ Operational Notes
 - Views: `vw_argilla_pages` reads the latest OCR run per document; `vw_latest_annotations_spans` resolves to the most recent Argilla export per dataset.
 - Permissions: Use separate tokens/service accounts for loaders (`raw_loader`, `argilla_loader`); enforce least privilege.
 
+Quick Bootstrap Script
+----------------------
+
+Run `scripts/motherduck_bootstrap.sh` to create both databases and views in one go:
+
+```
+MOTHERDUCK_TOKEN=... ./scripts/motherduck_bootstrap.sh
+```
+
+This attaches `md:md_raw_ocr` and `md:md_annotated`, runs the DDLs (`raw_ocr.sql`, `views_raw.sql`, `annotated.sql`, `views_annotated.sql`, `argilla_ingest_log.sql`), and prints a brief summary.
+
+Parquet Flow (Argilla Pulls Parquet)
+------------------------------------
+
+- Export pages for Argilla from `md_raw_ocr`:
+  - `.read sql/motherduck/export_for_argilla.sql`
+  - Writes Parquet files (partitioned by doc_id) to your S3/R2 prefix.
+- Argilla ingests those Parquet files into dataset `vessels_ocr_<batch_id>`.
+- Load annotated Parquet back into `md_annotated`:
+  - `.read sql/motherduck/load_annotated_parquet.sql`
+  - Uses staged temp tables and `argilla_export_loader_from_staged.sql` to keep append-only invariants.
+
 Loading Data
 ------------
 See `examples_load_parquet.sql` for DuckDB COPY FROM snippets to load DeepSeek Parquet outputs into raw_documents and raw_pages.

@@ -1,5 +1,8 @@
 # Phase 1 Audit Report - October 13, 2025
 
+> Archived: captures the Label Studio-era remediation. For current annotation stack,
+> reference Argilla/MotherDuck workplans.
+
 ## Executive Summary
 ✅ **Phase 1 COMPLETE** - All critical objectives achieved with zero omissions
 
@@ -324,3 +327,4 @@ Phase 5: High Availability (1 week) ← RENUMBERED FROM PHASE 4
 ---
 
 **Next Action**: Update GitHub issues with reorganized phase structure per user request.
+> Archived: This report covers the former Label Studio era. The active SME pipeline uses Argilla with Workers + MotherDuck. See `docs/operations/pipeline-overview.md`.

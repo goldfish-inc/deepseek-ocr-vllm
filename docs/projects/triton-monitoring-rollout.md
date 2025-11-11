@@ -95,3 +95,4 @@ curl http://192.168.2.110:8000/v2/models/docling_granite_python/ready
 ## Notes
 - Cloud-init on Calypso configured to keep password auth enabled to avoid lockouts.
 - Use `TRITON_REPO_NAME` in `apps/ner-training/deploy.sh` to deploy under `distilbert-base-uncased`.
+> Archived: This rollout plan covers Triton + Docling/DistilBERT. The current NER pipeline uses DeepSeek OCR + Ollama (Spark) with Argilla and does not rely on Triton Docling.

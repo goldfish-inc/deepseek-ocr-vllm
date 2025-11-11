@@ -13,6 +13,9 @@ cloud/**/*.js.map
 *.d.ts
 *.d.ts.map
 
+# Wrangler build artifacts
+.wrangler/
+
 # Pulumi
 .pulumi/
 Pulumi.*.yaml
@@ -90,6 +93,10 @@ ansible/inventory/hostsner_labels.json
 # ignore local go binaries
 apps/**/annotations-sink
 
+# Go build caches
+**/.gocache/
+**/.gomodcache/
+
 # Reconciliation test outputs (too large for git)
 tests/reconciliation/current/*.csv
 tests/reconciliation/diffs/*.csv
@@ -104,3 +111,4 @@ tests/reconciliation/diffs/
 data/mvp/*.csv
 data/mvp/*.duckdb
 data/mvp/*.parquet
+.vercel

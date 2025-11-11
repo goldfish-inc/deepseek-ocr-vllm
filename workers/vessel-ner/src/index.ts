@@ -8,6 +8,7 @@
  */
 
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { uploadHandler } from './handlers/upload';
 import { argillaWebhook } from './handlers/argilla-webhook';
 
@@ -17,7 +18,6 @@ type Bindings = {
   ENTITY_EXTRACTION_QUEUE: Queue;
   ARGILLA_SYNC_QUEUE: Queue;
   MOTHERDUCK_TOKEN: string;
-  ANTHROPIC_API_KEY: string;
   HF_TOKEN: string;
   ARGILLA_API_KEY: string;
   DEEPSEEK_OCR_SPACE_URL: string;
@@ -26,6 +26,14 @@ type Bindings = {
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
+
+// CORS for upload portal
+app.use('/upload', cors({
+  origin: ['https://upload.goldfish.io', 'https://vessel-ner-pipeline.ryan-8fa.workers.dev'],
+  allowMethods: ['POST', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'X-Requested-With'],
+  credentials: true,
+}));
 
 // Health check
 app.get('/health', (c) => {
@@ -40,7 +48,8 @@ app.post('/webhook/argilla', argillaWebhook);
 
 // Debug endpoint - list R2 contents
 app.get('/r2/list', async (c) => {
-  const listed = await c.env.VESSEL_PDFS.list({ prefix: 'uploads/', limit: 100 });
+  const prefix = c.req.query('prefix') || '';
+  const listed = await c.env.VESSEL_PDFS.list({ prefix, limit: 100 });
   return c.json({
     objects: listed.objects.map(obj => ({
       key: obj.key,

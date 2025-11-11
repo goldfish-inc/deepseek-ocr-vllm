@@ -31,7 +31,7 @@ Manifest Row Schema
 - ingested_at: ISO timestamp (UTC)
 
 Joining in Training
-- Annotations repo (Docling): include vertical and pdf_path
+- Annotations repo (Argilla exports): include vertical and pdf_path
 - Filter: vertical == "maritime"
 - Join: pdf_path (annotations) → pdf repo path
 - Download: via huggingface_hub (Dataset repo, Git/XeT under the hood)

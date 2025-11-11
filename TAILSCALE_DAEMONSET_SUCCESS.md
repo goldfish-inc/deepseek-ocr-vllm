@@ -1,5 +1,7 @@
 # Tailscale DaemonSet Implementation - SUCCESS ✅
 
+> Archived: retains the troubleshooting history for the old Label Studio bootstrapper.
+
 **Date**: 2025-10-13 00:55 UTC
 **Status**: **DEPLOYED AND WORKING**
 

@@ -11,7 +11,6 @@ This file inventories current SQL, highlights mismatches, and records decisions 
   - `V10__dataset_registry.sql` (provenance registry)
   - `V11__temporal_assertions.sql` (long-tail assertions & events)
   - `V12__stage_to_curated_promotions.sql` (deterministic promotions + enrichment view)
-  - `consolidated_cleandata_schema.sql` (legacy bootstrap; prefer versioned migrations)
   - `20251018_intelligence_db.sql` (WIP domain model draft)
 - `sql/emergency_schema_patch.sql`
   - Removed; history now covered by `V7__stage_contract_alignment.sql`.
@@ -20,12 +19,12 @@ This file inventories current SQL, highlights mismatches, and records decisions 
 
 ## Known Mismatches
 
-- Consolidated schema (`consolidated_cleandata_schema.sql`) still contains legacy structures (array-based cleaning rules, Label Studio `label.*` tables). Future cleanup will align it with the versioned migrations or deprecate it entirely.
-- Label Studio tables (`label.*`) remain in consolidated bootstrap scripts but are paused/out of scope for Phases 0–2.
+- Consolidated bootstrap scripts have been removed; use versioned migrations only.
+- Legacy `label.*` tables are retired. Any future human-in-the-loop storage will flow through Argilla/MotherDuck schemas instead.
 
 ## Decisions
 
-- Keep consolidated initializer only for dev/bootstrap; versioned migrations are the authoritative path forward.
+- Versioned migrations are the authoritative path forward; consolidated initializer removed from repo (Nov 2025).
 - Staging schema adds worker-safe scalar columns via `V7__stage_contract_alignment.sql`; ad-hoc patch slated for removal once mirrors confirmed.
 - Maintain canonical vessel tables with typed hot fields (`curated.vessel_info_typed`) and long-tail assertions (`V11`) for temporal history.
 - Provide a denormalized `curated.vessels_enrichment_view` as the tenant-facing contract (delivered as part of `V12__stage_to_curated_promotions.sql`).
@@ -38,4 +37,4 @@ This file inventories current SQL, highlights mismatches, and records decisions 
 - [x] Author `V11__temporal_assertions.sql` to introduce long-tail assertions and watchlist events.
 - [x] Author `V12__stage_to_curated_promotions.sql` with deterministic promotion function, audit log, and enrichment view.
 - [x] Author `V9__enrichment_view.sql` exposing `curated.vessels_enrichment_view` (**fulfilled via V12; no additional migration required**).
-- [ ] Remove/park `label.*` from the initializer; leave TODO to reintroduce post‑stabilization.
+- [x] Remove legacy `label.*` initializer content; future annotation schemas will live alongside Argilla exporters.

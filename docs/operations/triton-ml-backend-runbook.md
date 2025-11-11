@@ -1,8 +1,11 @@
 # Triton ML Backend Operations Runbook
 
-**Component**: `ls-triton-adapter` (Go service running in `apps` namespace)
+> Archived: `ls-triton-adapter` has been deleted along with Label Studio. Keep this runbook
+> only for reference while migrating any lingering Triton integrations.
+
+**Component**: `ls-triton-adapter` (retired Go service that previously ran in `apps` namespace)
 **Dependencies**: Triton Inference Server on Calypso GPU node, DistilBERT NER model, Docling-Granite model
-**Critical Path**: PDF document extraction and NER pre-annotation for Label Studio
+**Critical Path**: PDF document extraction and NER pre-annotation for the legacy Label Studio flow
 
 ---
 
@@ -275,41 +278,11 @@ kubectl -n apps rollout restart deploy/ls-triton-adapter deploy/csv-ingestion-wo
 kubectl -n apps logs -l app=csv-ingestion-worker --tail=20 | grep "webhook signature"
 ```
 
-### Rotating S3 Credentials
+### Cloudflare R2 Credentials (Future Argilla Upload Pipeline)
 
-**Critical**: S3 credentials must be rotated in BOTH ESC and Label Studio UI
-
-**Used By**:
-- `ls-triton-adapter` - Downloads PDFs from S3 for extraction
-- Label Studio - Uploads PDFs to S3 storage
-- `csv-ingestion-worker` - Uploads extracted tables to S3
-
-**Steps**:
-```bash
-# 1. Generate new AWS IAM credentials for S3 bucket
-# (Use AWS Console or aws-cli)
-
-# 2. Update ESC config
-pulumi -C cluster config set --secret labelStudioS3AccessKey "NEW_ACCESS_KEY"
-pulumi -C cluster config set --secret labelStudioS3SecretKey "NEW_SECRET_KEY"
-
-# 3. Update Label Studio UI
-# - Navigate to Settings → Cloud Storage
-# - Update AWS Access Key ID and Secret Access Key
-# - Click "Validate and Save"
-
-# 4. Redeploy cluster stack
-pulumi -C cluster up
-
-# 5. Restart adapter and CSV worker
-kubectl -n apps rollout restart deploy/ls-triton-adapter
-kubectl -n apps rollout restart deploy/csv-ingestion-worker
-
-# 6. Verify (attempt PDF upload in Label Studio)
-# Upload should succeed and pre-annotation should work
-```
-
-**Rotation Owner**: Platform team (documented in `docs/SECRETS_MANAGEMENT.md`)
+- The upcoming Worker pipeline stores PDFs in Cloudflare R2 (`vessel-pdfs`).
+- Rotate credentials via Wrangler once Stage 2 of `VESSEL_NER_CLOUDFLARE_WORKPLAN.md` ships (Wrangler secrets `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` or service binding tokens).
+- Argilla no longer reads directly from S3; workspace attachments live in the in-cluster PVCs.
 
 ---
 
@@ -408,3 +381,4 @@ kubectl -n apps rollout status deploy/ls-triton-adapter
 - [Secrets Management](../SECRETS_MANAGEMENT.md)
 - [NER Model Deployment](../../apps/ner-training/DEPLOYMENT_SUMMARY.md)
 - [Integration Test Results](../../apps/ls-triton-adapter/INTEGRATION_TEST_RESULTS.md)
+> Archived: Legacy Triton backend runbook (Docling/DistilBERT). Current NER pipeline: DeepSeek OCR + Ollama (Spark) + Argilla + MotherDuck; Triton path not used for NER.

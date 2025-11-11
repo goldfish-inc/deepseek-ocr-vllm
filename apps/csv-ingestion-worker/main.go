@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,12 +15,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	_ "github.com/lib/pq"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // BuildVersion is injected at build time via -ldflags.
@@ -27,14 +24,10 @@ var BuildVersion = "dev"
 // Config holds application configuration
 type Config struct {
 	DatabaseURL      string
-	S3Bucket         string
-	S3Region         string
-	S3Endpoint       string // For testing with MinIO
 	Port             string
 	ConfidenceConfig string
 	MaxWorkers       int
 	WebhookSecret    string // For signature verification
-	LabelStudioURL   string
 	ReviewManagerURL string
 }
 
@@ -42,7 +35,6 @@ type Config struct {
 type Worker struct {
 	config           *Config
 	db               *sql.DB
-	s3Client         *s3.Client
 	metrics          *Metrics
 	cleaningRules    map[string][]CleaningRule
 	confidenceConfig map[string]FieldConfig
@@ -112,14 +104,6 @@ func main() {
 	defer db.Close()
 	fmt.Fprintln(os.Stderr, "DEBUG: database initialized")
 
-	// Initialize S3 client (non-fatal - will be needed when webhooks arrive)
-	s3Client, err := initS3Client(cfg)
-	if err != nil {
-		log.Printf("Warning: Failed to initialize S3 client: %v (will retry on webhook)", err)
-		s3Client = nil // Will be lazy-initialized when needed
-	}
-	fmt.Fprintln(os.Stderr, "DEBUG: s3 init complete (may be nil)")
-
 	// Initialize metrics
 	metrics := initMetrics()
 	fmt.Fprintln(os.Stderr, "DEBUG: metrics initialized")
@@ -135,7 +119,6 @@ func main() {
 	worker := &Worker{
 		config:           cfg,
 		db:               db,
-		s3Client:         s3Client,
 		metrics:          metrics,
 		confidenceConfig: confidenceConfig,
 	}
@@ -196,13 +179,9 @@ func main() {
 func loadConfig() *Config {
 	cfg := &Config{
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		S3Bucket:         os.Getenv("S3_BUCKET"),
-		S3Region:         getEnvOrDefault("S3_REGION", "us-east-1"),
-		S3Endpoint:       os.Getenv("S3_ENDPOINT"), // Optional, for MinIO testing
 		Port:             getEnvOrDefault("PORT", "8080"),
 		MaxWorkers:       getIntEnvOrDefault("MAX_WORKERS", 10),
 		WebhookSecret:    os.Getenv("WEBHOOK_SECRET"),
-		LabelStudioURL:   os.Getenv("LABEL_STUDIO_URL"),
 		ReviewManagerURL: getEnvOrDefault("REVIEW_MANAGER_URL", "http://review-queue-manager.apps:8080"),
 		ConfidenceConfig: getEnvOrDefault("CONFIDENCE_CONFIG", `{
 			"IMO": {"base": 0.98, "trusted_bonus": 0.02, "untrusted_malus": -0.02},
@@ -220,10 +199,6 @@ func loadConfig() *Config {
 	if cfg.DatabaseURL == "" {
 		log.Fatal("DATABASE_URL is required")
 	}
-	if cfg.S3Bucket == "" {
-		log.Fatal("S3_BUCKET is required")
-	}
-
 	return cfg
 }
 
@@ -269,29 +244,6 @@ func initDatabase(dbURL string) (*sql.DB, error) {
 	}
 
 	return db, nil
-}
-
-func initS3Client(cfg *Config) (*s3.Client, error) {
-	// Bound AWS config load to avoid long hangs (e.g., IMDS)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	awsCfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(cfg.S3Region),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	opts := []func(*s3.Options){}
-	if cfg.S3Endpoint != "" {
-		// For MinIO/testing
-		opts = append(opts, func(o *s3.Options) {
-			o.BaseEndpoint = &cfg.S3Endpoint
-			o.UsePathStyle = true
-		})
-	}
-
-	return s3.NewFromConfig(awsCfg, opts...), nil
 }
 
 // withConnectTimeout appends connect_timeout=N (seconds) to a PostgreSQL DSN if missing.

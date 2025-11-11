@@ -1,6 +1,6 @@
 # Oceanid Cluster Bootstrap
 
-This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational infrastructure components. It manages in-cluster resources and requires kubeconfig access.
+This Pulumi project bootstraps the **K3s Kubernetes cluster** with foundational infrastructure components. It manages in-cluster resources and requires kubeconfig access. For the full CI/CD picture (how this stack interacts with the cloud Pulumi project, Flux, and device workflows) see [docs/operations/cicd-architecture.md](../docs/operations/cicd-architecture.md).
 
 ## Scope
 
@@ -125,7 +125,7 @@ PKO (in-cluster IaC)
   ↓
 Cloudflare Tunnel (ingress)
   ↓
-Applications (Label Studio, Triton)
+Applications (Argilla, Triton)
 ```
 
 ## Stack Outputs
@@ -135,7 +135,6 @@ export const kubeconfigPath: string              // Path to kubeconfig file
 export const fluxNamespace: string               // flux-system
 export const pkoNamespace: string                // pulumi-system
 export const cloudflareNamespace: string         // cloudflared
-export const labelStudioHostname: string         // label.boathou.se
 export const migrationStatus: object             // Component migration state
 ```
 
@@ -143,7 +142,6 @@ View outputs:
 
 ```bash
 pulumi stack output kubeconfigPath
-pulumi stack output labelStudioHostname
 ```
 
 ## GitOps Workflow

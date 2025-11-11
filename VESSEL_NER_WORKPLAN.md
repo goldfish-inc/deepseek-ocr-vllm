@@ -1,5 +1,7 @@
 # Vessel NER Pipeline - Complete Workplan
 
+> Archived: This workplan described a Claude-based NER stage. The active pipeline performs NER via Spark using the team-managed Ollama Worker proxy and uses DeepSeek OCR + Argilla + MotherDuck. Keep for historical reference.
+
 ## Architecture: Parquet-First Data Pipeline
 
 **Key Principle**: Keep data in Parquet format throughout. PostgreSQL ONLY for final web/UI database (Crunchy Bridge).
@@ -17,13 +19,11 @@
   Location: HuggingFace (saves VPS space)
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ Stage 2: Claude Pre-Annotation                                 │
+│ Stage 2: NER (Spark + Ollama Worker)                            │
 │ Repo: goldfish-inc/deepseekocr-preannotated                    │
 └─────────────────────────────────────────────────────────────────┘
-  Script: preannotate_with_claude.py
-  Input: Read from goldfish-inc/deepseekocr-output
-  Process: Claude API extracts 50+ entity types
-  Output: Write *.parquet to HF with entities_claude column
+  Process: Spark job calls Ollama Worker to extract 50+ entity types
+  Output: Write *.parquet to MotherDuck `entities`
   Storage: HuggingFace (NOT VPS - saves space)
 
   Schema:

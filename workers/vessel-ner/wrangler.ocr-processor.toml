@@ -1,7 +1,7 @@
 name = "vessel-ner-ocr-processor"
 main = "src/workers/ocr-processor.ts"
 compatibility_date = "2025-01-07"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat_v2"]
 
 account_id = "8fa97474778c8a894925c148ca829739"
 

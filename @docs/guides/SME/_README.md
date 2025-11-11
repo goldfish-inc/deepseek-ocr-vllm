@@ -33,3 +33,4 @@ make ner:labels-apply
 ```
 
 - Schema updates: small staging views or typed columns are fine; follow the patterns in the guide.
+> Archived: Label Studio content retained for history. Active SME workflow uses Argilla; see `workers/vessel-ner`.

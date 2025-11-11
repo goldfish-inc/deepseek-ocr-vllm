@@ -37,7 +37,7 @@ This eliminates architecture-specific compilation errors when deploying to produ
 - **raw**: Raw ingestion data
 - **stage**: Staging area for data processing
 - **curated**: Canonical entities after EBISU entity resolution
-- **label**: Label Studio integration (placeholder)
+- **label**: Argilla integration (placeholder)
 
 ### Tables Created ✅
 - **30 curated tables**: Including vessels, vessel_identifiers, vessel_info, vessel_associates, etc.

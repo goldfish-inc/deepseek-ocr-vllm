@@ -26,7 +26,7 @@ curl https://ollama-api.goldfish.io/v1/chat/completions \
 
 ### Prerequisites
 
-- Wrangler CLI installed: `pnpm add -g wrangler`
+- Wrangler CLI available: use `pnpm exec wrangler` (or `pnpm dlx wrangler` if not installed in the workspace)
 - Cloudflare account with Workers enabled
 - DNS record: `ollama-api.goldfish.io` CNAME to worker route
 
@@ -40,16 +40,16 @@ curl https://ollama-api.goldfish.io/v1/chat/completions \
 2. **Set secrets:**
    ```bash
    cd cloud/workers
-   wrangler secret put OLLAMA_ORIGIN --env production
+   pnpm exec wrangler secret put OLLAMA_ORIGIN --env production
    # Enter: https://ollama.goldfish.io
 
-   wrangler secret put AIG_AUTH_TOKEN --env production
+   pnpm exec wrangler secret put AIG_AUTH_TOKEN --env production
    # Enter: <token-from-step-1>
    ```
 
 3. **Deploy:**
    ```bash
-   wrangler deploy --env production
+   pnpm exec wrangler deploy --env production
    ```
 
 4. **Store token in Pulumi ESC:**

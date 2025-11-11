@@ -10,7 +10,7 @@
  * NOTE: Uses DGX Spark Ollama endpoint (http://spark-291b:11434)
  * - 100% private (no external API calls)
  * - $0 cost per extraction
- * - Same quality as Claude (~90-92% F1 score)
+ * - Production-grade quality (~90–92% F1 score)
  */
 
 import { MotherDuckClient } from '../lib/motherduck';
@@ -19,6 +19,7 @@ interface Env {
   ARGILLA_SYNC_QUEUE: Queue;
   MOTHERDUCK_TOKEN: string;
   MOTHERDUCK_DATABASE: string;
+  MD_QUERY_PROXY_URL?: string;
   DGX_SPARK_ENDPOINT: string; // https://ollama-api.boathou.se
   AIG_AUTH_TOKEN: string; // AI Gateway auth token
 }
@@ -42,6 +43,7 @@ export default {
     const motherduck = new MotherDuckClient({
       token: env.MOTHERDUCK_TOKEN,
       database: env.MOTHERDUCK_DATABASE,
+      proxyUrl: env.MD_QUERY_PROXY_URL,
     });
 
     for (const message of batch.messages) {

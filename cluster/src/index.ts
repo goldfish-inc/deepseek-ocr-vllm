@@ -8,7 +8,6 @@ import { cloudflareProvider, k8sProvider, kubeconfigPath } from "./providers";
 import { CloudflareTunnel } from "./components/cloudflareTunnel";
 import { PulumiOperator } from "./components/pulumiOperator";
 import { configureGitOps } from "./gitops";
-// import { LabelStudio } from "./components/labelStudio"; // MOVED TO GITOPS
 import { HostCloudflared } from "./components/hostCloudflared";
 import { HostTailscale } from "./components/hostTailscale";
 import { HostDockerService } from "./components/hostDockerService";
@@ -17,7 +16,6 @@ import { getSentrySettings, toEnvVars } from "./sentry-config";
 import { ControlPlaneLoadBalancer } from "./components/controlPlaneLoadBalancer";
 import { MigrationOrchestrator } from "./components/migrationOrchestrator";
 import { NodeTunnels } from "./components/nodeTunnels";
-import { SMEReadiness } from "./components/smeReadiness";
 import { DbBootstrap } from "./components/dbBootstrap";
 import { TailscaleOperator } from "./components/tailscaleOperator";
 import { TailscaleSubnetRouter } from "./components/tailscaleSubnetRouter";
@@ -335,21 +333,6 @@ const cleandataDbUrl = cfg.requireSecret("cleandataDbUrl");
 })();
 */
 
-// SME Readiness - Configure boathou.se domain with Cloudflare Access
-// NOTE: Access app creation is now managed by cloud stack to prevent duplication
-// This component only exports URLs and service token management
-const enableSMEAccess = cfg.getBoolean("enableSMEAccess") ?? false; // Default false - cloud stack owns Access
-const smeEmailDomain = cfg.get("accessAllowedEmailDomain") ?? "boathou.se";
-
-const smeReadiness = new SMEReadiness("sme-ready", {
-    cloudflareProvider,
-    zoneId: clusterConfig.cloudflare.zoneId,
-    tunnelId: clusterConfig.cloudflare.tunnelId,
-    nodeTunnelId: clusterConfig.nodeTunnel.tunnelId,
-    emailDomain: smeEmailDomain,
-    enableLabelStudioAccess: enableSMEAccess,
-});
-
 // HF token for model pulling
 const hfToken = cfg.getSecret("hfAccessToken");
 
@@ -550,75 +533,28 @@ if (enableCalypsoHostConnector) {
 
     // Host-side model pullers to fetch latest models from HF and drop new versions for Triton
     const hfModelRepo = cfg.get("hfModelRepo") || "distilbert/distilbert-base-uncased";
-    const graniteModelRepo = cfg.get("graniteModelRepo") || "ibm-granite/granite-docling-258M";
 
     if (hfToken) {
-        // DistilBERT NER model (PyTorch - will be converted to ONNX later)
-        new HostModelPuller("calypso-distilbert-puller", {
-            host: "192.168.2.80",
-            user: "oceanid",
-            privateKey: cfg.requireSecret("calypso_ssh_key"),
-            hfToken: hfToken,
-            hfModelRepo: hfModelRepo,
-            targetDir: "/opt/triton/models/distilbert-base-uncased",
-            interval: "15min",
-            modelType: "pytorch",
-        }, { dependsOn: [calypsoTriton!] });
-
-        // Granite Docling model (PyTorch/MLX)
-        new HostModelPuller("calypso-granite-puller", {
-            host: "192.168.2.80",
-            user: "oceanid",
-            privateKey: cfg.requireSecret("calypso_ssh_key"),
-            hfToken: hfToken,
-            hfModelRepo: graniteModelRepo,
-            targetDir: "/opt/triton/models/docling_granite_python",
-            interval: "15min",
-            modelType: "pytorch",
-        }, { dependsOn: [calypsoTriton!] });
+        // Legacy model pullers retired; models now deployed via Workers pipeline
     }
 
     // Sync Triton model configs from repo to Calypso and restart Triton
     try {
         const fs = require("fs");
         const path = require("path");
-        const distilCfg = fs.readFileSync(path.resolve(process.cwd(), "..", "triton-models/distilbert-base-uncased/config.pbtxt"), "utf8");
-        const doclingCfg = fs.readFileSync(path.resolve(process.cwd(), "..", "triton-models/docling_granite_python/config.pbtxt"), "utf8");
+        // Legacy Triton model config sync retired
         new command.remote.Command("calypso-sync-triton-configs", {
             connection: { host: "192.168.2.80", user: "oceanid", privateKey: cfg.requireSecret("calypso_ssh_key") },
             create: `
 set -euo pipefail
 SUDO=""; if [ "$(id -u)" -ne 0 ]; then SUDO="sudo -n"; fi
-$SUDO mkdir -p /opt/triton/models/distilbert-base-uncased /opt/triton/models/docling_granite_python
-cat > /tmp/distilbert_config.pbtxt <<'CFG'
-${distilCfg}
-CFG
-cat > /tmp/docling_config.pbtxt <<'CFG'
-${doclingCfg}
-CFG
-$SUDO mv /tmp/distilbert_config.pbtxt /opt/triton/models/distilbert-base-uncased/config.pbtxt
-$SUDO mv /tmp/docling_config.pbtxt /opt/triton/models/docling_granite_python/config.pbtxt
-$SUDO systemctl restart tritonserver
+$SUDO systemctl restart tritonserver || true
             `,
         }, { dependsOn: [calypsoTriton!] });
     } catch (e) {
         // Ignore local read errors during preview
     }
 }
-
-// =============================================================================
-// EXPORTS FOR SME READINESS
-// =============================================================================
-
-export const smeUrls = {
-    gpuServices: smeReadiness.gpuServiceUrl,
-};
-
-export const smeAccess = {
-    emailDomain: smeEmailDomain,
-    accessEnabled: enableSMEAccess,
-    accessPolicyId: smeReadiness.accessPolicyId,
-};
 
 // =============================================================================
 // SCRIPT RETIREMENT MIGRATION

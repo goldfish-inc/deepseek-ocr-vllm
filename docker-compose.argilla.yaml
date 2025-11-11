@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  argilla-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: argilla
+      POSTGRES_USER: argilla
+      POSTGRES_PASSWORD: test-password
+    ports:
+      - "5434:5432"
+    volumes:
+      - argilla-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argilla"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  argilla-redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - argilla-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  argilla-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - argilla-es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  argilla:
+    image: argilla/argilla-server:v2.8.0
+    user: root
+    depends_on:
+      argilla-postgres:
+        condition: service_healthy
+      argilla-elasticsearch:
+        condition: service_healthy
+      argilla-redis:
+        condition: service_healthy
+    environment:
+      ARGILLA_HOME_PATH: /data
+      ARGILLA_ELASTICSEARCH: http://argilla-elasticsearch:9200
+      ARGILLA_DATABASE_URL: postgresql+asyncpg://argilla:test-password@argilla-postgres:5432/argilla
+      ARGILLA_REDIS_URL: redis://argilla-redis:6379/0
+      ARGILLA_AUTH_SECRET_KEY: test-secret-key-for-local-development-only
+      USERNAME: admin
+      PASSWORD: admin12345
+      API_KEY: test-api-key
+      WORKSPACE: argilla
+    ports:
+      - "6900:6900"
+    volumes:
+      - argilla-data:/data
+
+volumes:
+  argilla-postgres-data:
+  argilla-es-data:
+  argilla-redis-data:
+  argilla-data:

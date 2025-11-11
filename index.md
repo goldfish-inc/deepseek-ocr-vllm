@@ -12,7 +12,7 @@ Oceanid serves as the **data processing + ML pipeline layer** that cleans and va
 |---------|---------|------------|--------------|
 | **[cloud/](cloud/)** | Cloudflare DNS/Access, CrunchyBridge PostgreSQL, ESC secrets | GitHub Actions (OIDC) | Push to `cloud/**` |
 | **[cluster/](cluster/)** | K3s bootstrap, Flux, PKO, Cloudflare tunnels | Local / Self-hosted runner | Manual `pulumi up` |
-| **[clusters/](clusters/)** | Application workloads (Label Studio, etc.) | Flux CD in-cluster | Push to `clusters/**` |
+| **[clusters/](clusters/)** | Application workloads (Argilla, workers, etc.) | Flux CD in-cluster | Push to `clusters/**` |
 | **[policy/](policy/)** | OPA security policies, TypeScript helpers | GitHub Actions CI | All PRs |
 
 **Key Principle:** Cloud resources (DNS, DB) are automated via CI. Cluster bootstrap requires kubeconfig and runs locally. Applications deploy via GitOps.
@@ -20,9 +20,9 @@ Oceanid serves as the **data processing + ML pipeline layer** that cleans and va
 ## Data Pipeline
 
 ```
-Raw CSV/PDF → Docling-Granite → ML Cleaning → Human Review
+Raw CSV/PDF → DeepSeek OCR → MotherDuck → NER (Spark + Ollama Worker) → Argilla Review
      ↓              ↓                ↓             ↓
-Label Studio   Structure      csv-repair     Corrections
+Argilla Sync   Structure      csv-repair     Corrections
              Extraction       -bert
 
                      ↓ Promotion (audited)
@@ -33,7 +33,7 @@ Label Studio   Structure      csv-repair     Corrections
 ## Components
 
 - **Triton Inference (Calypso GPU)**: ML models for NER and PDF extraction
-- **Label Studio**: Annotation + review UI
+- **Argilla**: Annotation + review UI (replaces Label Studio)
 - **Staging DB**: Document versions + cleaning audit
 - **Ingestion Worker**: Automated CSV processing
 

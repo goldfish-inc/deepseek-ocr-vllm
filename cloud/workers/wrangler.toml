@@ -7,6 +7,6 @@ workers_dev = false
 pattern = "ollama-api.goldfish.io/*"
 zone_name = "goldfish.io"
 
-# Secrets (set via: wrangler secret put <NAME>)
+# Secrets (set via: pnpm exec wrangler secret put <NAME>)
 # - OLLAMA_ORIGIN: https://ollama.goldfish.io
 # - AIG_AUTH_TOKEN: <random-bearer-token>

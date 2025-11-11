@@ -80,7 +80,7 @@ export default {
               score: entities.length > 0
                 ? entities.reduce((sum, e) => sum + e.confidence, 0) / entities.length
                 : 0,
-              agent: 'claude-haiku-4-5',
+              agent: 'ollama-worker',
             },
           ],
         };

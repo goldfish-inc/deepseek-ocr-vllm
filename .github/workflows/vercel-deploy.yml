@@ -1,0 +1,64 @@
+name: vercel-deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
+      - 'workers/**'
+      - 'policy/**'
+      - 'cluster/**'
+      - 'cloud/**'
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  deploy:
+    name: Deploy to Vercel (Team goldfish)
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify Vercel scope (goldfish)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          echo "Checking Vercel auth and scope..."
+          npx --yes vercel@latest teams ls --token "$VERCEL_TOKEN" >/tmp/teams.txt
+          grep -q "^goldfish\b" /tmp/teams.txt || { echo "goldfish team not visible to token"; exit 1; }
+
+      - name: Pull Vercel env (prod)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest pull --yes --environment=production \
+            --scope goldfish --token "$VERCEL_TOKEN"
+
+      - name: Build (prebuilt)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes vercel@latest build --prod --scope goldfish --token "$VERCEL_TOKEN"
+
+      - name: Deploy (prod)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes vercel@latest deploy --prebuilt --prod \
+            --scope goldfish --token "$VERCEL_TOKEN"

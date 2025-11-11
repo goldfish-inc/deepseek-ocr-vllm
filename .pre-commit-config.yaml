@@ -67,13 +67,6 @@ repos:
         language: system
         types: [go]
         pass_filenames: true
-      - id: golangci-lint
-        name: golangci-lint
-        entry: bash -c 'cd apps/ls-triton-adapter && golangci-lint run --fix --timeout=5m'
-        language: system
-        types: [go]
-        pass_filenames: false
-        files: ^apps/ls-triton-adapter/
 
   # TypeScript compilation check
   - repo: local
@@ -92,15 +85,6 @@ repos:
         types_or: [ts, tsx]
         pass_filenames: false
         files: ^cloud/.*\.ts$
-
-  # Guard paused modules (Label Studio etc.)
-  - repo: local
-    hooks:
-      - id: guard-paused-modules
-        name: Guard Paused Modules
-        entry: bash scripts/ci/guard_paused_modules.sh
-        language: system
-        pass_filenames: false
 
   # Enforce docker buildx for multi-platform builds
   - repo: local

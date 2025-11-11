@@ -1,5 +1,7 @@
 # Audit Report: Tailscale DaemonSet Implementation
 
+> Archived: Contains references to the decommissioned Label Studio + bootstrapper stack.
+
 **Date**: 2025-10-13 01:15 UTC
 **Auditor**: Claude Code
 **Implementation Status**: ✅ PRODUCTION DEPLOYED

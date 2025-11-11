@@ -2,6 +2,11 @@
 
 **Last Updated:** 2025-11-06
 
+> **Update (2025-11-08):** Label Studio has been fully replaced by the Argilla + MotherDuck
+> pipeline described in `VESSEL_NER_CLOUDFLARE_WORKPLAN.md`. The live sections below have
+> been updated accordingly; paragraphs that still describe the Label Studio era are retained
+> for historical reference only.
+
 ## Your Data Flow Understanding ✓ CORRECT
 
 ```
@@ -14,7 +19,7 @@ PDF → deepseekocr → Parquet → HuggingFace Repo
         ┌────────────────┴────────────────┐
         ↓                                  ↓
    (a) SME Annotation                (b) Direct Load
-   (Label Studio)                    (Production Shortcut)
+   (Argilla)                         (Production Shortcut)
         ↓                                  ↓
    Back to Parquet                   PostgreSQL
         ↓                                  ↓
@@ -55,17 +60,16 @@ make pg.dev.full
 **Location:** `apps/csv-ingestion-worker/main.go`
 
 **Features:**
-- S3 file ingestion
+- HTTPS file ingestion (R2, presigned HTTP, or direct uploads)
 - Database-driven cleaning rules
 - Confidence scoring per field
-- Label Studio integration
 - Prometheus metrics
 - Writes to `stage.*` schema
 
 **How to use:**
 ```bash
 cd apps/csv-ingestion-worker
-go run . # Requires DATABASE_URL, S3_BUCKET env vars
+go run . # Requires DATABASE_URL and WEBHOOK_SECRET (optional)
 ```
 
 **Database Tables:**
@@ -146,18 +150,18 @@ make cb.ebisu.full        # Full pipeline
 - No actual PDF processing
 
 **What's Needed:**
-1. PDF download from S3/HTTP
-2. Call OCR service (deepseek/docling)
+1. PDF download from R2/HTTP
+2. Call DeepSeek OCR service
 3. Extract structured data
 4. Write to `stage.documents`
 5. Generate parquet output
 
 **Recommendation:** Implement as Python service using:
 - `scripts/batch_extract.py` (already exists!)
-- Docling for PDF → Markdown
+- DeepSeek OCR for PDF → text
 - Push to HuggingFace Datasets
 
-### 7. OCR Service (DeepSeek/Docling)
+### 7. OCR Service (DeepSeek)
 
 **Status:** 🚧 Scaffold only
 
@@ -171,29 +175,27 @@ make cb.ebisu.full        # Full pipeline
 1. Add DeepSeek OCR endpoint (`POST /ocr`)
 2. Accept PDF bytes or URL
 3. Return structured text/tables
-4. Optionally: Docling integration for layout preservation
+4. (Optional) Page layout capture if needed for future enrichment
 
-**Alternative:** Use Triton inference directly (already deployed on Calypso GPU)
-- `triton-models/docling_granite_python/` exists
-- GPU: `https://gpu.boathou.se`
-- May not need separate ocr-service
+**Note:** We no longer use the Docling/Triton GPU path. OCR is performed via DeepSeek and processed through the Workers pipeline.
 
-### 8. SME Annotation Flow (Label Studio)
+### 8. SME Annotation Flow (Argilla)
 
-**Status:** 🚧 Partial infrastructure
+**Status:** 🚧 In progress (Cloudflare Workers + Argilla importer)
 
 **What Exists:**
-- CSV worker integrates with Label Studio API
-- `apps/ls-triton-adapter/` - Connects Label Studio to Triton ML backend
-- Database tables for annotations (paused in migrations)
+- Cloudflare Workers for upload, OCR, entity extraction, Argilla sync, and export
+- Argilla deployed in `clusters/tethys/apps/argilla.yaml` with importer Job
+- MotherDuck schemas (`raw_ocr`, `entities`, `entity_corrections`) defined and usable
 
 **What's Missing:**
-1. Parquet → Label Studio task importer
-2. Label Studio → Parquet exporter
-3. SME review UI (Label Studio hosted? or custom?)
-4. Approval workflow (SME corrections → production)
+1. End-to-end smoke test that drives an upload all the way through Argilla export
+2. Automated exporter that mirrors Argilla corrections into EBISU/cleandata tables
+3. Ops runbook for rotating Argilla secrets + handling Downtime
+4. Dashboard alerts that watch Argilla sync Queue depth instead of LS-specific metrics
 
-**Note:** Currently using **Path B (direct load)** for MVP. Path A can be added later.
+**Note:** Argilla replaces the Label Studio “Path A” flow. Path B (direct load) still works
+for fast MVP loads while the Workers mature.
 
 ### 9. HuggingFace Datasets Integration
 
@@ -250,22 +252,22 @@ SELECT COUNT(*), vessel_flag FROM vessels GROUP BY vessel_flag;
 ### Phase 1: Complete PDF Pipeline (High Priority)
 1. **Implement PDF Ingestion Worker** (Python recommended)
    - Use existing `scripts/batch_extract.py` as base
-   - Add S3 download
-   - Call Triton Docling endpoint (already on Calypso GPU)
+   - Add R2 download helper
+   - Call DeepSeek OCR service (via Workers)
    - Write to `stage.documents`
 
 2. **Test End-to-End PDF Flow**
-   - PDF → Triton Docling → Parquet → PostgreSQL
+   - PDF → DeepSeek OCR → Parquet → PostgreSQL
    - Verify data quality
 
 ### Phase 2: SME Annotation (Medium Priority)
-1. **Parquet ↔ Label Studio Integration**
-   - Importer: Parquet → Label Studio tasks
-   - Exporter: Annotations → corrected Parquet
+1. **Argilla Worker Rollout**
+   - Finish Cloudflare workers and queues (upload → OCR → entity → Argilla sync → export)
+   - Ship Terraform/Wrangler automation for bindings + secrets
 
-2. **Deploy Label Studio**
-   - Already have `apps/ls-triton-adapter`
-   - Need Label Studio instance (Docker or SaaS)
+2. **Argilla Export Automation**
+   - Mirror Argilla corrections back into MotherDuck + EBISU tables
+   - Replace LS-specific dashboards/alerts with Argilla equivalents
 
 ### Phase 3: Automation (Low Priority)
 1. **HuggingFace Auto-Push**
@@ -380,7 +382,7 @@ docker-compose restart postgraphile
 
 🚧 **PDF pipeline needs completion**
 - Worker scaffold exists
-- Triton Docling ready on GPU
+- Workers + DeepSeek OCR pathway ready
 - Just needs implementation
 
 📋 **SME annotation is optional**

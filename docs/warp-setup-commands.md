@@ -185,3 +185,4 @@ Once kubectl is stable via WARP:
 - Full setup guide: `docs/cloudflare-warp-setup.md`
 - Tracking issue: [#84](https://github.com/goldfish-inc/oceanid/issues/84)
 - Cloudflare Zero Trust: https://one.dash.cloudflare.com/
+> Archived: This document references Label Studio flows. Argilla replaces LS; see `docs/operations/pipeline-overview.md` for the current pipeline.

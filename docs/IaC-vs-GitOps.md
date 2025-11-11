@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the clear boundary between Infrastructure as Code (IaC) managed by Pulumi and Application Deployment managed by Flux GitOps.
+This document defines the clear boundary between Infrastructure as Code (IaC) managed by Pulumi and Application Deployment managed by Flux GitOps. For how those layers flow through GitHub Actions, Pulumi, and Flux, see [docs/operations/cicd-architecture.md](./operations/cicd-architecture.md).
 
 ## Core Principle
 
@@ -191,7 +191,7 @@ const operator = new NewOperator(...);
 ### ❌ Anti-Pattern 1: Mixed Management
 ```typescript
 // Pulumi creating app resources
-const labelStudio = new k8s.apps.v1.Deployment("label-studio", {...});
+const argilla = new k8s.apps.v1.Deployment("argilla", {...});
 ```
 
 ### ❌ Anti-Pattern 2: Manual Kubectl Commands

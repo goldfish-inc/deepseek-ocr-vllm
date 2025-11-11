@@ -4,7 +4,7 @@
  * Proxies requests to DGX Spark Ollama instance via Cloudflare Tunnel.
  * Uses cf-aig-authorization header following AI Gateway best practices.
  *
- * Environment secrets (set via wrangler secret put):
+ * Environment secrets (set via `pnpm exec wrangler secret put`):
  * - OLLAMA_ORIGIN: https://ollama.goldfish.io (tunnel endpoint)
  * - AIG_AUTH_TOKEN: Bearer token for authentication
  */

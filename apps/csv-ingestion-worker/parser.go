@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"regexp"
 	"strings"
-
-	"net/http"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -192,21 +189,17 @@ func normalizeColumnName(name string) string {
 	return n
 }
 
-// downloadFile downloads a file from S3 or presigned URL
+// downloadFile downloads a file from an HTTP(S) endpoint
 func (w *Worker) downloadFile(ctx context.Context, fileURL string) ([]byte, error) {
-	// Check if it's a presigned URL or S3 path
 	if strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://") {
 		return w.downloadFromURL(ctx, fileURL)
 	}
 
-	// Parse S3 path (s3://bucket/key or just key)
-	bucket, key := w.parseS3Path(fileURL)
-	return w.downloadFromS3(ctx, bucket, key)
+	return nil, fmt.Errorf("unsupported file URL: %s (only http/https sources are supported)", fileURL)
 }
 
-// downloadFromURL downloads from a presigned URL
+// downloadFromURL downloads from an HTTP(S) location
 func (w *Worker) downloadFromURL(ctx context.Context, url string) ([]byte, error) {
-	// Use AWS SDK's HTTP client for consistency
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -231,43 +224,4 @@ func (w *Worker) downloadFromURL(ctx context.Context, url string) ([]byte, error
 	}
 
 	return content, nil
-}
-
-// downloadFromS3 downloads directly from S3
-func (w *Worker) downloadFromS3(ctx context.Context, bucket, key string) ([]byte, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	}
-
-	result, err := w.s3Client.GetObject(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get S3 object: %w", err)
-	}
-	defer result.Body.Close()
-
-	// Limit file size to 100MB
-	limitedReader := io.LimitReader(result.Body, 100*1024*1024)
-	content, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read S3 object: %w", err)
-	}
-
-	return content, nil
-}
-
-// parseS3Path parses an S3 path into bucket and key
-func (w *Worker) parseS3Path(path string) (string, string) {
-	// Handle s3://bucket/key format
-	if strings.HasPrefix(path, "s3://") {
-		path = strings.TrimPrefix(path, "s3://")
-		parts := strings.SplitN(path, "/", 2)
-		if len(parts) == 2 {
-			return parts[0], parts[1]
-		}
-		return parts[0], ""
-	}
-
-	// Otherwise assume it's just a key in the configured bucket
-	return w.config.S3Bucket, path
 }

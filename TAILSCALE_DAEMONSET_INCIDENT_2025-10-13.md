@@ -1,5 +1,8 @@
 # Tailscale DaemonSet Incident Report - October 13, 2025
 
+> Archived: focuses on the former Label Studio/project-bootstrapper deployment. Argilla
+> runs entirely inside the cluster now.
+
 ## Incident Summary
 **Severity**: CRITICAL
 **Start Time**: 2025-10-13 15:19 UTC
@@ -273,3 +276,4 @@ If networking cannot be recovered:
 **Status**: ACTIVE INCIDENT - Awaiting user intervention for node recovery
 **Owner**: @ryan-taylor
 **Last Updated**: 2025-10-13 15:30 UTC
+> Archived: Focused on the Label Studio/project-bootstrapper deployment. Current SME review runs in Argilla; refer to `docs/operations/pipeline-overview.md`.

@@ -481,7 +481,7 @@ pulumi import --yes \
 pulumi config get cloudflare:zoneId
 
 # Cloudflare DNS record ID
-wrangler dns records list --zone-name boathou.se
+pnpm exec wrangler dns records list --zone-name boathou.se
 
 # CrunchyBridge cluster ID
 cb cluster list
@@ -523,7 +523,7 @@ esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfAccessToken "
 # Optional: repo names (defaults are shown)
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepo "goldfish-inc/oceanid-annotations"
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoNER "goldfish-inc/oceanid-annotations-ner"
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfDatasetRepoDocling "goldfish-inc/oceanid-annotations-docling"
+# Docling annotations repo deprecated; use Argilla exports instead
 esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:hfModelRepo "goldfish-inc/oceanid-ner-distilbert"
 
 # CrunchyBridge Postgres URL for migrations
@@ -634,7 +634,7 @@ If you made changes directly in Cloudflare/CrunchyBridge console:
 
 ```bash
 # 1. Note the actual resource configuration
-wrangler dns records list --zone-name boathou.se
+pnpm exec wrangler dns records list --zone-name boathou.se
 # or: cb cluster show <cluster-id>
 
 # 2. Delete from Pulumi state

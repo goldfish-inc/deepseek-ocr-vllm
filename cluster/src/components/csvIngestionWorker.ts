@@ -4,9 +4,6 @@ import * as pulumi from "@pulumi/pulumi";
 export interface CSVIngestionWorkerArgs {
     namespace: pulumi.Input<string>;
     dbUrl: pulumi.Input<string>;
-    s3Bucket: pulumi.Input<string>;
-    s3Region?: pulumi.Input<string>;
-    labelStudioUrl: pulumi.Input<string>;
     reviewManagerUrl?: pulumi.Input<string>;
     // Prefer passing a full immutable image reference (e.g., ghcr.io/...:${GIT_SHA})
     image?: pulumi.Input<string>;
@@ -117,18 +114,6 @@ export class CSVIngestionWorker extends pulumi.ComponentResource {
                                                 return url;
                                             }
                                         }),
-                                    },
-                                    {
-                                        name: "S3_BUCKET",
-                                        value: args.s3Bucket,
-                                    },
-                                    {
-                                        name: "S3_REGION",
-                                        value: args.s3Region || "us-east-1",
-                                    },
-                                    {
-                                        name: "LABEL_STUDIO_URL",
-                                        value: args.labelStudioUrl,
                                     },
                                     {
                                         name: "REVIEW_MANAGER_URL",

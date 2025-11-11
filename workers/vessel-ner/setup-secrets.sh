@@ -11,7 +11,6 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Get secrets from Pulumi ESC (expects Pulumi logged in and config available)
 echo "📥 Fetching secrets from Pulumi ESC..."
 MOTHERDUCK_TOKEN=$(pulumi config get --cwd "$ROOT_DIR/cloud" oceanid-cloud:motherduckToken)
-CLAUDE_API_KEY=$(pulumi config get --cwd "$ROOT_DIR/cloud" claudeApiKey)
 HF_TOKEN=$(pulumi config get --cwd "$ROOT_DIR/cloud" oceanid-cluster:huggingFaceToken)
 ARGILLA_API_KEY=$(pulumi config get --cwd "$ROOT_DIR/cloud" argillaApiKey)
 
@@ -23,7 +22,6 @@ WRANGLER="pnpm exec wrangler"
 # Set secrets for main worker
 echo "🔑 Setting secrets for vessel-ner-pipeline..."
 echo "$MOTHERDUCK_TOKEN" | $WRANGLER secret put MOTHERDUCK_TOKEN --name vessel-ner-pipeline
-echo "$CLAUDE_API_KEY" | $WRANGLER secret put ANTHROPIC_API_KEY --name vessel-ner-pipeline
 echo "$HF_TOKEN" | $WRANGLER secret put HF_TOKEN --name vessel-ner-pipeline
 echo "$ARGILLA_API_KEY" | $WRANGLER secret put ARGILLA_API_KEY --name vessel-ner-pipeline
 
@@ -35,7 +33,6 @@ echo "$HF_TOKEN" | $WRANGLER secret put HF_TOKEN --name vessel-ner-ocr-processor
 # Set secrets for entity extractor
 echo "🔑 Setting secrets for vessel-ner-entity-extractor..."
 echo "$MOTHERDUCK_TOKEN" | $WRANGLER secret put MOTHERDUCK_TOKEN --name vessel-ner-entity-extractor
-echo "$CLAUDE_API_KEY" | $WRANGLER secret put ANTHROPIC_API_KEY --name vessel-ner-entity-extractor
 
 # Set secrets for Argilla sync
 echo "🔑 Setting secrets for vessel-ner-argilla-sync..."

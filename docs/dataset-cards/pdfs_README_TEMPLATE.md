@@ -46,7 +46,7 @@ files = list_repo_files(repo, repo_type="dataset")
 pdfs = [f for f in files if f.startswith("maritime/") and f.endswith(".pdf")]
 ```
 
-For each training run, prefer pairing with Docling annotations that include `vertical` and `pdf_path` for simple filtering and joins.
+For each training run, prefer pairing with Argilla export annotations that include `vertical` and `pdf_path` for simple filtering and joins.
 
 ## License & Source
 

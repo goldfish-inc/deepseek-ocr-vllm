@@ -89,13 +89,9 @@ rm -rf sink/
 
 # Inline Python components (if not needed)
 # Note: Check if these are still referenced before removing
-# - cluster/src/components/labelStudioMlAutoconnect.ts
 # - cluster/src/components/hostGpuService.ts
 
-# Legacy Python scripts (optional cleanup)
-rm scripts/provision-ls-project*.py
-rm scripts/connect-ml-backend.py
-rm scripts/export_pdf_boxes.py
+# Legacy Label Studio scripts were removed when Argilla replaced LS.
 ```
 
 ### Update CI/CD

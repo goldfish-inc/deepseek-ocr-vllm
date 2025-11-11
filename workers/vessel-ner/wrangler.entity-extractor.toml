@@ -22,7 +22,7 @@ binding = "ARGILLA_SYNC_QUEUE"
 [vars]
 MOTHERDUCK_DATABASE = "vessel_intelligence"
 DGX_SPARK_ENDPOINT = "https://ollama-api.boathou.se"
-MD_QUERY_PROXY_URL = "" # Optional: team-hosted SQL proxy URL
+MD_QUERY_PROXY_URL = "https://md.boathou.se"
 
 # Secrets
 # MOTHERDUCK_TOKEN

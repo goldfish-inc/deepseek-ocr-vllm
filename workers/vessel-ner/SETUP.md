@@ -23,7 +23,6 @@ workers/vessel-ner/
 
 ### Dependencies Installed
 - ✅ `@cloudflare/workers-types` (TypeScript types)
-- ✅ `@anthropic-ai/sdk` (Claude API)
 - ✅ `hono` (Lightweight web framework)
 - ✅ `wrangler` v4.46.0 (Cloudflare CLI)
 
@@ -52,9 +51,7 @@ pnpm exec wrangler queues create argilla-sync
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
   pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
-# Claude API key
-op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  pnpm exec wrangler secret put ANTHROPIC_API_KEY
+# No Claude key required. NER runs via Spark using the Ollama Worker proxy.
 
 # HuggingFace token (for DeepSeek OCR Space access)
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
@@ -90,7 +87,7 @@ curl http://localhost:8787/health
 
 2. **Entity Extractor Worker** (`src/workers/entity-extractor.ts`)
    - Consumes `entity-extraction` queue
-   - Calls Claude API with NER prompt (51 entity types)
+   - Calls the Ollama Worker proxy for NER (via Spark pipeline)
    - Writes to MotherDuck `entities` table
    - Enqueues to `argilla-sync`
 
@@ -121,7 +118,6 @@ curl http://localhost:8787/health
 
 ### Secrets (set via wrangler secret put)
 - `MOTHERDUCK_TOKEN` - From 1Password
-- `ANTHROPIC_API_KEY` - From 1Password
 - `HF_TOKEN` - From 1Password
 - `ARGILLA_API_KEY` - From K8s cluster
 

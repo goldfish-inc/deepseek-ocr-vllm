@@ -119,9 +119,9 @@ CREATE TABLE IF NOT EXISTS stage.training_corpus (
   correction_type text NOT NULL,  -- 'value_fix' | 'format_fix' | 'type_fix' | 'false_positive' | 'false_negative'
 
   -- Annotation provenance
-  annotator text NOT NULL,  -- Email or user ID from Label Studio
+  annotator text NOT NULL,  -- Email or user ID from Argilla/Oceanid reviewer
   annotated_at timestamptz DEFAULT now(),
-  annotation_source text,  -- 'label_studio' | 'direct_review' | 'batch_import'
+  annotation_source text,  -- 'argilla' | 'direct_review' | 'batch_import'
 
   -- Context for training
   context_before text,  -- Surrounding text/cells for context-aware models
@@ -145,7 +145,7 @@ CREATE INDEX IF NOT EXISTS ix_training_corpus_column ON stage.training_corpus(co
 CREATE INDEX IF NOT EXISTS ix_training_corpus_annotator ON stage.training_corpus(annotator);
 CREATE INDEX IF NOT EXISTS ix_training_corpus_split ON stage.training_corpus(training_split);
 
-COMMENT ON TABLE stage.training_corpus IS 'Human corrections from Label Studio for ML model retraining. Each row is a training example showing original → corrected value pair with context.';
+COMMENT ON TABLE stage.training_corpus IS 'Human corrections from Argilla/Oceanid reviewers for ML retraining. Each row is a training example showing original → corrected value pair with context.';
 COMMENT ON COLUMN stage.training_corpus.correction_type IS 'Classification of correction: value_fix (wrong value), format_fix (right value, wrong format), type_fix (wrong data type), false_positive (should not have been extracted), false_negative (should have been extracted but was not)';
 COMMENT ON COLUMN stage.training_corpus.difficulty_rating IS 'Annotator-assessed difficulty (1=trivial, 5=expert judgment required). Used for curriculum learning and active learning sampling.';
 

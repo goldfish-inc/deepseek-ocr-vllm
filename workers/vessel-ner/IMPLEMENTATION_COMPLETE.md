@@ -13,7 +13,7 @@
 ```
 PDF Upload → R2 Storage → DeepSeek OCR (HF Space) → MotherDuck (parquet)
    ↓
-Claude NER → MotherDuck entities → Argilla (K8s cluster) → SME Review
+Ollama (Spark) NER → MotherDuck entities → Argilla (K8s cluster) → SME Review
    ↓
 MotherDuck entity_corrections → (optional) CrunchyBridge Postgres
 ```
@@ -138,9 +138,9 @@ pnpm exec wrangler tail vessel-ner-pipeline
 - Writes to MotherDuck `raw_ocr` table (parquet)
 - Enqueues to `entity-extraction` (one per page)
 
-### Stage 3: NER (Worker → Claude → MotherDuck)
-- Entity Extractor reads OCR text from MotherDuck
-- Calls Claude API with 51-entity prompt
+### Stage 3: NER (Spark → Ollama → MotherDuck)
+- Spark job reads OCR text from MotherDuck
+- Calls Ollama Worker proxy for NER
 - Writes to MotherDuck `entities` table (parquet)
 - Enqueues to `argilla-sync`
 
@@ -186,13 +186,13 @@ pnpm exec wrangler tail vessel-ner-pipeline
 ## 🧪 Testing Checklist
 
 - [ ] Infrastructure created (R2, Queues)
-- [ ] Secrets set (MotherDuck, Claude, HF, Argilla)
+- [ ] Secrets set (MotherDuck, HF, Argilla)
 - [ ] Workers deployed (4 workers total)
 - [ ] Health check passes
 - [ ] Test PDF upload succeeds
 - [ ] OCR processor logs show DeepSeek call
 - [ ] MotherDuck `raw_ocr` table has data
-- [ ] Entity extractor logs show Claude call
+- [ ] NER job shows successful calls to Ollama Worker
 - [ ] MotherDuck `entities` table has data
 - [ ] Argilla sync logs show API call
 - [ ] Argilla UI shows annotation tasks
@@ -213,7 +213,7 @@ pnpm exec wrangler tail vessel-ner-pipeline
 5. Test with real IUU watchlist PDFs
 6. SME reviews entities in Argilla
 7. Validate entity quality
-8. Tune Claude prompts if needed
+8. Tune Ollama prompts/models if needed
 
 ### Phase 3: Scale & Monitor (Later)
 9. Set up Sentry for error tracking
@@ -242,7 +242,7 @@ pnpm exec wrangler tail vessel-ner-pipeline
 5. **Progress Tracking**: D1 database for job status
 6. **Webhook Security**: Add HMAC signature verification
 7. **Rate Limiting**: Add Cloudflare rate limiting rules
-8. **Cost Monitoring**: Track Claude API + MotherDuck usage
+8. **Cost Monitoring**: Track MotherDuck; Ollama Worker is team-hosted
 
 ---
 

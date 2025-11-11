@@ -2,15 +2,40 @@
 
 Cloud-native NER extraction pipeline for vessel intelligence documents.
 
-## Architecture
+## Documentation
 
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete system architecture with Mermaid diagrams
+- **[HUGGINGFACE_OCR_INTEGRATION.md](./HUGGINGFACE_OCR_INTEGRATION.md)** - Detailed OCR integration guide
+- **[BULK_UPLOAD_SECURITY.md](./BULK_UPLOAD_SECURITY.md)** - Security hardening for bulk upload API
+- **[SETUP.md](./SETUP.md)** - Step-by-step setup instructions
+- **[IMPLEMENTATION_COMPLETE.md](./IMPLEMENTATION_COMPLETE.md)** - Implementation status
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    A[PDF Upload] -->|Store| B[R2 Bucket]
+    A -->|Enqueue| C[pdf-processing Queue]
+    C -->|Consume| D[OCR Processor]
+    D -->|URL-based fetch| E[HuggingFace DeepSeek-OCR]
+    E -->|Fetch PDF| B
+    E -->|OCR Text| D
+    D -->|Write| F[MotherDuck]
+    D -->|Enqueue| G[entity-extraction Queue]
+
+    H[External:<br/>Ollama on NVIDIA GTX SPARK] -->|Consume| G
+    H -->|Read OCR| F
+    H -->|Write Entities| F
+    H -->|Sync| J[Argilla]
+
+    style E fill:#ff9800
+    style B fill:#4caf50
+    style F fill:#2196f3
+    style H fill:#9c27b0
+    style J fill:#e91e63
 ```
-PDF Upload → R2 Storage → DeepSeek OCR (HF Space) → MotherDuck (parquet)
-   ↓
-DGX Spark (Llama 3.3 70B) → MotherDuck entities → Argilla (K3s cluster) → SME Review
-   ↓
-MotherDuck entity_corrections → (optional) CrunchyBridge Postgres
-```
+
+**See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed diagrams and component descriptions.**
 
 ## Prerequisites
 
@@ -57,9 +82,7 @@ pnpm exec wrangler queues create argilla-sync
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
   pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
-# Claude API key
-op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  pnpm exec wrangler secret put ANTHROPIC_API_KEY
+# NER runs via Spark using the team-managed Ollama Worker proxy (no Claude key required)
 
 # HuggingFace token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
@@ -123,9 +146,12 @@ workers/vessel-ner/
 
 All secrets stored in 1Password vault `ddqqn2cxmgi4xl4rris4mztwea`:
 - ✅ Motherduck API
-- ✅ Claude API NER
 - ✅ Hugging Face API Token
 - ✅ Argilla API key (from K8s cluster)
+
+Runtime variables:
+- `MD_QUERY_PROXY_URL` (recommended): team-hosted SQL proxy endpoint (POST { database, query }).
+- `USE_DIRECT_UPLOAD` (ocr-processor only): set to `true` to use the Gradio Space direct upload path (base64 chunking) that is compatible with Cloudflare Workers.
 
 ## MotherDuck Schema
 
@@ -133,7 +159,7 @@ Database: `vessel_intelligence`
 
 Tables:
 - `raw_ocr` - OCR text from DeepSeek
-- `entities` - Extracted entities from Claude
+- `entities` - Extracted entities (via Ollama Worker/Spark)
 - `entity_corrections` - SME corrections from Argilla
 - `processing_log` - Pipeline status tracking
 

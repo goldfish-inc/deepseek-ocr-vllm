@@ -24,7 +24,7 @@ func (w *Worker) processCSVTask(ctx context.Context, taskData *TaskData) error {
 		return fmt.Errorf("failed to create document: %w", err)
 	}
 
-	// Download file from S3
+	// Download file from configured file source
 	fileContent, err := w.downloadFile(ctx, taskData.FileURL)
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)

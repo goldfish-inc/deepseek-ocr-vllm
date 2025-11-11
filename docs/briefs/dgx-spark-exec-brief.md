@@ -16,7 +16,7 @@
 
 | Pain Today | DGX Impact | Benefit |
 |------------|-----------|---------|
-| Manual annotation only; SMEs spend 80% of time labeling | Run Granite Docling + DistilBERT pre-annotations at scale | SMEs verify suggestions (10× faster), focus on edge cases |
+| Manual annotation only; SMEs spend 80% of time labeling | DeepSeek OCR + Ollama NER (Spark) reviewed in Argilla | SMEs verify suggestions (10× faster), focus on edge cases |
 | Slow model iteration (days per fine-tune) | 8× GPUs + 4 TB RAM for parallel training | Weekly or even daily model refreshes, faster improvements |
 | Growing backlog of PDFs/CSVs | High-throughput batch processing | Clear backlog, keep data fresh, feed dashboards in near real time |
 | Calypso GPU already serving production load | DGX handles heavy training without disrupting inference | Stable production inference AND rapid experimentation |
@@ -34,8 +34,8 @@
 
 ## 4. Key Capabilities We Gain
 - Run multi-hour training jobs in minutes (large batch sizes, longer sequences).
-- Convert massive PDF archives through Granite Docling rapidly to support pre-annotation.
-- Generate synthetic data / active learning campaigns without blocking production GPUs.
+- Convert massive PDF archives through DeepSeek OCR rapidly to support pre-annotation.
+- Generate synthetic examples via Spark + Ollama without blocking production GPUs.
 - Evaluate multiple models in parallel; pick the best performing candidate for each SME project.
 
 ---
@@ -44,7 +44,7 @@
 1. Rack & power the DGX; connect to tailnet for secure access.
 2. Align CUDA/drivers with Calypso’s Triton version to ensure model portability.
 3. Stage shared datasets (S3 + local NVMe cache); enable monitoring in Grafana.
-4. Stand up training/batch pipelines (DistilBERT fine-tuning, Docling pre-processing).
+4. Stand up batch pipelines (OCR → NER → Argilla review) and Spark jobs powered by Ollama.
 5. Promote models from DGX → Calypso inference; SMEs see richer pre-filled tasks.
 
 ---
@@ -56,3 +56,4 @@
 - **GPU utilisation:** DGX vs Calypso, ensure both are productive.
 
 With the DGX Spark, we close the biggest gap in Oceanid—automated pre-annotation and rapid ML iteration. The result: SMEs work faster, models learn continuously, and we keep our advantage in data quality.
+> Archived: This brief referenced Granite Docling and DistilBERT pre-annotation. The current NER pipeline uses DeepSeek OCR, Ollama NER (Spark) with Argilla review, and MotherDuck as the data lake. See `workers/vessel-ner` and `VESSEL_NER_CLOUDFLARE_WORKPLAN.md`.

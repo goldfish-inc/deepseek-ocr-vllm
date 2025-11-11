@@ -1,6 +1,8 @@
 # Infrastructure Improvements Summary
 **October 8-9, 2025**
 
+> Archived: Captures the pre-Argilla remediation. Label Studio references are historical.
+
 ## Executive Summary
 
 Completed major infrastructure improvements focusing on networking stability, GitOps reliability, and database connectivity. Successfully migrated from unreliable SSH tunnels to Cloudflare WARP for kubectl access, resolved Flux Helm ownership conflicts, and upgraded Label Studio to v1.21.0.

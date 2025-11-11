@@ -1,6 +1,6 @@
 # Secrets Management - Pulumi ESC Only
 
-**Principle:** All project secrets are stored in Pulumi ESC (Environments, Secrets, and Configuration). No other secret management tools (1Password, Vault, etc.) are used in deployment workflows.
+**Principle:** All project secrets are stored in Pulumi ESC (Environments, Secrets, and Configuration). No other secret management tools (1Password, Vault, etc.) are used in deployment workflows. For the CI/CD context around these secrets (cloud vs. cluster stacks, device runners), read [docs/operations/cicd-architecture.md](./operations/cicd-architecture.md). For per-device onboarding—including which ESC keys to create—follow [docs/operations/device-onboarding-cicd.md](./operations/device-onboarding-cicd.md).
 
 ---
 

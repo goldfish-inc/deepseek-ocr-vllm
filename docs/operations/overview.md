@@ -4,7 +4,7 @@ This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS an
 
 ## Topology
 
-- K8s on primary VPS (tethys). Label Studio runs here and is exposed via the Cloudflare cluster tunnel at `https://label.boathou.se`.
+- K3s on primary VPS (tethys). Argilla runs in `apps` namespace and is exposed via the Cloudflare tunnel at `https://label.boathou.se`.
 - Calypso (GPU workstation) runs a host‑level cloudflared connector and a simple GPU HTTP service at `https://gpu.boathou.se`.
 - All secrets and tokens are stored in Pulumi ESC (`default/oceanid-cluster`).
 
@@ -110,50 +110,33 @@ kubectl cluster-info
 
 Ensure your email domain or emails are included in Access policy.
 
-Mermaid (GPU path):
+Mermaid (Argilla path):
 
 ```mermaid
 flowchart LR
-  LS[Label Studio] --> AD[Adapter]
-  AD --> CF[Cloudflare Edge]
-  CF --> CL[cloudflared (Calypso)]
-  CL --> TR[Triton 8000]
+  Upload[Cloudflare upload handler] --> OCR[DeepSeek OCR worker]
+  OCR --> NER[Ollama Worker (Spark)]
+  NER --> Sync[Argilla sync worker]
+  Sync --> Argilla[Argilla UI]
+  Argilla --> Export[argilla-export worker]
+  Export --> MD[MotherDuck]
 ```
 
-## Label Studio ML Backend (Auto‑provisioned)
+## Argilla + MotherDuck Pipeline (WIP)
 
-- Project `NER_Data` can be auto‑provisioned in‑cluster by a one‑off Job (gated by config `enableLsProvisionerJob`):
-  - Connects ML backend: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
-  - Applies a full NER labeling interface from ESC/labels.json
-  - Registers task‑create webhooks to the sink `/ingest`
-- **S3 storage is wired automatically per project.** The provisioner calls `/api/storages/s3/` and `/api/storages/export/s3/` to create (or update) project‑scoped import/export storage using the bucket/region/prefix settings from ESC (`aws.labelStudio.*`). Each project gets its own folder (prefix resolved via `{project}` / `{project_id}` tokens, or automatically appended as `<slug>-<id>/import` / `.../export`). Import storage defaults to presigned URLs (`use_blob_urls: true`, `presign: true`) and immediately triggers `/sync`, so raw documents appear in the queue without any manual UI work.
-- Customize prefixes, regex filters, titles, or a custom S3 endpoint by setting these Pulumi config keys / ESC values:
-  - `aws.labelStudio.bucketName`, `aws.labelStudio.region`, optional `aws.labelStudio.endpoint`
-  - `aws.labelStudio.importPrefix`, `aws.labelStudio.exportPrefix`
-  - `aws.labelStudio.importRegex` (e.g., `.*\.(csv|xlsx|pdf)$`)
-  - `aws.labelStudio.importTitle`, `aws.labelStudio.exportTitle`
-- For additional projects, you can run the provisioner Job again or connect the ML backend manually.
-
-Manual steps (if needed):
-
-- Project → Settings → Model → Connect model
-- URL: `http://ls-triton-adapter.apps.svc.cluster.local:9090`
-- Test (uses `/setup` GET/POST); Health: `/health`
-
-Notes:
-
-- The deprecated `ls-ml-autoconnect` service was removed to avoid coupling infra to a personal API token.
-- `ls-triton-adapter` stays running cluster‑wide as the shared inference endpoint.
-- PDF page images for box annotation are controlled by `PDF_CONVERT_TO_IMAGES` (set via Pulumi).
-- LS provision verification job is also gated via config `enableLsVerifyJob`.
-  - If you change this setting or other env vars, redeploy with Pulumi (`pulumi -C cluster up`).
+- Argilla replaces Label Studio completely. Deployment details live in `ARGILLA_DEPLOYMENT.md`.
+- Dataset imports are handled by `clusters/tethys/apps/argilla-importer.yaml` + `ARGILLA_IMPORT.md` (server-side Hugging Face importer).
+- The Cloudflare Workers pipeline that feeds Argilla is tracked in `VESSEL_NER_CLOUDFLARE_WORKPLAN.md` (archived). Current flow: upload handler → OCR → NER via Spark + Ollama Worker → Argilla sync/export → MotherDuck corrections → Postgres/PostGraphile.
+- `ls-triton-adapter` remains as the shared inference endpoint until the Argilla sync worker takes over suggestions.
+- All former Label Studio helpers (ML auto-connect, S3 helper, PAT scripts) were removed; use the workplan to coordinate new functionality.
 
 ## Secrets & Config
 
 - ESC keys to verify:
   - `cloudflareNodeTunnelId`, `cloudflareNodeTunnelToken`, `cloudflareNodeTunnelHostname`, `cloudflareNodeTunnelTarget`
   - `cloudflareAccountId`, `cloudflareApiToken`, `cloudflareZoneId`
-  - `labelStudioApiToken` - API token for ML backend auto-configuration (from 1Password)
+  - `argillaPostgresPassword`, `argillaAuthSecret`, `argillaAdminPassword`, `argillaAdminApiKey`, `argillaRedisUrl`
+  - `huggingFaceToken`
   - `nautilusSyncToken` - GitHub token used by the docs sync workflow to dispatch builds to `goldfish-inc/nautilus`
 - The node tunnel token can be either:
   - Base64‑encoded credentials.json, or
@@ -191,33 +174,11 @@ curl -sk https://gpu.<base>/v2/health/ready
   - `make db-psql`
   - `psql "$DATABASE_URL" -c "select * from stage.v_documents_freshness;"`
 
-### Label Studio database (labelfish)
+### Argilla Workspace Storage
 
-- Database: `labelfish` on the "ebisu" CrunchyBridge cluster (PG 17), isolated from staging/curated
-- Schema: `labelfish` (bootstrap in `sql/labelstudio/labelfish_schema.sql`); app tables created by Label Studio migrations
-- Roles: `labelfish_owner` (app), `labelfish_rw` (optional services), `labelfish_ro` (read‑only)
-- Extensions: `pgcrypto`, `citext`, `pg_trgm`, `btree_gist`; defaults: `UTC`, `search_path=labelfish,public`, timeouts
-
-Provision (manual):
-
-```bash
-# Create DB (example owner shown via CrunchyBridge CLI)
-cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres -- -c \
-  "CREATE DATABASE labelfish OWNER u_ogfzdegyvvaj3g4iyuvlu5yxmi;"
-
-# Apply bootstrap SQL (roles/schema/extensions/grants)
-cb psql 3x4xvkn3xza2zjwiklcuonpamy --role postgres --database labelfish \
-  < sql/labelstudio/labelfish_schema.sql
-
-# Store connection URL for the cluster stack
-esc env set default/oceanid-cluster pulumiConfig.oceanid-cluster:labelStudioDbUrl \
-  "postgres://labelfish_owner:<password>@p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com:5432/labelfish" --secret
-```
-
-Wire Label Studio (cluster):
-
-- The cluster stack reads `labelStudioDbUrl` (ESC secret) and sets `DATABASE_URL` for the LS deployment.
-- Public host: `LABEL_STUDIO_HOST=https://label.<base>`
+- Argilla uses an in-cluster PostgreSQL + Elasticsearch StatefulSet (see `clusters/tethys/apps/argilla.yaml`). No external CrunchyBridge database is required.
+- Secrets come from `argilla-secrets` (managed by Pulumi; see `cluster/src/index.ts`). Update ESC values listed above if credentials change.
+- Public host remains `label.<base>` but the service is Argilla.
 - Tunnel ingress/DNS: `label.<base>` CNAME → `<cluster_tunnel_id>.cfargotunnel.com` (proxied) with ingress mapping to LS service.
 
 Verify:
@@ -258,3 +219,26 @@ curl -s -X POST http://localhost:9090/predict \
   -H 'Content-Type: application/json' \
   -d '{"model":"docling_granite_python","pdf_base64":"'"$PDF64"'","prompt":"Extract vessel summary"}' | jq .
 ```
+## Current Pipeline (High-Level)
+
+```mermaid
+flowchart LR
+  U[Upload] --> W(Worker /upload)
+  W --> R2[(R2)]
+  W --> Q1{pdf-processing}
+  Q1 --> OCR[OCR Worker]
+  OCR --> DS[DeepSeek Space]
+  DS --> OCR
+  OCR -->|INSERT via proxy| MD[(MotherDuck raw_ocr)]
+  OCR --> Q2{entity-extraction}
+  Q2 --> NER[Entity Extractor]
+  NER -->|Spark + Ollama| NER
+  NER -->|INSERT via proxy| MD2[(MotherDuck entities)]
+  NER --> Q3{argilla-sync}
+  Q3 --> SYNC[Argilla Sync]
+  SYNC -->|POST| ARG[Argilla]
+  ARG -->|Webhook| WEBH[Webhook Handler]
+  WEBH --> MDC[(MotherDuck entity_corrections)]
+```
+
+See also: `docs/operations/pipeline-overview.md` and `docs/operations/networking-topology.md`.

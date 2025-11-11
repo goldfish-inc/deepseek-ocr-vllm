@@ -1,5 +1,8 @@
 # Recovery Plan - October 13, 2025
 
+> Archived: references to Label Studio/project-bootstrapper reflect the retired stack. Use
+> Argilla/MotherDuck guides for current recovery steps.
+
 ## Immediate Recovery (Next 30 Minutes)
 
 ### Goal

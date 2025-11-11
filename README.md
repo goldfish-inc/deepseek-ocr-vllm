@@ -68,6 +68,8 @@ The `dashboards/` directory remains for now as legacy artifacts and will be migr
 - Collision Review UI RFC (separate project): docs/RFC_UI_COLLISION_REVIEW.md
 - EBISU Data Dictionary: docs/ebisu-data-dictionary.md
 - EBISU Implementation Summary: docs/EBISU_IMPLEMENTATION_SUMMARY.md
+- CI/CD topology across Cloud Pulumi, K3s stack, Flux, and device workflows: docs/operations/cicd-architecture.md
+- Device onboarding (tunnels, Access, runners): docs/operations/device-onboarding-cicd.md
 
 ## Getting Started
 
@@ -85,6 +87,16 @@ cd cluster
 pulumi stack select ryan-taylor/oceanid-cluster/prod
 pulumi preview
 ```
+
+### Vercel Deploys (Team goldfish)
+
+- CI enforces deploys to the `goldfish` team via `.github/workflows/vercel-deploy.yml`.
+- Required repo secrets:
+  - `VERCEL_TOKEN` (team-scoped)
+  - `VERCEL_ORG_ID` (ID of team goldfish, e.g. `team_...`)
+  - `VERCEL_PROJECT_ID` (ID of the Vercel project)
+- The workflow uses `vercel pull/build/deploy` with `--scope goldfish`.
+- Disable Auto-Deployments on any personal-scope Vercel project linked to this repo to avoid duplicate deploys.
 
 ### Required Pulumi Config / ESC Keys
 
@@ -230,122 +242,41 @@ Admin commands (Calypso):
 - Restart tunnel: `sudo systemctl restart cloudflared-node`
 - Model repo: `/opt/triton/models/<model>/1/model.onnx` (config.pbtxt in model dir)
 
-### PDF Support (Docling‑Granite via Triton Python)
+### Argilla + MotherDuck Pipeline (Current)
 
-- Copy the provided Triton Python model to Calypso:
-  - `scp -r triton-models/docling_granite_python calypso:/tmp/`
-  - `ssh calypso "sudo mv /tmp/docling_granite_python /opt/triton/models/ && sudo systemctl restart tritonserver"`
-- Call Triton directly via `https://gpu.<base>` with the Triton HTTP v2 API.
+CSV normalization and PDF intelligence now land in MotherDuck and Argilla instead of Label Studio. The reference architecture lives in `VESSEL_NER_CLOUDFLARE_WORKPLAN.md`:
 
-```bash
-# Triton health (expect: ready: true)
-curl -sk https://gpu.boathou.se/v2/health/ready
-```
-  - `http://ls-triton-adapter.apps.svc.cluster.local:9090/predict_ls`
-  - See docs/ML_BACKEND_CONNECTION.md for per‑project connection steps
-  The adapter extracts the PDF URL from the task payload and routes to `docling_granite_python`.
+1. **upload-handler worker** accepts PDF uploads and stores them in R2 (`vessel-pdfs`).
+2. **ocr-processor worker** runs DeepSeek OCR and writes the output to MotherDuck (`raw_ocr`).
+3. **NER job (Spark + Ollama Worker)** extracts entities and appends to MotherDuck `entities` tables.
+4. **argilla-sync worker** formats batches for Argilla and posts them to `https://label.boathou.se` (Argilla server in K3s).
+5. **argilla-export worker** receives Argilla webhooks and pushes SME corrections back into MotherDuck (`entity_corrections`).
 
-### Active Learning Pipeline
+Each worker is a Cloudflare Worker (Wrangler v4) with Queues bindings; secrets for DeepSeek, Argilla, and MotherDuck are managed via `wrangler secret put`. NER runs via Spark using the team‑managed Ollama Worker proxy. See:
+- docs/operations/pipeline-overview.md
+- docs/operations/networking-topology.md
 
-The adapter exposes `/train` to support Label Studio Active Learning with automatic model retraining:
+### CSV Ingestion Worker (standalone)
 
-**Architecture:**
-1. Annotation submission → POST `/train` → Creates K8s Job on Calypso GPU node
-2. Training Job fetches annotations from HuggingFace dataset
-3. Fine-tunes DistilBERT model on new annotations
-4. Exports optimized ONNX model
-5. Publishes to HuggingFace model repository
-6. Reloads Triton model via Model Control API (zero-downtime)
-7. Next predictions use updated model
+The Go CSV worker (`apps/csv-ingestion-worker`) remains the canonical path for structured files. It accepts generic ingestion webhooks (no Label Studio coupling), downloads the source file over HTTPS, applies pandas-style normalization rules from the `stage.*` schemas, and writes the cleaned rows plus audit metadata into PostgreSQL. This pipeline is independent of Argilla and continues to power the Cleandata / EBISU transformations.
 
-**Configuration:**
-- `TRAIN_ASYNC` (default `true`): Run training Job asynchronously
-- `TRAIN_DRY_RUN` (default `false`): Skip Job creation, log only
-- `TRAINING_JOB_IMAGE`: Container image for training worker
-- `TRAINING_JOB_NAMESPACE`: K8s namespace for Jobs (default `apps`)
-- `TRITON_URL`: Triton server URL for model reload
-- `TRITON_MODEL_NAME`: Model name in Triton repository
+### Model Training
 
-**Local validation:**
-
-```bash
-# Start adapter locally (dry-run)
-cd apps/ls-triton-adapter && TRAIN_DRY_RUN=1 go run .
-
-# In another terminal, test endpoint
-curl -X POST http://localhost:9090/train \
-  -H "Content-Type: application/json" \
-  -d '{"annotations": [{"text": "Test", "label": "VESSEL"}]}'
-```
-
-**Cluster validation:**
-
-```bash
-# Port-forward to adapter
-kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-
-# Trigger training
-curl -X POST http://localhost:9090/train \
-  -H "Content-Type: application/json" \
-  -d '{"annotations": [{"text": "Vessel IMO 1234567", "label": "VESSEL"}]}'
-
-# Check Job status
-kubectl get jobs -n apps | grep train
-kubectl logs -n apps job/train-<timestamp> -f
-```
-
-## Model Training (DistilBERT NER)
-
-### Automated Active Learning (Production)
-
-Training is fully automated via the Active Learning pipeline:
-- Annotations submitted in Label Studio trigger K8s Jobs
-- Jobs run on Calypso GPU node with RTX 4090
-- Trained models automatically reload into Triton (zero-downtime)
-
-See **Active Learning Pipeline** section above for architecture details.
-
-### Manual Training (Development)
-
-For local development and testing:
-
-```bash
-# 1. Prepare labels (ESC nerLabels order is ground truth)
-cat labels.json
-
-# 2. Train model
-python scripts/ner_train.py \
-  --labels labels.json \
-  --data-dir ./local_annotations \
-  --out ./models/ner-distilbert
-
-# 3. Export to ONNX
-bash scripts/export_onnx.sh \
-  ./models/ner-distilbert \
-  ./distilbert_onnx \
-  63  # label count
-
-# 4. Test locally with Triton
-# (Copy model.onnx to Triton model repository and reload)
-```
-
-### Training Worker Components
-
-- **Container**: `ghcr.io/goldfish-inc/oceanid/training-worker:main`
-- **Base image**: `python:3.11-slim` (optimized for GitHub Actions disk space)
-- **Entrypoint**: `apps/training-worker/entrypoint.py`
-  - Fetches annotations from HuggingFace dataset
-  - Trains DistilBERT with `scripts/ner_train.py`
-  - Exports ONNX with `scripts/export_onnx.sh`
-  - Publishes to HuggingFace model repository
-  - Reloads Triton model via Model Control API
+The "active learning" adapter and early DistilBERT path are retired. Model development now follows the Argilla workflow: SMEs review entity suggestions in Argilla, exports land in MotherDuck, and batch enrichment runs via Spark with Ollama where needed. See `workers/vessel-ner` for the DeepSeek OCR and Argilla sync stages.
 
 ## SME Workflow (CSV/Text/PDF/Images)
 
 For SMEs working with multi-format data:
 
-- v1 (current): Pre-labels for Text and PDFs. CSVs work when a row has a `text` column or a `pdf`/`url` column. Images require conversion to PDF or OCR to enable pre-labels.
-- v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically in-cluster and import clean tasks into Label Studio.
+- v1 (current): Argilla hosts PDF/entity review. CSV records enter via the ingestion worker and surface in Argilla once the Cloudflare workers sync them.
+- v2 (planned): Integrate existing pandas cleaners to normalize per-country spreadsheets automatically and push curated batches into Argilla/MotherDuck without manual staging.
+
+#### New CLI helpers (Week 1–2)
+
+- `scripts/md_ingest_and_authorize.py` — Load Parquet into `curated.<dataset>` and create `authorized.org_<id>_<dataset>` views. Optionally upserts a minimal `catalog` used by ocean `/api/catalog`.
+  - Env: `MOTHERDUCK_TOKEN`, `MD_DATABASE`, `DATASET`, `PARQUET_GLOB`, `ORG_IDS`.
+- `scripts/argilla_exporter.py` — Skeleton exporter that writes `pages/` and `spans/` Parquet plus `schema.json` under `<OUTPUT_BASE>/<dataset>/` for Argilla→MotherDuck round‑trip.
+  - Env: `DATASET`, `OUTPUT_BASE`.
 
 See the detailed guide with diagrams: `@docs/guides/SME/workflow.md`.
 For DB access and staging table workflows, see `@docs/guides/SME/index.mdx`.

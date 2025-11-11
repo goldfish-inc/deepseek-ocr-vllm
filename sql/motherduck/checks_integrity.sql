@@ -170,3 +170,59 @@ SELECT
   COUNT(DISTINCT export_run_id) AS total_runs,
   MAX(created_at) AS latest_ingest
 FROM anndb.main.annotations_pages;
+
+-- ========================================
+-- OPTIONAL: Parquet Schema Validation (Argilla)
+-- ========================================
+-- Usage:
+--   CREATE TEMP TABLE _schema_check_params(
+--     pages_glob VARCHAR,
+--     spans_glob VARCHAR
+--   );
+--   INSERT INTO _schema_check_params VALUES (
+--     's3://bucket/argilla/out/<dataset>/pages/*.parquet',
+--     's3://bucket/argilla/out/<dataset>/spans/*.parquet'
+--   );
+-- Then run the two queries below to detect missing columns.
+
+-- Pages Parquet expected columns
+-- Expected: argilla_record_id, doc_id, page_num, status, annotator_id, reviewer_id, record_sha256
+-- Actual columns from DESCRIBE of read_parquet(pages_glob)
+-- NOTE: Requires httpfs settings if using S3/R2
+--
+-- CREATE TEMP TABLE _pages_cols AS
+-- SELECT column_name
+-- FROM (DESCRIBE SELECT * FROM read_parquet((SELECT pages_glob FROM _schema_check_params)));
+--
+-- WITH expected(column_name) AS (
+--   VALUES ('argilla_record_id'),('doc_id'),('page_num'),('status'),('annotator_id'),('reviewer_id'),('record_sha256')
+-- ), missing AS (
+--   SELECT e.column_name
+--   FROM expected e
+--   LEFT JOIN _pages_cols c USING (column_name)
+--   WHERE c.column_name IS NULL
+-- )
+-- SELECT 'Schema: Missing pages columns' AS check_name,
+--        COUNT(*) AS missing_count,
+--        string_agg(column_name, ', ') AS missing_columns
+-- FROM missing;
+
+-- Spans Parquet expected columns
+-- Expected: argilla_record_id, span_id, doc_id, page_num, label, start, end, text, text_sha256, norm_value, annotator_id
+--
+-- CREATE TEMP TABLE _spans_cols AS
+-- SELECT column_name
+-- FROM (DESCRIBE SELECT * FROM read_parquet((SELECT spans_glob FROM _schema_check_params)));
+--
+-- WITH expected(column_name) AS (
+--   VALUES ('argilla_record_id'),('span_id'),('doc_id'),('page_num'),('label'),('start'),('end'),('text'),('text_sha256'),('norm_value'),('annotator_id')
+-- ), missing AS (
+--   SELECT e.column_name
+--   FROM expected e
+--   LEFT JOIN _spans_cols c USING (column_name)
+--   WHERE c.column_name IS NULL
+-- )
+-- SELECT 'Schema: Missing spans columns' AS check_name,
+--        COUNT(*) AS missing_count,
+--        string_agg(column_name, ', ') AS missing_columns
+-- FROM missing;

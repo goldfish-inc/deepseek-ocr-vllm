@@ -76,9 +76,7 @@ pnpm exec wrangler queues create argilla-sync-dlq
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
   pnpm exec wrangler secret put MOTHERDUCK_TOKEN
 
-# Claude API key
-op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-  pnpm exec wrangler secret put ANTHROPIC_API_KEY
+# No Claude key required. NER uses the Ollama Worker proxy via Spark.
 
 # HuggingFace token
 op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
@@ -96,10 +94,7 @@ for worker in vessel-ner-ocr-processor vessel-ner-entity-extractor vessel-ner-ar
   op read "op://ddqqn2cxmgi4xl4rris4mztwea/Motherduck API/credential" | \
     pnpm exec wrangler secret put MOTHERDUCK_TOKEN --name $worker
 
-  if [[ "$worker" == *"entity-extractor"* ]]; then
-    op read "op://ddqqn2cxmgi4xl4rris4mztwea/Claude API NER/credential" | \
-      pnpm exec wrangler secret put ANTHROPIC_API_KEY --name $worker
-  fi
+  # No Claude key required for entity-extractor (NER via Spark + Ollama Worker)
 
   if [[ "$worker" == *"ocr-processor"* ]]; then
     op read "op://ddqqn2cxmgi4xl4rris4mztwea/Hugging Face API Token/credential" | \
@@ -221,9 +216,9 @@ pnpm exec wrangler queues consumer list pdf-processing-dlq
 ### Issue: PDF not processing
 
 **Check**:
-1. R2 bucket exists: `wrangler r2 bucket list`
-2. Queue has messages: `wrangler queues list`
-3. OCR processor logs: `wrangler tail vessel-ner-ocr-processor`
+1. R2 bucket exists: `pnpm exec wrangler r2 bucket list`
+2. Queue has messages: `pnpm exec wrangler queues list`
+3. OCR processor logs: `pnpm exec wrangler tail vessel-ner-ocr-processor`
 
 **Common causes**:
 - DeepSeek HF Space is down or rate-limited
@@ -233,14 +228,14 @@ pnpm exec wrangler queues consumer list pdf-processing-dlq
 ### Issue: No entities extracted
 
 **Check**:
-1. OCR text in MotherDuck (use DuckDB CLI)
-2. Claude API key valid
+1. OCR text in MotherDuck (use DuckDB CLI / MotherDuck Web)
+2. Ollama Worker reachable (HTTP 200)
 3. Entity extractor logs for errors
 
 **Common causes**:
-- Claude API rate limit
+- Ollama Worker request/response mismatch (check payload)
 - OCR text is empty or corrupted
-- JSON parsing error in Claude response
+- Authentication to AI Gateway failed
 
 ### Issue: Entities not in Argilla
 
@@ -273,7 +268,7 @@ OCR Processor Worker
       ↓
 Entity Extractor Worker
   ├─ Read from MotherDuck: raw_ocr
-  ├─ Call Claude API (NER)
+  ├─ Call Ollama Worker (Spark) for NER
   ├─ Write to MotherDuck: entities
   └─ Enqueue: argilla-sync
       ↓
@@ -332,4 +327,4 @@ Argilla webhook → POST /webhook/argilla
 - [R2 Storage](https://developers.cloudflare.com/r2/)
 - [MotherDuck API](https://motherduck.com/docs/api-reference)
 - [Argilla API](https://docs.argilla.io/latest/reference/)
-- [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript)
+- [Ollama Worker Proxy](https://ollama-api.boathou.se)

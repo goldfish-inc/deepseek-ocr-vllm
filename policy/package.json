@@ -10,9 +10,9 @@
     "fmt": "opa fmt --write opa-policies.rego"
   },
   "devDependencies": {
-    "@types/node": "^20.14.10",
-    "@pulumi/pulumi": "^3.197.0",
+    "@pulumi/pulumi": "^3.206.0",
+    "@types/node": "^20.19.24",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   }
 }

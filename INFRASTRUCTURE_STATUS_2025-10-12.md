@@ -1,5 +1,7 @@
 # Infrastructure Status - 2025-10-12 22:45 UTC
 
+> Archived: includes debugging notes for the retired Label Studio/bootstrapper stack.
+
 ## Summary
 
 **DaemonSet-based Tailscale implementation DEPLOYED but blocked by node failure.**

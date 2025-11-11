@@ -1,4 +1,5 @@
 # Oceanid Infrastructure Fixes - 2025-10-12
+> Archived. Label Studio remediation steps in this document have been superseded by the Argilla + MotherDuck pipeline.
 
 **Session Goal**: Fix root architectural anti-patterns causing infinite deployment loops
 

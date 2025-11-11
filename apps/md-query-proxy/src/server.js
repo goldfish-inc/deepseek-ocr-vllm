@@ -3,6 +3,11 @@ import duckdb from 'duckdb';
 
 const PORT = process.env.PORT || 8080;
 const MOTHERDUCK_TOKEN = process.env.MOTHERDUCK_TOKEN;
+const PROXY_MODE = (process.env.PROXY_MODE || 'rw').toLowerCase(); // 'rw' or 'ro'
+const MAX_ROWS = Number(process.env.MAX_ROWS || 10000);
+const MAX_MS = Number(process.env.MAX_MS || 15000);
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000); // 1 minute
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 120); // requests per window per client
 
 if (!MOTHERDUCK_TOKEN) {
   console.warn('[md-query-proxy] WARNING: MOTHERDUCK_TOKEN is not set. The service will not be able to ATTACH to MotherDuck.');
@@ -41,6 +46,28 @@ function rewriteSqlForMd(sql) {
   return s;
 }
 
+function isDangerous(sql) {
+  const lowered = sql.trim().toLowerCase();
+  // Disallow DDL and extension/runtime changes always
+  if (/(\bdrop\b|\btruncate\b|\balter\b|\battach\b|\bdetach\b|\binstall\b|\bload\b|\bset\b)/.test(lowered)) return true;
+  return false;
+}
+
+function enforceReadOnly(sql) {
+  const lowered = sql.trim().toLowerCase();
+  // Allow only SELECT and SHOW/DESCRIBE in read-only mode
+  if (/^(select|show|describe)\b/.test(lowered)) return true;
+  return false;
+}
+
+function withLimit(sql) {
+  const lowered = sql.trim().toLowerCase();
+  if (!lowered.startsWith('select')) return sql; // only apply to SELECT
+  // If there's already a LIMIT, do nothing
+  if (/\blimit\b\s+\d+/i.test(lowered)) return sql;
+  return `${sql}\nLIMIT ${MAX_ROWS}`;
+}
+
 async function init() {
   return new Promise((resolve, reject) => {
     // Install and load the MotherDuck extension
@@ -67,12 +94,42 @@ async function init() {
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
-app.get('/health', (req, res) => {
+// Minimal in-memory rate limiter (per client IP)
+const bucket = new Map(); // key -> { count, reset }
+function clientKey(req) {
+  const h = req.headers || {};
+  return (
+    h['cf-connecting-ip'] ||
+    (Array.isArray(h['x-forwarded-for']) ? h['x-forwarded-for'][0] : (h['x-forwarded-for'] || '')).split(',')[0].trim() ||
+    req.ip ||
+    'unknown'
+  );
+}
+function rateLimit(req, res, next) {
+  const key = `${clientKey(req)}:${req.path}`;
+  const now = Date.now();
+  const item = bucket.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS };
+  if (now > item.reset) {
+    item.count = 0;
+    item.reset = now + RATE_LIMIT_WINDOW_MS;
+  }
+  item.count += 1;
+  bucket.set(key, item);
+  if (item.count > RATE_LIMIT_MAX) {
+    res.status(429).json({ error: 'Rate limit exceeded', retry_after_ms: item.reset - now });
+  } else {
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_LIMIT_MAX - item.count)));
+    res.setHeader('X-RateLimit-Reset', String(item.reset));
+    next();
+  }
+}
+
+app.get('/health', rateLimit, (req, res) => {
   res.json({ status: 'ok', service: 'md-query-proxy' });
 });
 
 // POST /query { database: string, query: string }
-app.post('/query', async (req, res) => {
+app.post('/query', rateLimit, async (req, res) => {
   try {
     const { database, query } = req.body || {};
     if (!database || !query) {
@@ -84,8 +141,21 @@ app.post('/query', async (req, res) => {
 
     const start = Date.now();
     await ensureAttached(database);
-    const rewritten = rewriteSqlForMd(query);
+    if (isDangerous(query)) {
+      return res.status(400).json({ error: 'Dangerous statement blocked' });
+    }
+    if (PROXY_MODE === 'ro' && !enforceReadOnly(query)) {
+      return res.status(400).json({ error: 'Write operations are disabled' });
+    }
+    const rewritten = withLimit(rewriteSqlForMd(query));
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { conn.interrupt && conn.interrupt(); } catch {}
+    }, MAX_MS);
     conn.all(rewritten, (err, rows) => {
+      clearTimeout(timer);
+      if (timedOut) return res.status(504).json({ error: 'Query timed out', elapsed_ms: Date.now() - start });
       if (err) return res.status(400).json({ error: err.message, elapsed_ms: Date.now() - start });
 
       // Convert BigInt values (DuckDB returns BIGINT for COUNT, etc.) to strings for JSON compatibility
@@ -103,6 +173,42 @@ app.post('/query', async (req, res) => {
     });
   } catch (e) {
     return res.status(502).json({ error: String(e) });
+  }
+});
+
+// Apply rate limit to schema routes
+// GET /schema/tables?database=<db>
+app.get('/schema/tables', rateLimit, async (req, res) => {
+  try {
+    const database = req.query.database;
+    if (!database) return res.status(400).json({ error: 'Missing database' });
+    await ensureAttached(database);
+    conn.all('SHOW TABLES FROM md;', (err, rows) => {
+      if (err) return res.status(400).json({ error: err.message });
+      // rows: [{ name: 'table' }]
+      const tables = (rows || []).map((r) => r.name).filter(Boolean);
+      res.json({ tables });
+    });
+  } catch (e) {
+    res.status(502).json({ error: String(e) });
+  }
+});
+
+// GET /schema/columns?database=<db>&table=<name>
+app.get('/schema/columns', rateLimit, async (req, res) => {
+  try {
+    const { database, table } = req.query || {};
+    if (!database || !table) return res.status(400).json({ error: 'Missing database or table' });
+    await ensureAttached(database);
+    const sql = `DESCRIBE md.${table};`;
+    conn.all(sql, (err, rows) => {
+      if (err) return res.status(400).json({ error: err.message });
+      // rows: columns with field_name and type
+      const cols = (rows || []).map((r) => ({ name: r.column_name || r.field || r.name || r.Column, type: r.column_type || r.type }));
+      res.json({ columns: cols });
+    });
+  } catch (e) {
+    res.status(502).json({ error: String(e) });
   }
 });
 

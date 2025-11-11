@@ -2,6 +2,7 @@ name = "vessel-ner-pipeline"
 main = "src/index.ts"
 compatibility_date = "2025-01-07"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true  # Enable workers.dev subdomain for quick E2E testing
 
 # Account ID (Cloudflare account)
 account_id = "8fa97474778c8a894925c148ca829739"
@@ -49,4 +50,4 @@ DEEPSEEK_OCR_SPACE_URL = "https://huggingface.co/spaces/goldfish-inc/deepseekocr
 ARGILLA_API_URL = "http://argilla.apps.svc.cluster.local:6900"
 MOTHERDUCK_DATABASE = "vessel_intelligence"
 MD_QUERY_PROXY_URL = "https://md.boathou.se" # Team-hosted SQL proxy URL (POST {database, query})
-USE_DIRECT_UPLOAD = "true"  # Feature flag: Use direct HTTP FormData upload to Gradio Space
+USE_DIRECT_UPLOAD = "false"  # Feature flag: Use direct HTTP FormData upload to Gradio Space

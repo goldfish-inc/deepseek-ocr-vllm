@@ -66,6 +66,8 @@ ssh spark-291b 'curl -s http://localhost:11434/api/tags | jq ".models[0].name"'
 - **Domain**: `ollama.goldfish.io`
 - **Policy**: Allow all (temporary for testing)
 
+> **Infra as code**: Access app + service-token bypass policy are now managed in `cloud/src/index.ts`. Set `oceanid-cloud:sparkAccessServiceTokenId` (service token **ID**, not the client ID) in Pulumi config/ESC so previews can wire the policy automatically.
+
 **Service Token:**
 - **ID**: `f4c14d9b-611e-48bb-b696-40f4425e64e4`
 - **Client ID**: `a1ad143d0d633ec38d44fd230a285fc8.access`

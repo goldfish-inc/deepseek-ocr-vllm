@@ -9,6 +9,8 @@
 export interface MotherDuckConfig {
   token: string;
   database: string;
+  /** Optional HTTP proxy that executes SQL against MotherDuck using an official client (DuckDB + md). */
+  proxyUrl?: string;
 }
 
 export interface RawOcrRow {
@@ -52,27 +54,30 @@ export interface EntityCorrectionRow {
 export class MotherDuckClient {
   private token: string;
   private database: string;
-  private baseUrl = 'https://api.motherduck.com/v1';
+  private baseUrl?: string;
 
   constructor(config: MotherDuckConfig) {
     this.token = config.token;
     this.database = config.database;
+    this.baseUrl = config.proxyUrl;
   }
 
   /**
    * Execute SQL query
    */
   async query<T = unknown>(sql: string): Promise<T[]> {
-    const response = await fetch(`${this.baseUrl}/query`, {
+    if (!this.baseUrl) {
+      throw new Error(
+        'MotherDuck HTTP SQL endpoint is not available. Configure MD_QUERY_PROXY_URL to point to a team-hosted proxy that executes SQL using the official MotherDuck/DuckDB client.'
+      );
+    }
+    const response = await fetch(`${this.baseUrl}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        database: this.database,
-        query: sql,
-      }),
+      body: JSON.stringify({ database: this.database, query: sql }),
     });
 
     if (!response.ok) {

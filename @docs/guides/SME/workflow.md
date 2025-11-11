@@ -145,3 +145,4 @@ flowchart LR
 - Don’t:
   - Upload sensitive content without clearance.
   - Introduce ad-hoc labels without checking the project schema.
+> Archived: This workflow documented Label Studio. The current SME workflow runs via Argilla; see `workers/vessel-ner` docs for the new path.

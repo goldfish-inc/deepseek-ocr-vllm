@@ -392,3 +392,4 @@ Everything else (extraction, table processing, webhooks) is automatic!
 **You make ZERO choices!**
 
 Everything is automatic - file uploads, processing, and database ingestion happen in the background with no UI interaction.
+> Archived: Superseded by the Argilla + MotherDuck pipeline. See `docs/operations/pipeline-overview.md` and `docs/operations/networking-topology.md`.

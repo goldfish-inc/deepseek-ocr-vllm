@@ -12,7 +12,7 @@ echo "🚀 Deploying Cloudflare Tunnel to DGX Spark..."
 
 # Get tunnel token from Pulumi ESC
 echo "📦 Retrieving tunnel token from Pulumi ESC..."
-TUNNEL_TOKEN=$(pulumi config get dgx-spark:cloudflareTunnelToken --cwd "${SCRIPT_DIR}/../..")
+TUNNEL_TOKEN=$(pulumi config get dgx-spark:cloudflareTunnelToken --cwd "${SCRIPT_DIR}/../../cloud")
 
 if [ -z "$TUNNEL_TOKEN" ]; then
   echo "❌ Error: Tunnel token not found in Pulumi config"

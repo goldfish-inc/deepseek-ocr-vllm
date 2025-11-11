@@ -15,13 +15,13 @@ import (
 	"time"
 )
 
-// WebhookPayload represents a Label Studio webhook event
-type WebhookPayload struct {
-	Action      string                 `json:"action"`     // TASK_CREATED, ANNOTATION_CREATED, etc.
-	Task        map[string]interface{} `json:"task"`       // Task data
-	Project     map[string]interface{} `json:"project"`    // Project metadata
-	Annotation  map[string]interface{} `json:"annotation"` // For annotation events
-	WebhookData map[string]interface{} `json:"webhook"`    // Webhook metadata
+// IngestionEvent represents an upload webhook emitted by our intake services
+type IngestionEvent struct {
+	Action      string                 `json:"action"`
+	Task        map[string]interface{} `json:"task"`
+	Project     map[string]interface{} `json:"project"`
+	Annotation  map[string]interface{} `json:"annotation"`
+	WebhookData map[string]interface{} `json:"webhook"`
 }
 
 // TaskData represents the structured task data for CSV processing
@@ -56,7 +56,7 @@ func (w *Worker) handleWebhook(rw http.ResponseWriter, r *http.Request) {
 
 	// Verify webhook signature if secret is configured
 	if w.config.WebhookSecret != "" {
-		signature := r.Header.Get("X-Label-Studio-Signature")
+		signature := r.Header.Get("X-Oceanid-Signature")
 		if !w.verifyWebhookSignature(body, signature) {
 			log.Printf("Invalid webhook signature")
 			w.metrics.webhooksReceived.WithLabelValues("unknown", "invalid_signature").Inc()
@@ -66,7 +66,7 @@ func (w *Worker) handleWebhook(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse webhook payload
-	var payload WebhookPayload
+	var payload IngestionEvent
 	if err := json.Unmarshal(body, &payload); err != nil {
 		log.Printf("Failed to parse webhook payload: %v", err)
 		w.metrics.webhooksReceived.WithLabelValues("unknown", "invalid_json").Inc()
@@ -140,7 +140,7 @@ func (w *Worker) verifyWebhookSignature(body []byte, signature string) bool {
 		return false
 	}
 
-	// Label Studio uses HMAC-SHA256
+	// Oceanid ingestion events use HMAC-SHA256
 	mac := hmac.New(sha256.New, []byte(w.config.WebhookSecret))
 	mac.Write(body)
 	expectedMAC := hex.EncodeToString(mac.Sum(nil))
@@ -149,7 +149,7 @@ func (w *Worker) verifyWebhookSignature(body []byte, signature string) bool {
 	return hmac.Equal([]byte(signature), []byte(expectedMAC))
 }
 
-func (w *Worker) extractTaskData(payload WebhookPayload) (*TaskData, error) {
+func (w *Worker) extractTaskData(payload IngestionEvent) (*TaskData, error) {
 	task := payload.Task
 	if task == nil {
 		return nil, fmt.Errorf("no task data in payload")
@@ -171,8 +171,8 @@ func (w *Worker) extractTaskData(payload WebhookPayload) (*TaskData, error) {
 	fileURL := ""
 	fileName := ""
 
-	// Check common field names for CSV file URL
-	// file_upload is used by triton-docling adapter for extracted tables
+	// Check common field names for CSV file URL. Legacy pipelines may still emit
+	// "file_upload" or "document_url" fields; keep them for backward compatibility.
 	for _, field := range []string{"csv", "file", "csv_url", "file_url", "file_upload", "document_url"} {
 		if url, ok := data[field].(string); ok && url != "" {
 			fileURL = url

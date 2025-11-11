@@ -78,7 +78,7 @@
 **Goal:** Provision Cloudflare resources and MotherDuck schema
 
 **Tasks:**
-1. Install Wrangler v4: `pnpm add -g wrangler@latest`
+1. Ensure Wrangler v4 is available: `pnpm exec wrangler --version` (or use `pnpm dlx wrangler@latest --version`)
 2. Create Cloudflare project: `wrangler init vessel-ner-pipeline`
 3. Create R2 bucket: `wrangler r2 bucket create vessel-pdfs`
 4. Create Queues:
@@ -122,13 +122,13 @@
 
 **Testing:**
 ```bash
-wrangler dev --local
+pnpm exec wrangler dev --local
 curl -F "pdf=@test.pdf" http://localhost:8787/api/upload
 ```
 
 **Deployment:**
 ```bash
-wrangler deploy src/upload-handler.ts
+pnpm exec wrangler deploy src/upload-handler.ts
 ```
 
 ---
@@ -164,9 +164,9 @@ wrangler deploy src/upload-handler.ts
 
 **Testing:**
 ```bash
-wrangler dev --local
+pnpm exec wrangler dev --local
 # Manually send queue message
-wrangler queues send pdf-processing '{"pdf_key": "test.pdf"}'
+pnpm exec wrangler queues send pdf-processing '{"pdf_key": "test.pdf"}'
 ```
 
 ---
@@ -205,7 +205,7 @@ wrangler queues send pdf-processing '{"pdf_key": "test.pdf"}'
 **Testing:**
 ```bash
 # Test with existing MotherDuck data
-wrangler queues send entity-extraction '{"document_id": "test_page_0"}'
+pnpm exec wrangler queues send entity-extraction '{"document_id": "test_page_0"}'
 ```
 
 ---
@@ -318,25 +318,25 @@ Panama    B-FLAG_STATE
 ### Development
 ```bash
 # Local testing
-wrangler dev --local
+pnpm exec wrangler dev --local
 
 # Tail logs in real-time
-wrangler tail
+pnpm exec wrangler tail
 ```
 
 ### Staging
 ```bash
 # Deploy to staging environment
-wrangler deploy --env staging
+pnpm exec wrangler deploy --env staging
 ```
 
 ### Production
 ```bash
 # Deploy to production
-wrangler deploy --env production
+pnpm exec wrangler deploy --env production
 
 # Monitor
-wrangler tail --env production --format=pretty
+pnpm exec wrangler tail --env production --format=pretty
 ```
 
 ---
@@ -465,3 +465,6 @@ Then trigger entity extraction for these 191 docs via Worker.
 - [Queues Docs](https://developers.cloudflare.com/queues/)
 - [MotherDuck Docs](https://motherduck.com/docs/)
 - [Argilla Docs](https://docs.argilla.io/)
+# Vessel NER – Cloudflare Workers Workplan
+
+> Archived: The NER stage in this workplan used Claude. The active pipeline performs NER via Spark using the team‑managed Ollama Worker proxy, with OCR by DeepSeek and review in Argilla. Keep this document for historical reference.

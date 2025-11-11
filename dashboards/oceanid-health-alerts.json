@@ -9,8 +9,8 @@
     "panels": [
       {
         "type": "stat",
-        "title": "⚠️ CRITICAL: Tasks Without Webhooks",
-        "description": "Tasks in Label Studio but no webhook triggers sent",
+        "title": "⚠️ Argilla Sync Backlog",
+        "description": "Messages waiting to reach Argilla from Cloudflare queues",
         "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
         "options": {
           "colorMode": "background",
@@ -31,16 +31,16 @@
         },
         "targets": [
           {
-            "expr": "label_studio_tasks_total - on() sink_webhooks_total",
-            "legendFormat": "Unprocessed Tasks",
+            "expr": "argilla_sync_queue_depth",
+            "legendFormat": "Pending records",
             "refId": "A"
           }
         ]
       },
       {
         "type": "stat",
-        "title": "Project Bootstrapper Health",
-        "description": "Attempts to connect to Label Studio API",
+        "title": "Argilla API Health",
+        "description": "UP status for in-cluster Argilla server",
         "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
         "options": {
           "colorMode": "background",
@@ -60,8 +60,8 @@
         },
         "targets": [
           {
-            "expr": "up{job=\"project-bootstrapper\"}",
-            "legendFormat": "Bootstrapper UP",
+            "expr": "up{job=\"argilla-server\"}",
+            "legendFormat": "Argilla UP",
             "refId": "A"
           }
         ]

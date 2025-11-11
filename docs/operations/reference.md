@@ -33,8 +33,8 @@ cb network add-firewall-rule --network ooer7tenangenjelkxbkgz6sdi \
 ## Database Management
 
 **Crunchy Bridge** (Ebisu): `p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com`
-**DB**: `labelfish`, **User**: `u_ogfzdegyvvaj3g4iyuvlu5yxmi`
-**ESC Key**: `oceanid-cluster:labelStudioDbUrl`
+**DB**: `cleandata`, **User**: `postgres`
+**ESC Key**: `oceanid-cluster:cleandataDbUrl`
 
 **Firewall**: Unified allowlist via Tailscale exit node
 - `157.173.210.123/32` (srv712429 exit node)
