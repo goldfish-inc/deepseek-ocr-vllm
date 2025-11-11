@@ -1,20 +1,33 @@
 # Operations Guide
 
-This guide covers the day‑to‑day flows for the Oceanid stack with 2× VPS and 1× GPU workstation.
+**Last Updated**: 2025-11-11
+**Status**: Production (Argilla + vessel-ner Workers)
+
+This guide covers the day‑to‑day operations for the Oceanid stack with K3s cluster and Cloudflare Workers.
 
 ## Topology
 
-- K3s on primary VPS (tethys). Argilla runs in `apps` namespace and is exposed via the Cloudflare tunnel at `https://label.boathou.se`.
-- Calypso (GPU workstation) runs a host‑level cloudflared connector and a simple GPU HTTP service at `https://gpu.boathou.se`.
+- **K3s Cluster**: Primary VPS (tethys) + GPU worker (calypso). Argilla runs in `apps` namespace.
+- **Cloudflare Workers**: vessel-ner stack (OCR + entity extraction) running serverless at edge.
+- **DGX Spark**: DeepSeek-OCR vLLM service (192.168.2.119:8000) for OCR processing.
+- **MotherDuck**: SQL warehouse for OCR results, entities, and annotations.
 - All secrets and tokens are stored in Pulumi ESC (`default/oceanid-cluster`).
 
-### Calypso Contract
+### Legacy Services (Deprecated)
 
-- DNS: `gpu.<base>` CNAME points to the Node Tunnel target `<TUNNEL_ID>.cfargotunnel.com`.
-- Host tunnel: systemd `cloudflared-node.service`, config under `/etc/cloudflared/config.yaml` routing `gpu.<base>` → `http://localhost:8000`.
-- Triton: systemd `tritonserver.service` (Docker), ports 8000/8001/8002; models mounted from `/opt/triton/models`.
-- Adapter: calls `TRITON_BASE_URL=https://gpu.<base>` and presents Cloudflare Access service token when enabled.
-- Pulumi ownership: `HostCloudflared` and `HostDockerService` components render/update these units.
+The following services have been replaced by the new architecture:
+
+- **Triton Adapter** (`ls-triton-adapter`): ❌ Removed - Replaced by vessel-ner Cloudflare Workers
+- **Label Studio**: ❌ Removed - Replaced by Argilla
+- **Calypso GPU Tunnel**: ⚠️ Legacy - DGX Spark now provides OCR via vLLM (DeepSeek-OCR)
+
+### Current Architecture
+
+- **Upload Portal**: `upload.goldfish.io` (Cloudflare Worker)
+- **OCR Processing**: vessel-ner-ocr-processor (Worker) → DeepSeek-OCR vLLM (DGX Spark)
+- **Entity Extraction**: vessel-ner-entity-extractor (Worker)
+- **Storage**: Cloudflare R2 (vessel-parquet bucket) + MotherDuck (SQL warehouse)
+- **Annotation**: Argilla (K3s cluster, `apps` namespace)
 
 ## Deployment Model
 
@@ -35,18 +48,22 @@ Agent setup (once, on a host with kubeconfig):
   - `scripts/k3s-ssh-tunnel.sh tethys`
   - `export KUBECONFIG=cluster/kubeconfig.yaml`
 - Basic smoke tests:
-  - `make smoke` (uses label.boathou.se and gpu.boathou.se)
-  - Triton HTTP V2 live:
-    - `curl -s https://gpu.boathou.se/v2/health/ready`
-    - `curl -s https://gpu.boathou.se/v2/models`
-  - Docling model present:
-    - `curl -s https://gpu.<base>/v2/models/docling_granite_python`
+  - **Argilla**: `curl -I https://label.boathou.se/` → `302` redirect to login
+  - **DeepSeek-OCR vLLM** (from authorized network): `curl http://192.168.2.119:8000/health`
+  - **Upload Portal**: `curl https://upload.goldfish.io/health`
+  - **MotherDuck**: Check `md-query-proxy` pod health in `apps` namespace
 
-## Hands‑off Training and Deployment (ESC‑only)
+## Training and Model Updates (Legacy)
 
-- GitHub Actions (`.github/workflows/train-ner.yml`) trains (nightly or on demand) from the HF dataset and publishes an updated ONNX to a private HF model repo.
-- Calypso runs a `model-puller` systemd timer that fetches the latest ONNX into `/opt/triton/models/distilbert-base-uncased/<n>/`.
-- Triton repository polling reloads new versions automatically.
+**Status**: ⚠️ **Deprecated** - NER training workflow paused during Argilla migration.
+
+Previous workflow (Label Studio era):
+- GitHub Actions trained models from HF datasets
+- Triton server auto-reloaded updated ONNX models
+
+**Current Approach**:
+- Argilla annotations exported to MotherDuck (`md.annotated` table)
+- Future: Training pipeline will consume MotherDuck exports
 
 Configure once in Pulumi ESC (no GitHub Secrets/Vars required):
 
@@ -97,8 +114,10 @@ From now on, every shell and service on Calypso uses the NVMe cache automaticall
 
 ## Access Controls
 
-- GPU endpoint `gpu.<base>` is protected by a Cloudflare Zero Trust Access application that only allows a service token issued to the in-cluster adapter. The adapter is provisioned with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` automatically.
-- Kubernetes API `api.<base>` is exposed via the node tunnel and protected by Cloudflare Access. Use `cloudflared access tcp` to connect.
+- **Argilla**: Exposed via Cloudflare WARP for developer access (private network routing)
+- **Upload Portal**: Public endpoint (`upload.goldfish.io`) for PDF uploads
+- **DeepSeek-OCR vLLM**: Private LAN access only (192.168.2.119) - accessed by vessel-ner Workers via Cloudflare Magic WAN
+- **Kubernetes API**: Accessible via Cloudflare WARP with kubectl direct routing
 
 ### K8s API via Access (recommended)
 
@@ -122,13 +141,25 @@ flowchart LR
   Export --> MD[MotherDuck]
 ```
 
-## Argilla + MotherDuck Pipeline (WIP)
+## Argilla + MotherDuck Pipeline (Production)
 
-- Argilla replaces Label Studio completely. Deployment details live in `ARGILLA_DEPLOYMENT.md`.
-- Dataset imports are handled by `clusters/tethys/apps/argilla-importer.yaml` + `ARGILLA_IMPORT.md` (server-side Hugging Face importer).
-- The Cloudflare Workers pipeline that feeds Argilla is tracked in `VESSEL_NER_CLOUDFLARE_WORKPLAN.md` (archived). Current flow: upload handler → OCR → NER via Spark + Ollama Worker → Argilla sync/export → MotherDuck corrections → Postgres/PostGraphile.
-- `ls-triton-adapter` remains as the shared inference endpoint until the Argilla sync worker takes over suggestions.
-- All former Label Studio helpers (ML auto-connect, S3 helper, PAT scripts) were removed; use the workplan to coordinate new functionality.
+**Status**: ✅ **Active** - Migrated from Label Studio November 2025
+
+**Architecture**:
+1. **Upload**: User uploads PDF to `upload.goldfish.io` (Cloudflare Worker)
+2. **Storage**: PDF stored in R2 bucket (`vessel-parquet`)
+3. **OCR**: R2 event triggers `vessel-ner-ocr-processor` → calls DeepSeek-OCR vLLM
+4. **Parquet**: OCR results written to R2 as Parquet files
+5. **Entity Extraction**: R2 event triggers `vessel-ner-entity-extractor` → reads Parquet, extracts entities
+6. **MotherDuck**: Entities written to `md.raw_ocr` and `md.entities` tables
+7. **Argilla**: Auto-discovers records from MotherDuck for SME annotation
+8. **Corrections**: SME edits synced back to `md.entity_corrections` table
+
+**Key Documentation**:
+- `docs/architecture/ocr-argilla-motherduck.md` - Architecture overview
+- `docs/operations/pipeline-overview.md` - End-to-end flow
+- `workers/vessel-ner/ARCHITECTURE.md` - Cloudflare Workers design
+- `sql/motherduck/ARGILLA_SCHEMA.md` - Database schema
 
 ## Secrets & Config
 
@@ -154,12 +185,21 @@ flowchart LR
 - Calypso sudo:
   - `oceanid` must have passwordless sudo for apt/systemd.
 
-### Calypso quick checks
+### Quick Health Checks
 
 ```bash
-ssh calypso 'systemctl status cloudflared-node --no-pager; systemctl status tritonserver --no-pager'
-ssh calypso 'curl -sf http://localhost:8000/v2/health/ready && echo OK'
-curl -sk https://gpu.<base>/v2/health/ready
+# Argilla (via WARP)
+curl http://argilla.apps.svc.cluster.local/api/health
+
+# DeepSeek-OCR vLLM (from authorized network)
+ssh sparky@192.168.2.119 'curl http://localhost:8000/health'
+
+# Upload portal
+curl https://upload.goldfish.io/health
+
+# MotherDuck connectivity (via md-query-proxy)
+kubectl -n apps port-forward svc/md-query-proxy 8080:8080 &
+curl http://localhost:8080/health
 ```
 
 ### CrunchyBridge Postgres
@@ -186,59 +226,71 @@ Verify:
 - `curl -I https://label.<base>/` → `302 Found` to `/user/login/`
 - First start creates app tables: `psql …/labelfish -c "\dt labelfish.*"`
 
-## Add a new GPU host (host‑level)
+## OCR Processing (DeepSeek-OCR vLLM)
 
-1. Provision SSH user + key; add to ESC.
-2. Add a `HostCloudflared` + optional `HostGpuService` for the host.
-3. Point a new `gpuX.<base>` route via Cloudflare DNS.
+**Current Setup**: DGX Spark (192.168.2.119) running DeepSeek-OCR via vLLM as systemd service.
 
-## Using Triton with Docling/Granite
+**Model**: `deepseek-ai/DeepSeek-OCR` (17GB, vision-language model)
+**Endpoint**: `http://192.168.2.119:8000/v1/chat/completions` (OpenAI-compatible)
+**GPU**: NVIDIA H100 (80GB VRAM)
 
-- If you have a ready Docker image (e.g., a Docling‑Granite HTTP server), you can run it instead of Triton. Ask and we’ll switch the host service to that container and route `gpu.<base>` to its HTTP port.
-- To use a model with Triton, place it under `/opt/triton/models/<model_name>/1/` on Calypso and add a `config.pbtxt`. Triton supports TensorRT, ONNX, PyTorch, TensorFlow and Python backends.
-- For Docling‑Granite via Python backend, this repo includes a skeleton at `triton-models/docling_granite_python/`. Copy it to Calypso and customize `model.py` as needed.
-
-Example (on Calypso):
+### Test OCR Processing
 
 ```bash
-sudo mkdir -p /opt/triton/models
-scp -r triton-models/docling_granite_python calypso:/tmp/
-ssh calypso "sudo mv /tmp/docling_granite_python /opt/triton/models/ && sudo systemctl restart tritonserver"
-curl -s https://gpu.<base>/v2/models
-
-GPU pinning
-- `distilbert-base-uncased` is pinned to GPU0; `docling_granite_python` is pinned to GPU1 (see `instance_group.gpus` in each `config.pbtxt`). Adjust if hardware layout changes.
+# From workstation with network access to 192.168.2.119
+curl -X POST http://192.168.2.119:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-ai/DeepSeek-OCR",
+    "messages": [{
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "<|grounding|>Convert the document to markdown."},
+        {"type": "image_url", "image_url": {"url": "https://example.com/doc.pdf"}}
+      ]
+    }],
+    "max_tokens": 4096,
+    "temperature": 0
+  }'
 ```
 
-Adapter usage (PDF):
+### Managing vLLM Service
 
 ```bash
-kubectl -n apps port-forward svc/ls-triton-adapter 9090:9090 &
-PDF64=$(base64 -w0 sample.pdf)
-curl -s -X POST http://localhost:9090/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"docling_granite_python","pdf_base64":"'"$PDF64"'","prompt":"Extract vessel summary"}' | jq .
+# SSH to DGX Spark
+ssh sparky@192.168.2.119
+
+# Check service status
+systemctl status deepseek-ocr-vllm
+
+# View logs
+journalctl -u deepseek-ocr-vllm -f
+
+# Restart service
+sudo systemctl restart deepseek-ocr-vllm
 ```
-## Current Pipeline (High-Level)
+
+See: `/Users/rt/Developer/deepseek-ocr-vllm/QUICKSTART.md` for deployment details.
+## Current Pipeline (Production)
 
 ```mermaid
 flowchart LR
-  U[Upload] --> W(Worker /upload)
-  W --> R2[(R2)]
-  W --> Q1{pdf-processing}
-  Q1 --> OCR[OCR Worker]
-  OCR --> DS[DeepSeek Space]
-  DS --> OCR
-  OCR -->|INSERT via proxy| MD[(MotherDuck raw_ocr)]
-  OCR --> Q2{entity-extraction}
-  Q2 --> NER[Entity Extractor]
-  NER -->|Spark + Ollama| NER
-  NER -->|INSERT via proxy| MD2[(MotherDuck entities)]
-  NER --> Q3{argilla-sync}
-  Q3 --> SYNC[Argilla Sync]
-  SYNC -->|POST| ARG[Argilla]
-  ARG -->|Webhook| WEBH[Webhook Handler]
-  WEBH --> MDC[(MotherDuck entity_corrections)]
+  U[User Upload] --> UPLOAD[upload.goldfish.io<br/>Cloudflare Worker]
+  UPLOAD --> R2[(Cloudflare R2<br/>vessel-parquet)]
+  R2 -.R2 Event.-> OCR[vessel-ner-ocr-processor<br/>Worker]
+  OCR --> VLLM[DeepSeek-OCR vLLM<br/>192.168.2.119:8000]
+  VLLM --> OCR
+  OCR -->|Parquet| R2
+  R2 -.R2 Event.-> ENTITY[vessel-ner-entity-extractor<br/>Worker]
+  ENTITY -->|INSERT| MD[(MotherDuck<br/>raw_ocr + entities)]
+  MD -->|Auto-discovery| ARG[Argilla<br/>K3s apps namespace]
+  ARG -->|SME Review| MD2[(MotherDuck<br/>entity_corrections)]
 ```
 
-See also: `docs/operations/pipeline-overview.md` and `docs/operations/networking-topology.md`.
+**Key Points**:
+- Serverless architecture (Cloudflare Workers at edge)
+- Event-driven processing (R2 triggers)
+- Direct GPU access via private LAN (vLLM on DGX Spark)
+- SQL-based storage (MotherDuck replaces Label Studio DB)
+
+See also: `docs/operations/pipeline-overview.md` and `docs/architecture/ocr-argilla-motherduck.md`.
