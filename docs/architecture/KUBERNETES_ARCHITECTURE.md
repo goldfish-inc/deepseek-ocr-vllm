@@ -1,8 +1,9 @@
 # Oceanid Kubernetes Architecture
 
-**Last Updated**: 2025-10-15
+**Last Updated**: 2025-11-11
 **K3s Version**: v1.33.4+k3s1
 **Status**: Production Deployed (3 nodes: tethys + calypso active, styx down)
+**Annotation Tool**: Argilla (migrated from Label Studio November 2025)
 
 ---
 
@@ -163,7 +164,7 @@ graph TB
 |-----------|---------|-----------|-------------|
 | `kube-system` | K8s core services | CoreDNS, metrics-server, Flannel | privileged |
 | `flux-system` | GitOps automation | Flux controllers (6 pods) | restricted |
-| `apps` | Application workloads | Label Studio, CSV workers, project-bootstrapper | baseline |
+| `apps` | Application workloads | Argilla, CSV workers, annotations-sink | baseline |
 | `tailscale-system` | Mesh networking | Tailscale DaemonSets | privileged |
 | `pulumi-system` | IaC automation | Pulumi Kubernetes Operator | privileged |
 | `cloudflared` | Ingress tunnels | cloudflared daemon | baseline |
@@ -173,29 +174,30 @@ graph TB
 ```mermaid
 graph TB
     subgraph "apps Namespace"
-        subgraph "Label Studio Stack"
-            LS[label-studio-ls-app<br/>Deployment: 1 replica<br/>Django + React UI]
-            LSNGINX[nginx sidecar<br/>Static file serving]
-            LSDB[PostgreSQL<br/>External: CrunchyBridge]
-            LSS3[S3 Storage<br/>External: AWS]
+        subgraph "Argilla Annotation Stack"
+            ARGILLA[argilla<br/>Deployment: 1 replica<br/>FastAPI + React UI]
+            ARGPG[PostgreSQL<br/>Deployment: 1 replica<br/>Workspace metadata]
+            ARGES[Elasticsearch<br/>Deployment: 1 replica<br/>Full-text search]
         end
 
         subgraph "Data Processing"
             CSV[csv-ingestion-worker<br/>Deployment: 1 replica<br/>CSV import pipeline]
-            PB[project-bootstrapper<br/>Deployment: 1 replica<br/>Auto-setup service]
+            ANNSINK[annotations-sink<br/>Deployment: 1 replica<br/>Legacy webhook handler]
         end
 
-        subgraph "ML Inference (calypso host)"
-            TRITON[Triton Inference Server<br/>Host-level systemd service<br/>Models: distilbert, granite-docling<br/>Status: ✅ Running]
+        subgraph "External Services"
+            CF[Cloudflare Workers<br/>vessel-ner stack<br/>OCR + Entity Extraction]
+            MD[MotherDuck<br/>SQL warehouse<br/>raw_ocr + entities]
+            CLEANDB[CrunchyBridge<br/>cleandata database]
         end
     end
 
-    LS --> LSNGINX
-    LS --> LSDB
-    LS --> LSS3
-    CSV --> LSDB
-    PB --> LS
-    TRITON -->|HTTP/gRPC<br/>:8000/:8001| LS
+    ARGILLA --> ARGPG
+    ARGILLA --> ARGES
+    CF -->|INSERT via md-query-proxy| MD
+    ARGILLA -->|Auto-discovery| MD
+    CSV --> CLEANDB
+    ANNSINK --> CLEANDB
 ```
 
 ### Pod Distribution by Node
@@ -205,8 +207,8 @@ graph LR
     subgraph "tethys (Control Plane)"
         T1[kube-system pods<br/>CoreDNS, metrics, Flannel]
         T2[flux-system pods<br/>6 controllers]
-        T3[label-studio<br/>1 pod]
-        T4[project-bootstrapper<br/>1 pod]
+        T3[argilla stack<br/>3 pods: app + postgres + elasticsearch]
+        T4[annotations-sink<br/>1 pod]
         T5[pulumi-operator<br/>1 pod]
         T6[cloudflared tunnel<br/>1 pod]
     end
@@ -259,11 +261,12 @@ graph TB
 
 | Workload | Storage Type | Path | Persistence |
 |----------|--------------|------|-------------|
-| Label Studio | local-path PVC | `/var/lib/label-studio` | ✅ Persistent |
+| Argilla PostgreSQL | local-path PVC | `/var/lib/postgresql` | ✅ Persistent |
+| Argilla Elasticsearch | local-path PVC | `/usr/share/elasticsearch/data` | ✅ Persistent |
 | CSV Worker | EmptyDir | `/tmp` | ❌ Ephemeral |
 | Tailscale DaemonSet | hostPath | `/var/lib/tailscale-exit` | ✅ Survives pod restart |
-| PostgreSQL | External | CrunchyBridge managed | ✅ Persistent |
-| S3 Objects | External | AWS S3 | ✅ Persistent |
+| CrunchyBridge DB | External | Managed PostgreSQL | ✅ Persistent |
+| MotherDuck | External | Managed DuckDB | ✅ Persistent |
 
 ### Volume Binding
 
@@ -277,7 +280,7 @@ graph TB
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: label-studio-data
+  name: argilla-postgres-data
   namespace: apps
 spec:
   storageClassName: local-path
@@ -288,8 +291,8 @@ spec:
       storage: 10Gi
 ```
 
-When Label Studio pod starts on `tethys`:
-1. K3s local-path-provisioner creates `/var/lib/label-studio` on tethys
+When Argilla PostgreSQL pod starts on `tethys`:
+1. K3s local-path-provisioner creates `/var/lib/postgresql` on tethys
 2. PV bound to PVC
 3. Pod mounts PVC
 
@@ -432,8 +435,10 @@ graph TB
 
 ```mermaid
 graph LR
-    subgraph "Label Studio (No HA)"
-        LS1[label-studio<br/>1 replica<br/>On tethys]
+    subgraph "Argilla Stack (No HA)"
+        ARGILLA1[argilla<br/>1 replica]
+        ARGPG1[postgres<br/>1 replica]
+        ARGES1[elasticsearch<br/>1 replica]
     end
 
     subgraph "CoreDNS (HA)"
@@ -449,14 +454,17 @@ graph LR
 
 **Current HA Configuration**:
 - ✅ CoreDNS: 2 replicas (survives 1 pod failure)
-- ❌ Label Studio: 1 replica (downtime during restart)
+- ❌ Argilla: 1 replica (downtime during restart)
+- ❌ Argilla PostgreSQL: 1 replica (data loss risk without backups)
+- ❌ Argilla Elasticsearch: 1 replica (search disrupted during restart)
 - ❌ CSV Worker: 1 replica (jobs lost on failure)
 - ❌ Flux Controllers: 1 replica each (GitOps disrupted during restart)
 
 **Recommendations** (future enhancement):
-- Scale Label Studio to 2+ replicas
+- Scale Argilla to 2+ replicas
 - Add PodDisruptionBudgets for critical services
 - Consider multi-control-plane K3s setup (3 nodes minimum)
+- Implement Argilla PostgreSQL backups (Velero or custom)
 
 ---
 
@@ -517,7 +525,8 @@ graph TB
 ```
 
 **Current Pod QoS**:
-- Label Studio: Burstable (requests: 500m/1Gi, limits: 2000m/4Gi)
+- Argilla: Burstable (requests: 500m/1Gi, limits: 2000m/4Gi)
+- Argilla PostgreSQL: Burstable (requests: 250m/512Mi, limits: 1000m/2Gi)
 - CSV Worker: Burstable (requests: 500m/512Mi, limits: 1000m/2Gi)
 - Tailscale: Burstable (requests: 50m/100Mi, limits: 500m/500Mi)
 
@@ -657,26 +666,26 @@ kubectl describe node tethys
 
 ```bash
 # Scale deployment
-kubectl scale deployment label-studio-ls-app -n apps --replicas=2
+kubectl scale deployment argilla -n apps --replicas=2
 
 # Restart deployment (rolling restart)
-kubectl rollout restart deployment/label-studio-ls-app -n apps
+kubectl rollout restart deployment/argilla -n apps
 
 # Check rollout status
-kubectl rollout status deployment/label-studio-ls-app -n apps
+kubectl rollout status deployment/argilla -n apps
 ```
 
 ### Debugging Pods
 
 ```bash
 # Get pod logs
-kubectl logs -n apps label-studio-ls-app-xxx
+kubectl logs -n apps argilla-xxx
 
 # Exec into pod
-kubectl exec -it -n apps label-studio-ls-app-xxx -- /bin/bash
+kubectl exec -it -n apps argilla-xxx -- /bin/bash
 
 # Describe pod (shows events)
-kubectl describe pod -n apps label-studio-ls-app-xxx
+kubectl describe pod -n apps argilla-xxx
 ```
 
 ---
@@ -691,5 +700,5 @@ kubectl describe pod -n apps label-studio-ls-app-xxx
 ---
 
 **Document Status**: ✅ Production Deployed
-**Last Verified**: 2025-10-13
+**Last Verified**: 2025-11-11
 **Next Review**: After styx node recovery

@@ -1,8 +1,9 @@
 # Oceanid Network Architecture
 
-**Last Updated**: 2025-10-15
+**Last Updated**: 2025-11-11
 **Status**: Production Deployed (3 nodes: tethys + calypso active, styx down)
 **K3s Version**: v1.33.4+k3s1
+**Annotation Tool**: Argilla (migrated from Label Studio November 2025)
 
 ---
 
@@ -27,7 +28,8 @@ The Oceanid infrastructure uses a **multi-layered network architecture** combini
 - **K3s Kubernetes** (v1.33.4) with Flannel CNI
 - **Tailscale mesh network** for unified egress and secure inter-node communication
 - **Cloudflare WARP** for secure cluster access from developer workstations
-- **Cloudflare Tunnel** for public ingress to services
+- **Cloudflare Workers** (vessel-ner stack) for OCR processing and entity extraction
+- **MotherDuck** (SQL warehouse) for OCR results and annotations
 - **CrunchyBridge PostgreSQL** with IP allowlist firewall
 
 ### Network Layers
@@ -35,9 +37,9 @@ The Oceanid infrastructure uses a **multi-layered network architecture** combini
 ```mermaid
 graph TB
     subgraph "Layer 4: Application"
-        LS[Label Studio]
-        PB[Project Bootstrapper]
+        ARG[Argilla]
         CS[CSV Worker]
+        AS[annotations-sink]
     end
 
     subgraph "Layer 3: Service Mesh"
@@ -51,18 +53,25 @@ graph TB
     end
 
     subgraph "Layer 1: Physical + Overlay"
-        PHYS[Physical NICs<br/>157.173.210.123<br/>192.168.2.80<br/>191.101.1.3]
+        PHYS[Physical NICs<br/>157.173.210.123<br/>192.168.2.110<br/>191.101.1.3]
         TS[Tailscale Mesh<br/>100.x.x.x]
     end
 
-    LS --> SVC
-    PB --> SVC
+    subgraph "External Services"
+        CF[Cloudflare Workers<br/>vessel-ner stack]
+        MD[MotherDuck<br/>SQL warehouse]
+    end
+
+    ARG --> SVC
     CS --> SVC
+    AS --> SVC
     SVC --> DNS
     SVC --> POD
     POD --> CLUS
     POD --> TS
     TS --> PHYS
+    ARG -.Auto-discovery.-> MD
+    CF -.OCR Results.-> MD
 ```
 
 ---
@@ -181,7 +190,8 @@ graph LR
 **Key Services**:
 - `kubernetes.default.svc.cluster.local` → 10.43.0.1:443 (API Server)
 - `kube-dns.kube-system.svc.cluster.local` → 10.43.0.10:53 (CoreDNS)
-- `label-studio-ls-app.apps.svc.cluster.local` → 10.43.71.170:8080
+- `argilla.apps.svc.cluster.local` → Argilla annotation UI (ClusterIP)
+- `md-query-proxy.apps.svc.cluster.local` → MotherDuck SQL proxy (ClusterIP)
 
 ---
 
@@ -290,140 +300,123 @@ Managed in `policy.hujson` and synced via GitHub Actions:
 
 ---
 
-## Triton Inference Server Integration
+## DeepSeek-OCR vLLM Integration
 
 ### Architecture: Host-Level GPU Service
 
-Triton Inference Server runs as a **systemd service** on calypso's host OS, providing GPU-accelerated model inference.
+DeepSeek-OCR via vLLM runs as a **systemd service** on DGX Spark (192.168.2.119), providing GPU-accelerated OCR processing.
 
 ```mermaid
 graph TB
-    subgraph "Calypso Node (192.168.2.110 / 100.83.53.38)"
+    subgraph "DGX Spark (192.168.2.119 LAN)"
         subgraph "Host Services"
-            TRITON[Triton Inference Server<br/>systemd service<br/>NVIDIA GPU Access]
-            TRITON_HTTP[Port 8000: HTTP API]
-            TRITON_GRPC[Port 8001: gRPC API]
-            TRITON_METRICS[Port 8002: Metrics]
+            VLLM[vLLM DeepSeek-OCR<br/>systemd service<br/>NVIDIA GPU Access]
+            VLLM_HTTP[Port 8000: OpenAI-compatible API]
+            VLLM_METRICS[Port 8002: Metrics]
         end
-
-        subgraph "K3s Pod Network (10.42.2.0/24)"
-            POD1[App Pod with nodeSelector<br/>kubernetes.io/hostname=calypso]
-            POD2[ML Workload Pod]
-        end
-
-        TRITON --> TRITON_HTTP
-        TRITON --> TRITON_GRPC
-        TRITON --> TRITON_METRICS
-        POD1 -->|localhost:8000<br/>hostNetwork=true| TRITON_HTTP
-        POD2 -->|Node IP:8000<br/>via Service| TRITON_HTTP
     end
 
-    subgraph "Other Cluster Nodes"
-        REMOTE_POD[Pod on tethys/styx]
+    subgraph "Cloudflare Workers"
+        UPLOAD[upload.goldfish.io<br/>PDF Upload Portal]
+        OCR[vessel-ner-ocr-processor<br/>OCR Worker]
+        ENTITY[vessel-ner-entity-extractor<br/>NER Worker]
     end
 
-    REMOTE_POD -->|100.83.53.38:8000<br/>via Tailscale| TRITON_HTTP
+    subgraph "External Storage"
+        R2[Cloudflare R2<br/>vessel-parquet bucket]
+        MD[MotherDuck<br/>raw_ocr + entities]
+    end
+
+    subgraph "K3s Cluster"
+        ARGILLA[Argilla<br/>Auto-discovery from MotherDuck]
+    end
+
+    UPLOAD -->|PDF Upload| R2
+    R2 -.Trigger.-> OCR
+    OCR -->|HTTP POST| VLLM_HTTP
+    VLLM_HTTP -->|OCR Results| OCR
+    OCR -->|Parquet| R2
+    R2 -.Trigger.-> ENTITY
+    ENTITY -->|Read Parquet| R2
+    ENTITY -->|INSERT| MD
+    MD -->|Auto-discovery| ARGILLA
 ```
 
 ### Service Details
 
-**Triton Server Configuration**:
-- **Host**: calypso (192.168.2.110 LAN, 100.83.53.38 Tailscale)
+**vLLM DeepSeek-OCR Configuration**:
+- **Host**: DGX Spark (192.168.2.119 LAN)
 - **Ports**:
-  - `8000/tcp` - HTTP inference API
-  - `8001/tcp` - gRPC inference API
+  - `8000/tcp` - OpenAI-compatible API (HTTP)
   - `8002/tcp` - Prometheus metrics endpoint
-- **Models**:
-  - `distilbert` - Text classification/embeddings
-  - `granite-docling` - Document layout extraction
-- **GPU**: NVIDIA RTX 4090
-- **Management**: systemd service (`triton-inference-server.service`)
+- **Model**: `deepseek-ai/DeepSeek-OCR` (vision-language model)
+- **GPU**: NVIDIA H100 (80GB VRAM)
+- **Management**: systemd service (`deepseek-ocr-vllm.service`)
+- **Access**: Cloudflare Workers via private LAN
 
 ### Access Patterns
 
-**Pattern 1: Local Pod Access (Recommended for GPU workloads)**
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: ml-worker
-spec:
-  nodeSelector:
-    kubernetes.io/hostname: calypso  # Schedule on calypso
-  hostNetwork: true  # Access Triton via localhost
-  containers:
-  - name: worker
-    image: ml-worker:latest
-    env:
-    - name: TRITON_URL
-      value: "http://localhost:8000"
+**Pattern 1: Cloudflare Workers → vLLM (Primary)**
+```typescript
+// vessel-ner-ocr-processor Worker
+const response = await fetch('http://192.168.2.119:8000/v1/chat/completions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    model: 'deepseek-ai/DeepSeek-OCR',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: '<|grounding|>Convert the document to markdown.' },
+        { type: 'image_url', image_url: { url: pdfUrl } }
+      ]
+    }],
+    max_tokens: 4096,
+    temperature: 0
+  })
+});
 ```
 
-**Pattern 2: Remote Pod Access (via Tailscale)**
+**Pattern 2: Direct Access (Development/Testing)**
+```bash
+# From workstation with access to 192.168.2.119
+curl -X POST http://192.168.2.119:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-ai/DeepSeek-OCR",
+    "messages": [{"role": "user", "content": "..."}],
+    "max_tokens": 4096
+  }'
+```
+
+**Pattern 3: K8s Pod Access (Future)**
 ```yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: inference-client
+  name: ocr-client
 spec:
   containers:
   - name: client
-    image: inference-client:latest
+    image: ocr-client:latest
     env:
-    - name: TRITON_URL
-      value: "http://100.83.53.38:8000"  # Calypso Tailscale IP
-```
-
-**Pattern 3: ClusterIP Service (optional, for DNS-based routing)**
-```yaml
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: triton-inference
-  namespace: apps
-spec:
-  type: ClusterIP
-  ports:
-  - name: http
-    port: 8000
-    targetPort: 8000
-  - name: grpc
-    port: 8001
-    targetPort: 8001
-  - name: metrics
-    port: 8002
-    targetPort: 8002
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: triton-inference
-  namespace: apps
-subsets:
-- addresses:
-  - ip: 100.83.53.38  # Calypso Tailscale IP
-  ports:
-  - name: http
-    port: 8000
-  - name: grpc
-    port: 8001
-  - name: metrics
-    port: 8002
+    - name: VLLM_URL
+      value: "http://192.168.2.119:8000"  # DGX Spark LAN IP
 ```
 
 ### Why Host-Level Deployment?
 
 **Advantages**:
-- ✅ Direct GPU access (no container runtime overhead)
-- ✅ Simpler CUDA/driver management (no container complexity)
-- ✅ Persistent model cache across pod restarts
-- ✅ Independent of K8s lifecycle (survives cluster issues)
+- ✅ Direct H100 GPU access (no container runtime overhead)
+- ✅ Simplified CUDA/driver management
+- ✅ Persistent model cache (17GB DeepSeek-OCR model)
+- ✅ Independent of K8s lifecycle
+- ✅ Cloudflare Workers can access via private LAN (no cluster dependency)
 
 **Trade-offs**:
 - ⚠️ Manual systemd management (not GitOps-managed)
-- ⚠️ Requires node-specific pod scheduling (`nodeSelector`)
-- ⚠️ Port conflicts if multiple Triton instances needed
+- ⚠️ Single-node deployment (no HA)
+- ⚠️ Requires network reachability from Workers (private LAN)
 
 ---
 
@@ -435,24 +428,29 @@ subsets:
 graph TB
     subgraph "External Clients"
         DEV[Developer Laptop<br/>via WARP]
-        PUBLIC[Public Users<br/>via Internet]
+        PUBLIC[Public Users<br/>PDF Upload]
     end
 
     subgraph "Ingress Layer"
         WARP[Cloudflare WARP<br/>Zero Trust Tunnel<br/>10.42.x.x, 10.43.x.x]
-        CFTUN[Cloudflare Tunnel<br/>cloudflared]
+        CFWORKER[Cloudflare Workers<br/>upload.goldfish.io]
     end
 
     subgraph "Kubernetes Cluster"
         K8SAPI[Kubernetes API<br/>10.43.0.1:443]
-        LSSVC[Label Studio Service<br/>10.43.71.170:8080]
+        ARGSVC[Argilla Service<br/>ClusterIP]
+    end
+
+    subgraph "External Storage"
+        MD[MotherDuck<br/>annotated data]
     end
 
     DEV -->|Private Routes| WARP
-    PUBLIC -->|HTTPS| CFTUN
+    PUBLIC -->|HTTPS| CFWORKER
     WARP --> K8SAPI
-    WARP --> LSSVC
-    CFTUN --> LSSVC
+    WARP --> ARGSVC
+    CFWORKER -.OCR Pipeline.-> MD
+    ARGSVC -.Auto-discovery.-> MD
 ```
 
 #### 1. Cloudflare WARP (Developer Access)
@@ -481,8 +479,8 @@ warp-cli connect
 export KUBECONFIG=~/.kube/k3s-warp.yaml
 kubectl get nodes  # Routes to 10.43.0.1 via WARP
 
-# Access Label Studio (no public tunnel needed)
-curl http://label-studio-ls-app.apps.svc.cluster.local:8080/health
+# Access Argilla (no public tunnel needed)
+curl http://argilla.apps.svc.cluster.local/api/health
 ```
 
 **Advantages**:
@@ -491,42 +489,53 @@ curl http://label-studio-ls-app.apps.svc.cluster.local:8080/health
 - ✅ Automatic reconnection
 - ✅ Works from any network (cafe, home, office)
 
-#### 2. Cloudflare Tunnel (Public Ingress)
+#### 2. Cloudflare Workers (OCR Pipeline)
 
-**Purpose**: Expose Label Studio web UI to public internet.
+**Purpose**: Process PDF uploads → OCR → Entity Extraction → MotherDuck storage.
 
 **How it works**:
-- `cloudflared` daemon runs as Deployment in cluster
-- Establishes outbound-only connection to Cloudflare edge
-- No inbound firewall ports opened on cluster nodes
-- Cloudflare edge terminates TLS, proxies to cluster
+- User uploads PDF to `upload.goldfish.io` (Cloudflare Worker)
+- Worker stores PDF in R2 bucket (`vessel-parquet`)
+- R2 event triggers `vessel-ner-ocr-processor` Worker
+- OCR Worker calls DeepSeek-OCR vLLM (192.168.2.119:8000) via private LAN
+- Results stored as Parquet in R2
+- R2 event triggers `vessel-ner-entity-extractor` Worker
+- Entity Worker reads Parquet, extracts entities, writes to MotherDuck
 
 **Architecture**:
 ```mermaid
 sequenceDiagram
     participant User as Public User
-    participant CFEdge as Cloudflare Edge<br/>label.boathou.se
-    participant CFDaemon as cloudflared<br/>(in cluster)
-    participant LSSVC as Label Studio Service<br/>10.43.71.170:8080
+    participant Upload as upload.goldfish.io<br/>Cloudflare Worker
+    participant R2 as Cloudflare R2<br/>vessel-parquet
+    participant OCR as vessel-ner-ocr-processor<br/>Worker
+    participant VLLM as DeepSeek-OCR vLLM<br/>192.168.2.119:8000
+    participant Entity as vessel-ner-entity-extractor<br/>Worker
+    participant MD as MotherDuck
 
-    User->>CFEdge: HTTPS request
-    CFEdge->>CFDaemon: Proxied request<br/>(via QUIC tunnel)
-    CFDaemon->>LSSVC: HTTP to ClusterIP
-    LSSVC->>CFDaemon: Response
-    CFDaemon->>CFEdge: Proxied response
-    CFEdge->>User: HTTPS response
+    User->>Upload: POST /upload (PDF)
+    Upload->>R2: Store PDF
+    R2->>OCR: R2 event trigger
+    OCR->>VLLM: HTTP POST (PDF → OCR)
+    VLLM->>OCR: OCR Results (markdown)
+    OCR->>R2: Store Parquet
+    R2->>Entity: R2 event trigger
+    Entity->>R2: Read Parquet
+    Entity->>Entity: Extract entities
+    Entity->>MD: INSERT INTO raw_ocr
 ```
 
 **Configuration**:
-- Public hostname: `label.boathou.se`
-- Tunnel token: Stored in Pulumi ESC secret `cloudflareTunnelToken`
-- Backend: `http://label-studio-ls-app.apps.svc.cluster.local:8080`
+- Upload portal: `upload.goldfish.io`
+- R2 bucket: `vessel-parquet`
+- vLLM endpoint: `http://192.168.2.119:8000` (private LAN)
+- MotherDuck: `md.raw_ocr` table
 
 **Advantages**:
-- ✅ Zero inbound firewall rules
-- ✅ DDoS protection via Cloudflare
-- ✅ Automatic TLS certificates
-- ✅ WAF and bot protection available
+- ✅ Serverless autoscaling
+- ✅ Global edge deployment
+- ✅ Event-driven architecture
+- ✅ Direct GPU access via private LAN
 
 ### Egress: Unified Exit Node
 
@@ -543,15 +552,15 @@ graph LR
 
     subgraph "External Services"
         CB[CrunchyBridge<br/>18.116.211.217:5432]
-        S3[AWS S3<br/>labelstudio-goldfish-uploads]
-        HF[Hugging Face<br/>hf.co]
+        MD[MotherDuck<br/>SQL Warehouse]
+        R2[Cloudflare R2<br/>vessel-parquet]
     end
 
     POD1 -->|Direct| TSEXIT
     POD2 -->|Via Tailscale| TSEXIT
     TSEXIT -->|Source: 157.173.210.123| CB
-    TSEXIT -->|Source: 157.173.210.123| S3
-    TSEXIT -->|Source: 157.173.210.123| HF
+    TSEXIT -->|Source: 157.173.210.123| MD
+    TSEXIT -->|Source: 157.173.210.123| R2
 ```
 
 **Status**: ✅ **Exit node routing ACTIVE AND VERIFIED** (as of 2025-10-13)
@@ -569,14 +578,14 @@ graph LR
 
 ```mermaid
 graph TB
-    POD[Pod: project-bootstrapper<br/>10.42.0.234]
+    POD[Pod: csv-ingestion-worker<br/>10.42.0.234]
     COREDNS[CoreDNS<br/>10.43.0.10:53]
-    SVCIP[Service: label-studio-ls-app<br/>10.43.71.170:8080]
-    ENDPOINT[Endpoint: Pod 10.42.0.226<br/>label-studio container]
+    SVCIP[Service: argilla<br/>ClusterIP]
+    ENDPOINT[Endpoint: Pod 10.42.0.226<br/>argilla container]
 
-    POD -->|1. DNS Query<br/>label-studio-ls-app.apps.svc.cluster.local| COREDNS
-    COREDNS -->|2. A Record<br/>10.43.71.170| POD
-    POD -->|3. HTTP Request<br/>10.43.71.170:8080| SVCIP
+    POD -->|1. DNS Query<br/>argilla.apps.svc.cluster.local| COREDNS
+    COREDNS -->|2. A Record<br/>ClusterIP| POD
+    POD -->|3. HTTP Request<br/>ClusterIP:80| SVCIP
     SVCIP -->|4. kube-proxy NAT<br/>DNAT to 10.42.0.226| ENDPOINT
 ```
 
@@ -588,7 +597,8 @@ graph TB
 ```
 
 Examples:
-- `label-studio-ls-app.apps.svc.cluster.local` → Label Studio service
+- `argilla.apps.svc.cluster.local` → Argilla service
+- `md-query-proxy.apps.svc.cluster.local` → MotherDuck proxy
 - `kubernetes.default.svc.cluster.local` → Kubernetes API
 - `kube-dns.kube-system.svc.cluster.local` → CoreDNS
 
@@ -598,18 +608,19 @@ Examples:
 ```
 
 Example from `apps` namespace:
-- `label-studio-ls-app` → Resolves to Label Studio in same namespace
+- `argilla` → Resolves to Argilla in same namespace
+- `md-query-proxy` → Resolves to MotherDuck proxy in same namespace
 
 ### Service Types
 
 | Type | Purpose | Example | IP Allocation |
 |------|---------|---------|---------------|
-| ClusterIP | Internal cluster services | label-studio-ls-app | 10.43.x.x |
+| ClusterIP | Internal cluster services | argilla, md-query-proxy | 10.43.x.x |
 | NodePort | Expose on node IP:port | (not used) | N/A |
 | LoadBalancer | Cloud LB integration | (not used) | N/A |
 | ExternalName | CNAME to external DNS | (not used) | N/A |
 
-**Note**: We use **ClusterIP** exclusively, with ingress via Cloudflare Tunnel or WARP.
+**Note**: We use **ClusterIP** exclusively, with ingress via Cloudflare WARP for developer access.
 
 ---
 
@@ -628,29 +639,28 @@ graph TB
         CFTUN[Cloudflare Tunnel<br/>cloudflared]
     end
 
-    subgraph "Cluster Zone - Untrusted"
-        PUBLICPODS[Public-Facing Pods<br/>Label Studio UI]
-    end
-
-    subgraph "Cluster Zone - Trusted"
-        INTERNALPODS[Internal Services<br/>Project Bootstrapper<br/>CSV Worker]
+    subgraph "Cluster Zone - Internal"
+        ARGILLA[Argilla<br/>Annotation UI]
+        INTERNALPODS[Internal Services<br/>CSV Worker<br/>annotations-sink]
         COREDNS[CoreDNS]
         K8SAPI[Kubernetes API]
     end
 
     subgraph "Data Zone"
         CB[CrunchyBridge PostgreSQL<br/>Encrypted TLS]
-        S3[AWS S3<br/>Encrypted TLS]
+        MD[MotherDuck<br/>Encrypted TLS]
+        R2[Cloudflare R2<br/>Encrypted TLS]
     end
 
     INTERNET --> CFEDGE
     CFEDGE --> CFTUN
-    CFTUN --> PUBLICPODS
-    PUBLICPODS --> INTERNALPODS
+    CFTUN --> ARGILLA
+    ARGILLA --> INTERNALPODS
     INTERNALPODS --> COREDNS
     INTERNALPODS --> K8SAPI
     INTERNALPODS --> CB
-    INTERNALPODS --> S3
+    ARGILLA --> MD
+    CFTUN --> R2
 ```
 
 ### CrunchyBridge Firewall
@@ -710,10 +720,10 @@ sequenceDiagram
     participant CoreDNS as CoreDNS (10.43.0.10)
     participant External as External DNS<br/>(8.8.8.8)
 
-    Pod->>Resolver: lookup label-studio-ls-app.apps.svc.cluster.local
+    Pod->>Resolver: lookup argilla.apps.svc.cluster.local
     Resolver->>CoreDNS: DNS query
     CoreDNS->>CoreDNS: Check cluster.local zone
-    CoreDNS->>Pod: A record: 10.43.71.170
+    CoreDNS->>Pod: A record: ClusterIP
 
     Pod->>Resolver: lookup github.com
     Resolver->>CoreDNS: DNS query
@@ -761,10 +771,10 @@ search apps.svc.cluster.local svc.cluster.local cluster.local
 ```
 
 **Resolution order**:
-1. `label-studio-ls-app` → tries `label-studio-ls-app.apps.svc.cluster.local` ✅
-2. `label-studio-ls-app` → tries `label-studio-ls-app.svc.cluster.local`
-3. `label-studio-ls-app` → tries `label-studio-ls-app.cluster.local`
-4. `label-studio-ls-app` → tries external DNS
+1. `argilla` → tries `argilla.apps.svc.cluster.local` ✅
+2. `argilla` → tries `argilla.svc.cluster.local`
+3. `argilla` → tries `argilla.cluster.local`
+4. `argilla` → tries external DNS
 
 ---
 
@@ -776,7 +786,7 @@ search apps.svc.cluster.local svc.cluster.local cluster.local
 
 **Symptoms**:
 ```
-dial tcp 10.43.71.170:80: connect: network is unreachable
+dial tcp 10.43.x.x:80: connect: network is unreachable
 ```
 
 **Possible Causes**:
@@ -812,7 +822,7 @@ systemctl restart k3s-agent  # Worker nodes
 
 **Symptoms**:
 ```
-dial tcp: lookup label-studio-ls-app on 10.43.0.10:53: no such host
+dial tcp: lookup argilla on 10.43.0.10:53: no such host
 ```
 
 **Diagnostics**:
@@ -842,14 +852,14 @@ kubectl rollout restart deployment/coredns -n kube-system
 **Diagnostics**:
 ```bash
 # Check service
-kubectl get svc label-studio-ls-app -n apps
+kubectl get svc argilla -n apps
 
 # Check endpoints (backing pods)
-kubectl get endpoints label-studio-ls-app -n apps
+kubectl get endpoints argilla -n apps
 
 # Verify pod selector matches
-kubectl get svc label-studio-ls-app -n apps -o yaml | grep selector
-kubectl get pods -n apps -l app.kubernetes.io/name=ls-app
+kubectl get svc argilla -n apps -o yaml | grep selector
+kubectl get pods -n apps -l app.kubernetes.io/name=argilla
 ```
 
 **Fix**:
@@ -898,15 +908,19 @@ kubectl run netshoot --rm -i --image=nicolaka/netshoot -- /bin/bash
 ```bash
 # Test service connectivity
 kubectl run netshoot --rm -i --image=nicolaka/netshoot -- \
-  curl -v http://label-studio-ls-app.apps.svc.cluster.local:8080/health
+  curl -v http://argilla.apps.svc.cluster.local/api/health
 
 # Test DNS resolution
 kubectl run netshoot --rm -i --image=nicolaka/netshoot -- \
-  nslookup label-studio-ls-app.apps.svc.cluster.local
+  nslookup argilla.apps.svc.cluster.local
 
 # Test database connectivity
 kubectl run netshoot --rm -i --image=nicolaka/netshoot -- \
   nc -zv p.3x4xvkn3xza2zjwiklcuonpamy.db.postgresbridge.com 5432
+
+# Test MotherDuck connectivity
+kubectl run netshoot --rm -i --image=nicolaka/netshoot -- \
+  curl -v http://md-query-proxy.apps.svc.cluster.local:8080/health
 ```
 
 ---
@@ -929,44 +943,45 @@ sequenceDiagram
     WARP->>Dev: Display pods
 ```
 
-### Example 2: Label Studio Database Query
+### Example 2: Argilla MotherDuck Query
 
 ```mermaid
 sequenceDiagram
-    participant LS as Label Studio Pod<br/>10.42.0.226<br/>(on tethys)
+    participant ARG as Argilla Pod<br/>10.42.0.226<br/>(on tethys)
+    participant PROXY as md-query-proxy<br/>ClusterIP
     participant TSEXIT as Tailscale Exit Node<br/>100.121.150.65
-    participant CB as CrunchyBridge<br/>18.116.211.217:5432
+    participant MD as MotherDuck
 
-    Note over LS,CB: NOT YET ACTIVE (exit node routing pending)
-
-    LS->>LS: Resolve p.xxx.db.postgresbridge.com<br/>via CoreDNS
-    LS->>TSEXIT: Route via tailscale0<br/>(when exit node enabled)
-    TSEXIT->>CB: TLS connection<br/>Source: 157.173.210.123
-    CB->>CB: Check firewall allowlist<br/>157.173.210.123/32 ✅
-    CB->>TSEXIT: PostgreSQL response
-    TSEXIT->>LS: Deliver to pod
+    ARG->>PROXY: SELECT * FROM annotated
+    PROXY->>PROXY: Parse SQL query
+    PROXY->>TSEXIT: Route via tailscale0
+    TSEXIT->>MD: TLS connection<br/>Source: 157.173.210.123
+    MD->>TSEXIT: Query results
+    TSEXIT->>PROXY: Deliver response
+    PROXY->>ARG: JSON response
 ```
 
-### Example 3: Public User Accessing Label Studio
+### Example 3: PDF Upload → OCR → Argilla
 
 ```mermaid
 sequenceDiagram
     participant User as Public User<br/>Browser
-    participant CFEdge as Cloudflare Edge<br/>label.boathou.se
-    participant CFTun as cloudflared Pod<br/>10.42.x.x
-    participant LSSVC as Label Studio Service<br/>10.43.71.170:8080
-    participant LSPod as Label Studio Pod<br/>10.42.0.226
+    participant Upload as upload.goldfish.io<br/>Cloudflare Worker
+    participant R2 as Cloudflare R2<br/>vessel-parquet
+    participant OCR as vessel-ner-ocr-processor<br/>Worker
+    participant VLLM as DeepSeek-OCR vLLM<br/>192.168.2.119
+    participant MD as MotherDuck
+    participant ARG as Argilla Pod<br/>10.42.0.226
 
-    User->>CFEdge: HTTPS GET /projects
-    CFEdge->>CFEdge: Terminate TLS
-    CFEdge->>CFTun: QUIC tunnel
-    CFTun->>LSSVC: HTTP to ClusterIP
-    LSSVC->>LSPod: kube-proxy NAT
-    LSPod->>LSPod: Django handler
-    LSPod->>LSSVC: HTTP 200 response
-    LSSVC->>CFTun: Response
-    CFTun->>CFEdge: QUIC tunnel
-    CFEdge->>User: HTTPS response
+    User->>Upload: POST /upload (PDF)
+    Upload->>R2: Store PDF
+    R2->>OCR: R2 event trigger
+    OCR->>VLLM: HTTP POST (PDF → OCR)
+    VLLM->>OCR: OCR Results
+    OCR->>R2: Store Parquet
+    R2->>MD: Load via entity-extractor
+    ARG->>MD: Auto-discovery query
+    MD->>ARG: Annotation records
 ```
 
 ---
@@ -980,6 +995,6 @@ sequenceDiagram
 
 ---
 
-**Document Status**: ✅ Production Deployed (with pending exit node activation)
-**Last Verified**: 2025-10-13
-**Next Review**: After exit node activation
+**Document Status**: ✅ Production Deployed (Argilla + vessel-ner Workers)
+**Last Verified**: 2025-11-11
+**Next Review**: After DGX Spark vLLM production deployment

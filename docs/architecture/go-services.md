@@ -2,64 +2,17 @@
 
 ## Overview
 
-All Oceanid application services have been migrated from Python to Go for extreme resource efficiency on limited hardware. This migration achieved a **98.5% reduction in memory usage** while maintaining full functionality.
+Oceanid application services have been migrated from Python to Go for extreme resource efficiency on limited hardware. This migration achieved a **98.5% reduction in memory usage** while maintaining full functionality.
+
+**Note**: As of November 2025, Oceanid has migrated from Label Studio to Argilla for annotations. Some legacy services (annotations-sink) remain deployed for historical data processing.
 
 ## Service Architecture
 
-### 1. Project Bootstrapper (`project-bootstrapper`)
+### 1. Annotations Sink (`annotations-sink`)
 
-**Purpose**: Creates and configures Label Studio projects with ML backend connections.
+**Status**: ⚠️ **Legacy Service** - Still deployed for historical data processing, but NOT in new Argilla pipeline.
 
-**Specifications**:
-- **Language**: Go (stdlib only)
-- **Image**: `ghcr.io/goldfish-inc/oceanid/project-bootstrapper:main`
-- **Base**: `scratch` (no OS)
-- **Size**: ~10MB
-- **Memory**: 1Mi (actual usage)
-- **CPU**: 1m (actual usage)
-- **Startup**: <100ms
-- **Port**: 8080
-
-**Endpoints**:
-- `GET /health` - Health check
-- `POST /create` - Create new Label Studio project
-
-**Environment Variables**:
-- `LS_URL` - Label Studio base URL
-- `LS_PAT` - Label Studio Personal Access Token
-- `NER_BACKEND_URL` - NER ML backend URL
-- `NER_LABELS_JSON` - JSON array of NER labels
-- `ALLOWED_ORIGINS` - CORS allowed origins
-
-### 2. Triton Adapter (`ls-triton-adapter`)
-
-**Purpose**: Bridges Label Studio to Triton Inference Server for NER predictions.
-
-**Specifications**:
-- **Language**: Go (stdlib only)
-- **Image**: `ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main`
-- **Base**: `scratch`
-- **Size**: ~10MB
-- **Memory**: ~5Mi
-- **CPU**: ~10m
-- **Startup**: <100ms
-- **Port**: 9090
-
-**Endpoints**:
-- `GET /health` - Health check
-- `POST /predict` - Direct prediction endpoint
-- `POST /predict_ls` - Label Studio formatted predictions
-
-**Environment Variables**:
-- `TRITON_BASE_URL` - Triton server URL
-- `DEFAULT_MODEL` - Default model name
-- `NER_LABELS` - JSON array of NER labels
-- `CF_ACCESS_CLIENT_ID` - Cloudflare Access client ID (optional)
-- `CF_ACCESS_CLIENT_SECRET` - Cloudflare Access secret (optional)
-
-### 3. Annotations Sink (`annotations-sink`)
-
-**Purpose**: Persists annotations to PostgreSQL and HuggingFace Hub.
+**Purpose**: Persists Label Studio annotations to PostgreSQL and HuggingFace Hub (legacy).
 
 **Specifications**:
 - **Language**: Go (lib/pq for PostgreSQL)
@@ -73,8 +26,8 @@ All Oceanid application services have been migrated from Python to Go for extrem
 
 **Endpoints**:
 - `GET /health` - Health check with DB connectivity status
-- `POST /webhook` - Label Studio webhook receiver
-- `POST /ingest` - Bulk task ingestion
+- `POST /webhook` - Label Studio webhook receiver (legacy)
+- `POST /ingest` - Bulk task ingestion (legacy)
 
 **Environment Variables**:
 - `DATABASE_URL` - PostgreSQL connection string
@@ -95,14 +48,14 @@ Audit Reference
 - A stable `source_tag` is stored in the outbox table to allow exact lookup of records by S3 object (e.g., `s3://bucket/key#version`).
 ```
 
-## Resource Comparison
+## Resource Comparison (Historical)
 
-| Service | Python | Go | Reduction |
-|---------|--------|-------|-----------|
-| **Bootstrapper** | 50MB RAM / 50m CPU | 1Mi RAM / 1m CPU | 98% / 98% |
-| **Adapter** | 500MB RAM / 100m CPU | 5Mi RAM / 10m CPU | 99% / 90% |
-| **Sink** | 200MB RAM / 50m CPU | 5Mi RAM / 10m CPU | 97.5% / 80% |
-| **Total** | 750MB RAM | 11Mi RAM | **98.5%** |
+| Service | Python | Go | Reduction | Status |
+|---------|--------|-------|-----------|--------|
+| **Project Bootstrapper** | 50MB RAM / 50m CPU | 1Mi RAM / 1m CPU | 98% / 98% | ❌ Removed (Label Studio deprecated) |
+| **Triton Adapter** | 500MB RAM / 100m CPU | 5Mi RAM / 10m CPU | 99% / 90% | ❌ Removed (replaced by vessel-ner Workers) |
+| **Annotations Sink** | 200MB RAM / 50m CPU | 5Mi RAM / 10m CPU | 97.5% / 80% | ⚠️ Legacy (still deployed) |
+| **Total** | 750MB RAM | 11Mi RAM | **98.5%** | |
 
 ## Image Architecture
 
@@ -129,12 +82,15 @@ Benefits:
 
 ## Deployment Configuration
 
-### Pulumi ESC Settings
+### Pulumi ESC Settings (Legacy)
 
-Enable external Go images:
+Historical configuration (no longer required for new architecture):
 ```bash
-esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:useExternalAdapter" "true"
-esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:adapterImage" "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main"
+# Deprecated - ls-triton-adapter removed November 2025
+# esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:useExternalAdapter" "true"
+# esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:adapterImage" "ghcr.io/goldfish-inc/oceanid/ls-triton-adapter:main"
+
+# Legacy - annotations-sink still deployed but not in new pipeline
 esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:useExternalSink" "true"
 esc env set default/oceanid-cluster "pulumiConfig.oceanid-cluster:sinkImage" "ghcr.io/goldfish-inc/oceanid/annotations-sink:main"
 ```
@@ -149,11 +105,12 @@ All services include:
 
 ## Build Pipeline
 
-GitHub Actions workflow (`build-images.yml`) builds all Go services in parallel:
-- Triggered on push to `apps/*/` directories
+GitHub Actions workflow (`build-images.yml`) builds active Go services:
+- Triggered on push to `apps/annotations-sink/` and other active directories
 - Multi-stage Docker builds
 - Pushes to GHCR with `:main` and `:sha` tags
 - Build cache optimization
+- **Note**: `ls-triton-adapter` removed from build pipeline (November 2025)
 
 ## Migration Benefits
 
@@ -166,23 +123,37 @@ GitHub Actions workflow (`build-images.yml`) builds all Go services in parallel:
 
 ## Monitoring
 
-Check service health:
+Check active service health:
 ```bash
 # In-cluster
 kubectl -n apps get pods
 kubectl -n apps top pods
 
-# Health endpoints
-curl http://project-bootstrapper.apps.svc.cluster.local:8080/health
-curl http://ls-triton-adapter.apps.svc.cluster.local:9090/health
+# Health endpoints (legacy services)
 curl http://annotations-sink.apps.svc.cluster.local:8080/health
+
+# New architecture (Argilla + vessel-ner Workers)
+curl http://argilla.apps.svc.cluster.local/api/health
 ```
+
+## New Architecture (November 2025)
+
+The Oceanid pipeline has migrated to:
+- **Annotation Tool**: Argilla (FastAPI + React, replaces Label Studio)
+- **OCR Processing**: Cloudflare Workers (vessel-ner stack) + DeepSeek-OCR vLLM
+- **Data Warehouse**: MotherDuck (SQL-based, replaces Label Studio internal DB)
+- **Entity Extraction**: Serverless Workers (replaces Triton Adapter)
+
+See:
+- `docs/architecture/ocr-argilla-motherduck.md` - New architecture
+- `docs/operations/pipeline-overview.md` - End-to-end flow
+- `workers/vessel-ner/ARCHITECTURE.md` - Cloudflare Workers design
 
 ## Future Considerations
 
-- **Metrics**: Add Prometheus metrics endpoints
-- **Tracing**: OpenTelemetry support for distributed tracing
-- **Circuit Breakers**: Resilience patterns for external dependencies
-- **Caching**: In-memory caching for frequently accessed data
+For remaining Go services:
+- **Deprecation**: Remove annotations-sink once historical data processing complete
+- **Metrics**: Add Prometheus metrics to remaining services
+- **Monitoring**: Update dashboards for new Argilla-based pipeline
 
-The Go migration demonstrates that modern cloud-native applications can run efficiently even on severely resource-constrained infrastructure through careful architectural choices and implementation.
+The Go migration demonstrated that modern cloud-native applications can run efficiently even on severely resource-constrained infrastructure through careful architectural choices and implementation. The new serverless architecture (Cloudflare Workers) continues this philosophy with global edge deployment and automatic scaling.
