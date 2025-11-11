@@ -1,4 +1,12 @@
-> Archived — November 2025
+> **Archived — November 2025**
+>
+> **This document describes the deprecated Label Studio workflow.**
+>
+> **For current pipeline documentation, see:**
+> - `docs/operations/pipeline-overview.md` - Current end-to-end flow
+> - `docs/architecture/ocr-argilla-motherduck.md` - New architecture
+> - `workers/vessel-ner/ARCHITECTURE.md` - Cloudflare Workers design
+> - `docs/operations/argilla-auto-discovery.md` - Argilla integration
 
 # (Archived) Quick Reference: "What Do I Choose in Label Studio?"
 
