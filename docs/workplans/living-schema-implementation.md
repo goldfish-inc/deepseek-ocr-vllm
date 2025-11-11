@@ -291,11 +291,11 @@
 **Files to create**:
 - `docs/operations/schema-consolidation.md`
 
-##### 5.4 SME Training
+##### 5.4 Documentation & Guides
 - [ ] Write user guide for adding new entity types
 - [ ] Document conflict resolution workflow
-- [ ] Record demo video: Argilla → SQLrooms flow
-- [ ] Hold training session with pilot SME group
+- [ ] Create Argilla → SQLrooms flow diagram
+- [ ] Record demo video if needed
 
 **Files to create**:
 - `docs/guides/SME/adding-entity-types.md`
@@ -361,18 +361,13 @@
 | MotherDuck performance degrades with JSONB queries | High | Medium | Benchmark early, add indexes, use materialized views |
 | LLM generates incorrect SQL | High | Medium | Validation layer, human review for saved reports |
 | Schema churn too high (>10 versions/day) | Medium | Low | Manual approval for new entity types, tighter similarity threshold |
-| SMEs confused by new workflow | Medium | Medium | Training sessions, documentation, pilot group first |
+| Workflow confusing for future users | Medium | Medium | Clear documentation, demo videos |
 | Data migration loses records | Critical | Low | Validation scripts, dry-run with sample data, rollback plan |
 | Conflict detection false positives | Low | High | Tune similarity threshold, provide override UI |
 
 ---
 
 ## Resources Required
-
-### Engineering
-- **Backend**: 1 engineer full-time (schema discovery, ingestion)
-- **Frontend**: 0.5 engineer (SQLrooms UI updates)
-- **DevOps**: 0.25 engineer (MotherDuck setup, monitoring)
 
 ### Infrastructure
 - **MotherDuck**: Standard plan ($0.50/GB scanned, estimate $50-200/month initially)
@@ -386,23 +381,18 @@
 
 ---
 
-## Communication Plan
+## Progress Tracking
 
-### Milestones to Announce
-1. **Phase 1 Complete**: "MotherDuck is live, historical data migrated"
-2. **Phase 2 Complete**: "Schema auto-discovery operational"
-3. **Phase 4 Complete**: "SQLrooms AI queries enabled for pilot group"
-4. **Launch**: "Living schema system fully deployed"
+### Phase Milestones
+1. **Phase 1 Complete**: MotherDuck is live, historical data migrated
+2. **Phase 2 Complete**: Schema auto-discovery operational
+3. **Phase 4 Complete**: SQLrooms AI queries enabled
+4. **Launch**: Living schema system fully deployed
 
-### Channels
-- **Slack #oceanid-engineering**: Weekly progress updates
-- **All-hands**: Demo at Phase 4 completion
-- **Documentation**: Update README, architecture diagrams
-
-### Stakeholders
-- **SME Team**: Training before Phase 4 launch
-- **Product**: Demo SQLrooms features early
-- **Compliance**: Validate point-in-time query reproducibility
+### Documentation Updates
+- Update README with new architecture
+- Add Mermaid diagrams for data flows
+- Document point-in-time query reproducibility for compliance
 
 ---
 
@@ -410,8 +400,8 @@
 
 ### Week 1-2 After Launch
 - Monitor schema churn metrics daily
-- Collect SME feedback on entity conflict workflow
 - Optimize slow queries identified in logs
+- Document any workflow issues discovered
 
 ### Week 3-4
 - Consolidate rare/stale entity types (first manual review)
@@ -426,7 +416,7 @@
 ### Month 4+
 - Explore real-time schema updates (sub-minute latency)
 - Investigate embedding-based entity similarity (beyond Levenshtein)
-- Consider multi-tenant schema isolation for different projects
+- Consider multi-tenant schema isolation if needed
 
 ---
 
@@ -451,11 +441,10 @@
 
 ## Next Steps (Action Items)
 
-### Immediate (This Week)
-1. [ ] Review this plan with team, get feedback
+### Immediate
+1. [ ] Review this plan, adjust as needed
 2. [ ] Set up MotherDuck account and connection credentials
-3. [ ] Create GitHub project board with Phase 1 tasks
-4. [ ] Schedule kickoff meeting
+3. [ ] GitHub project board already created (see execution plan)
 
 ### Week 1
 1. [ ] Start Phase 1.1: Create core tables

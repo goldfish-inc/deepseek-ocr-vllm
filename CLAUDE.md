@@ -1,5 +1,7 @@
 # Oceanid Infrastructure – Agent Instructions
 
+**Context**: Solo developer (rt) + AI assistant building production fisheries data infrastructure. No corporate planning, no meetings, just ship working code.
+
 ## CRITICAL RULES
 
 ### Never Hardcode Credentials
@@ -17,8 +19,8 @@
 **REQUIRED**: Run checks → fix root cause → verify → ask if stuck
 
 ### Never Break Working Infrastructure
-**VERIFY FIRST**: System working? Config actually broken? User approval?
-**IF NO**: Stop and ask user.
+**VERIFY FIRST**: System working? Config actually broken? Need user approval?
+**IF NO**: Stop and ask.
 
 **Incident 2025-10-13**: AI "completed" working Tailscale config → cluster at 33% capacity.
 **LESSON**: Working infrastructure that "looks incomplete" is NOT broken.
@@ -147,6 +149,21 @@ kubectl annotate gitrepository flux-system -n flux-system reconcile.fluxcd.io/re
 - **Flux CD**: v2.6.4, GitOps from `clusters/tethys/`
 - **GitHub Issues**: Create before implementing, reference in commits, close after verification
 - **Emoji prefixes**: 🗄️ DB, 🧠 ML, ⚙️ Workers, 📊 Dashboards, 🔧 Infra, 🐛 Bugs, 📝 Docs
+
+## Workflow (Solo Developer + AI)
+
+**No meetings. No standups. No corporate planning.**
+
+**Work style**:
+1. Create GitHub issue for feature/bug
+2. Build it (with AI assistance)
+3. Test it works (verify, don't assume)
+4. Ship it (via GitHub Actions)
+5. Monitor it (Grafana/Sentry)
+
+**Decision making**: User (rt) has final say. AI asks when uncertain, suggests when confident.
+
+**Documentation**: Only create when explicitly requested. Code should be self-documenting.
 
 ## Documentation
 - **Incidents**: `TAILSCALE_DAEMONSET_INCIDENT_2025-10-13.md`
