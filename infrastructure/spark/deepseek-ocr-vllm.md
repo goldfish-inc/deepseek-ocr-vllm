@@ -79,7 +79,7 @@ CMD ["vllm", "serve", "deepseek-ai/DeepSeek-OCR", \
 EOF
 
   # Build container
-  docker buildx build --platform linux/amd64 -t deepseek-ocr-vllm:latest -f /home/sparky/Dockerfile.deepseek-ocr --load .
+  docker build -t deepseek-ocr-vllm:latest -f /home/sparky/Dockerfile.deepseek-ocr .
 ENDSSH
 ```
 
