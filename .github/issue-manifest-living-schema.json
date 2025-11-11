@@ -1,0 +1,149 @@
+{
+  "program": {
+    "title": "Program: Living Schema Implementation",
+    "labels": ["epic", "initiative:living-schema", "priority:p0"],
+    "body": "Top-level tracking issue for the Living Schema program. Phases roll up into this program and each phase contains detailed tasks.\n\nDocs:\n- docs/architecture/living-schema-strategy.md\n- docs/workplans/living-schema-implementation.md\n\nSuccess criteria:\n- Discovery latency < 1 hour\n- Zero manual schema migrations post-launch\n- Point-in-time reproducibility for saved reports"
+  },
+  "epics": [
+    {
+      "title": "Epic: Phase 1 – MotherDuck Foundation (Week 1-2)",
+      "labels": ["epic", "initiative:living-schema", "phase:1", "area:motherduck", "priority:p0"],
+      "body": "Goal: Core schema in MotherDuck, historical Argilla data migrated, and OCR ingestion online.\n\nDeliverables:\n- Core tables exist in MotherDuck\n- Historical Argilla annotations migrated\n- New OCR data flows to MotherDuck automatically\n- Validation report (row counts, sample queries)\n\nReference: docs/workplans/living-schema-implementation.md#phase-1-motherduck-foundation-week-1-2",
+      "issues": [
+        {
+          "title": "P1.1 Create core tables and bootstrap scripts",
+          "labels": ["type:feat", "area:motherduck", "initiative:living-schema"],
+          "body": "- [ ] Set up MotherDuck DB connection (Pulumi ESC motherduckToken); test connectivity\n- [ ] Create raw_documents, annotations, structured_data tables\n- [ ] Add indexes for document_id, annotated_at, batch_id\n- [ ] Write smoke tests for table creation\n\nFiles:\n- sql/motherduck/schema_v1.sql\n- scripts/motherduck_setup.sh"
+        },
+        {
+          "title": "P1.2 Create schema catalog tables (entity_types, field_definitions, snapshots)",
+          "labels": ["type:feat", "area:motherduck", "initiative:living-schema"],
+          "body": "- [ ] Create entity_types, field_definitions, schema_snapshots, entity_conflicts, query_executions, saved_queries\n- [ ] Initialize version 1 snapshot (empty)\n\nFiles:\n- sql/motherduck/schema_catalog.sql"
+        },
+        {
+          "title": "P1.3 Migrate existing Argilla annotations → MotherDuck",
+          "labels": ["type:ops", "area:argilla", "area:motherduck", "initiative:living-schema"],
+          "body": "- [ ] Export current Argilla annotations to Parquet\n- [ ] Transform with schema_version = 1\n- [ ] Load into MotherDuck annotations\n- [ ] Verify row counts and spot-check entities\n\nFiles:\n- scripts/migrate_argilla_to_motherduck.py\n- scripts/validate_migration.sql"
+        },
+        {
+          "title": "P1.4 R2 → MotherDuck ingestion for OCR (Parquet)",
+          "labels": ["type:feat", "area:workers", "area:motherduck", "initiative:living-schema"],
+          "body": "- [ ] Update OCR processor to write Parquet with schema_version\n- [ ] Create ingestion job to insert into raw_documents; add batch_id tracking\n- [ ] E2E test: PDF → OCR → R2 → MotherDuck\n\nFiles:\n- workers/vessel-ner/src/workers/ocr-processor.ts\n- workers/vessel-ner/src/lib/motherduck.ts\n- workers/vessel-ner/src/workers/parquet-ingestion.ts"
+        }
+      ]
+    },
+    {
+      "title": "Epic: Phase 2 – Auto-Discovery Pipeline (Week 3-4)",
+      "labels": ["epic", "initiative:living-schema", "phase:2", "area:discovery", "priority:p0"],
+      "body": "Goal: Detect schema changes automatically (hourly), update catalog, and notify.\n\nDeliverables:\n- Discovery pipeline runs hourly\n- New entity types auto-cataloged\n- Conflicts flagged to Slack\n- Schema versions increment correctly\n\nReference: docs/workplans/living-schema-implementation.md#phase-2-auto-discovery-pipeline-week-3-4",
+      "issues": [
+        {
+          "title": "P2.1 Build schema discovery service (Deno/TypeScript)",
+          "labels": ["type:feat", "area:discovery", "initiative:living-schema"],
+          "body": "- [ ] Implement entity type scanner (annotations)\n- [ ] Implement field definition scanner (structured_data)\n- [ ] Update last_seen and occurrence_count\n- [ ] LLM descriptions for new entities/fields\n- [ ] Unit tests for discovery logic\n\nFiles:\n- workers/vessel-ner/src/workers/schema-discovery.ts\n- workers/vessel-ner/src/lib/schema-catalog.ts"
+        },
+        {
+          "title": "P2.2 Entity conflict detection + Slack alerts",
+          "labels": ["type:feat", "area:discovery", "area:product", "initiative:living-schema"],
+          "body": "- [ ] Levenshtein similarity (threshold 0.85)\n- [ ] Auto-approve if no conflicts; insert into entity_conflicts when flagged\n- [ ] Slack webhook notifications\n\nFiles:\n- workers/vessel-ner/src/workers/schema-discovery.ts"
+        },
+        {
+          "title": "P2.3 Schema versioning and snapshots",
+          "labels": ["type:feat", "area:discovery", "initiative:living-schema"],
+          "body": "- [ ] trigger_schema_version_increment()\n- [ ] Snapshot entity_types + field_definitions with diff\n- [ ] Insert into schema_snapshots\n- [ ] Invalidate LLM cache (placeholder)\n\nFiles:\n- workers/vessel-ner/src/lib/schema-versioning.ts"
+        },
+        {
+          "title": "P2.4 Integrate discovery with Argilla sync",
+          "labels": ["type:ops", "area:argilla", "area:discovery", "initiative:living-schema"],
+          "body": "- [ ] Post-sync hook calls discovery\n- [ ] Log discovery outcomes (new entities, conflicts)\n- [ ] Update Grafana dashboard metrics\n\nFiles:\n- workers/vessel-ner/src/workers/argilla-sync.ts\n- workers/vessel-ner/wrangler.schema-discovery.toml"
+        }
+      ]
+    },
+    {
+      "title": "Epic: Phase 3 – CSV Workers → Parquet (Week 5)",
+      "labels": ["epic", "initiative:living-schema", "phase:3", "area:workers", "priority:p1"],
+      "body": "Goal: CSV/XLS workers write Parquet to MotherDuck with schema tracking; backfill historical CSV.\n\nDeliverables:\n- CSV workers produce Parquet\n- CSV data flows to MotherDuck automatically\n- Field definitions auto-discovered\n- Historical CSV data migrated\n\nReference: docs/workplans/living-schema-implementation.md#phase-3-csv-worker-updates-week-5",
+      "issues": [
+        {
+          "title": "P3.1 Update Go CSV workers to write Parquet",
+          "labels": ["type:feat", "area:workers", "initiative:living-schema"],
+          "body": "- [ ] Add Apache Arrow/Parquet lib\n- [ ] Write Parquet instead of DB insert; include schema_version metadata\n- [ ] Upload to R2 bucket (vessel-csv)\n- [ ] Test with OpenZL manifest CSV\n\nFiles:\n- apps/csv-ingestion-worker/processor.go\n- apps/csv-ingestion-worker/go.mod"
+        },
+        {
+          "title": "P3.2 Ingest CSV Parquet into MotherDuck",
+          "labels": ["type:feat", "area:motherduck", "initiative:living-schema"],
+          "body": "- [ ] Ingestion job loads Parquet → structured_data\n- [ ] Trigger schema discovery after batch\n- [ ] Verify column extraction\n\nFiles:\n- workers/vessel-ner/src/workers/csv-ingestion.ts"
+        },
+        {
+          "title": "P3.3 Backfill historical CSV data",
+          "labels": ["type:ops", "area:data", "initiative:living-schema"],
+          "body": "- [ ] Export existing CSV data from Postgres\n- [ ] Convert to Parquet\n- [ ] Load with batch_id tracking\n- [ ] Run field discovery to populate field_definitions\n\nFiles:\n- scripts/backfill_csv_data.py"
+        }
+      ]
+    },
+    {
+      "title": "Epic: Phase 4 – SQLrooms Query Layer (Week 6-8)",
+      "labels": ["epic", "initiative:living-schema", "phase:4", "area:sqlrooms", "priority:p1"],
+      "body": "Goal: AI-powered query interface with schema awareness; live, snapshot, and time-travel modes.\n\nDeliverables:\n- SQLrooms queries MotherDuck\n- LLM generates accurate SQL\n- Saved reports with schema pinning\n- Change detection alerts users\n\nReference: docs/workplans/living-schema-implementation.md#phase-4-sqlrooms-query-layer-week-6-8",
+      "issues": [
+        {
+          "title": "P4.1 Schema context API (current + at/:date)",
+          "labels": ["type:feat", "area:sqlrooms", "initiative:living-schema"],
+          "body": "- [ ] GET /api/schema/current (entity_types, field_definitions, examples)\n- [ ] GET /api/schema/at/:date (time-travel)\n- [ ] Cache responses; invalidate on schema version change\n\nFiles:\n- apps/sqlrooms/src/api/schema.ts"
+        },
+        {
+          "title": "P4.2 LLM SQL generation and validation",
+          "labels": ["type:feat", "area:sqlrooms", "initiative:living-schema"],
+          "body": "- [ ] Prompt template with schema context\n- [ ] generateSQL() function and few-shot examples\n- [ ] Syntax/guardrail validation\n\nFiles:\n- apps/sqlrooms/src/lib/llm-query-generator.ts\n- apps/sqlrooms/src/lib/query-validator.ts"
+        },
+        {
+          "title": "P4.3 Query executor (live/snapshot/time_travel) + logging",
+          "labels": ["type:feat", "area:sqlrooms", "initiative:living-schema"],
+          "body": "- [ ] executeQuery() with mode switch\n- [ ] Log executions to query_executions\n- [ ] Compute result hash for change detection\n\nFiles:\n- apps/sqlrooms/src/lib/query-executor.ts"
+        },
+        {
+          "title": "P4.4 Saved reports UI + change badges",
+          "labels": ["type:feat", "area:sqlrooms", "initiative:living-schema"],
+          "body": "- [ ] Save Report with schema pinning and optional snapshot\n- [ ] Show 'Report changed' badge; Refresh and View Diff actions\n- [ ] Time-travel selector\n\nFiles:\n- apps/sqlrooms/src/components/SavedReports.tsx\n- apps/sqlrooms/src/components/QueryDiff.tsx"
+        },
+        {
+          "title": "P4.5 Change detection + notifications",
+          "labels": ["type:feat", "area:sqlrooms", "area:observability", "initiative:living-schema"],
+          "body": "- [ ] detectReportChanges() implementation\n- [ ] Schedule daily checks for saved reports\n- [ ] Email/Slack notifications for changed reports\n\nFiles:\n- apps/sqlrooms/src/api/reports.ts"
+        }
+      ]
+    },
+    {
+      "title": "Epic: Phase 5 – Monitoring & Refinement (Week 9+)",
+      "labels": ["epic", "initiative:living-schema", "phase:5", "area:observability", "priority:p2"],
+      "body": "Goal: Observability, performance tuning, and SME training.\n\nDeliverables:\n- Grafana dashboard for schema health\n- Automated alerts for anomalies\n- SME training completed\n- Query performance optimized\n\nReference: docs/workplans/living-schema-implementation.md#phase-5-monitoring--refinement-week-9",
+      "issues": [
+        {
+          "title": "P5.1 Schema churn dashboard + alerts",
+          "labels": ["type:feat", "area:observability", "initiative:living-schema"],
+          "body": "- [ ] Create schema_churn view; panels for versions, new entities/week, conflict queue depth\n- [ ] Alerts for >10 versions/day\n\nFiles:\n- dashboards/living-schema-metrics.json"
+        },
+        {
+          "title": "P5.2 Query performance monitoring (slow_queries)",
+          "labels": ["type:feat", "area:observability", "initiative:living-schema"],
+          "body": "- [ ] Create slow_queries view; panels for p50/p95/p99 and by schema version\n- [ ] Alert for >5s avg"
+        },
+        {
+          "title": "P5.3 Entity type health report + consolidation workflow",
+          "labels": ["type:docs", "area:observability", "initiative:living-schema"],
+          "body": "- [ ] Create entity_health view; weekly report for stale/rare types\n- [ ] Document consolidation workflow\n\nFiles:\n- docs/operations/schema-consolidation.md"
+        },
+        {
+          "title": "P5.4 SME training and guides",
+          "labels": ["type:docs", "area:product", "initiative:living-schema"],
+          "body": "- [ ] User guide for adding new entity types\n- [ ] Conflict resolution workflow docs\n- [ ] Demo video and pilot training session\n\nFiles:\n- docs/guides/SME/adding-entity-types.md"
+        },
+        {
+          "title": "P5.5 Performance optimization follow-ups",
+          "labels": ["type:feat", "area:observability", "area:data", "initiative:living-schema"],
+          "body": "- [ ] Add indexes based on slow query analysis\n- [ ] Materialized views for common joins (if needed)\n- [ ] Query result caching (Redis/KV)\n- [ ] Partition large tables by month (if >10M rows)"
+        }
+      ]
+    }
+  ]
+}
