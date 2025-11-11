@@ -21,10 +21,10 @@ kubectl -n apps run egress-test --rm -i --restart=Never --image=curlimages/curl:
 
 echo "== In-cluster service direct (should bypass proxy, return 200) =="
 kubectl -n apps run svc-test --rm -i --restart=Never --image=curlimages/curl:8.10.1 \
-  -- curl -s -o /dev/null -w '%{http_code}\n' http://label-studio-ls-app.apps.svc.cluster.local:8080/health || true
+  -- curl -s -o /dev/null -w '%{http_code}\n' http://argilla.apps.svc.cluster.local/api/health || true
 
-echo "== Project Bootstrapper env check (proxy vars present) =="
-kubectl -n apps exec deploy/project-bootstrapper -- env | grep -E 'HTTP_PROXY|NO_PROXY' || true
+echo "== Annotations Sink env check (proxy vars present) =="
+kubectl -n apps exec deploy/annotations-sink -- env | grep -E 'HTTP_PROXY|NO_PROXY' || true
 
 echo "== CSV Worker DB connectivity via proxy (optional) =="
 CSV_DEPLOY=$(kubectl -n apps get deploy -l app=csv-ingestion-worker -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)

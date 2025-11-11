@@ -9,15 +9,17 @@ if ! kubectl version --short >/dev/null 2>&1; then
 else
   kubectl get nodes -o wide || true
   kubectl -n node-tunnels get ds,po || true
-  kubectl -n apps get deploy,svc label-studio || true
+  kubectl -n apps get deploy,svc argilla || true
 fi
 
 echo "==> HTTP checks (external)"
-LABEL_HOST=${LABEL_HOST:-label.boathou.se}
-GPU_HOST=${GPU_HOST:-gpu.boathou.se}
+ARGILLA_HOST=${ARGILLA_HOST:-label.boathou.se}
+UPLOAD_HOST=${UPLOAD_HOST:-upload.goldfish.io}
 
-curl -skI https://${LABEL_HOST} | sed -n '1,5p' || true
-curl -sk https://${GPU_HOST}/ | head -n 3 || true
-curl -sk https://${GPU_HOST}/gpu | head -n 10 || true
+echo "== Argilla (via Cloudflare tunnel) =="
+curl -skI https://${ARGILLA_HOST} | sed -n '1,5p' || true
+
+echo "== Upload Portal (Cloudflare Worker) =="
+curl -skI https://${UPLOAD_HOST}/health | sed -n '1,5p' || true
 
 echo "==> Done. Review output above for errors."
