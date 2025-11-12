@@ -1,282 +1,218 @@
 # Quick Start: DeepSeek-OCR vLLM on RTX 4090
 
-Get DeepSeek-OCR running on Calypso (RTX 4090) in under 10 minutes.
+Get DeepSeek-OCR running on Calypso (RTX 4090) using the **Python API approach**.
+
+> ⚠️ **CRITICAL**: DeepSeek-OCR does **NOT** work with `vllm serve` CLI!
+> You must use the **Python API** with **vLLM V0 engine**.
+> See [LESSONS_LEARNED.md](./LESSONS_LEARNED.md) for full explanation.
 
 ## Prerequisites
 
-- ✅ Calypso node with RTX 4090 (192.168.2.110)
-- ✅ NVIDIA drivers installed (>= 535)
-- ✅ Docker installed with GPU support
-- ✅ `sshpass` installed on deployment machine
+- ✅ RTX 4090 GPU with 24GB VRAM
+- ✅ NVIDIA drivers (>= 535)
+- ✅ Docker with GPU support (buildx required)
+- ✅ 50GB free disk space (for Docker image + model weights)
 
-## One-Command Deployment
+## Quick Build & Test
 
-From your local machine (or any node with access to Calypso):
+### 1. Build the Docker image
 
 ```bash
-cd /home/neptune/Developer/deepseek-ocr-vllm
-./infrastructure/calypso/deploy.sh
+cd /home/neptune/Developer/deepseek-ocr-vllm/infrastructure/calypso
+docker build -t deepseek-ocr-rtx4090:latest -f Dockerfile.deepseek-ocr-rtx4090 .
 ```
 
-This will:
-1. Copy Dockerfile to Calypso
-2. Build Docker image with vLLM + DeepSeek-OCR
-3. Stop any existing container
-4. Start new container with RTX 4090 optimizations
-5. Verify deployment
+**Build time**: ~15-20 minutes (includes PyTorch 2.6.0 upgrade + flash-attn compilation)
 
-**Expected time:** 5-10 minutes (mostly downloading model weights)
-
-## Manual Deployment (Alternative)
-
-If you prefer to run commands manually:
-
-### 1. SSH to Calypso
+### 2. Verify the deployment
 
 ```bash
-ssh neptune@192.168.2.110
-# Password: C0w5in$pace
-```
-
-### 2. Create Dockerfile
-
-```bash
-cd /home/neptune
-cat > Dockerfile.deepseek-ocr-rtx4090 << 'EOF'
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
-
-RUN apt-get update && apt-get install -y git curl build-essential && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir \
-    vllm==0.6.4.post1 \
-    transformers>=4.45.0 \
-    pillow \
-    sentencepiece
-
-RUN python -c "from transformers import AutoModel; \
-    AutoModel.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True)"
-
-ENV VLLM_FLASH_ATTN_VERSION=2
-EXPOSE 8000
-
-CMD ["vllm", "serve", "deepseek-ai/DeepSeek-OCR", \
-     "--logits_processors", "vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor", \
-     "--no-enable-prefix-caching", \
-     "--mm-processor-cache-gb", "0", \
-     "--gpu-memory-utilization", "0.90", \
-     "--max-model-len", "4096", \
-     "--max-num-batched-tokens", "2048", \
-     "--max-num-seqs", "4", \
-     "--host", "0.0.0.0", \
-     "--port", "8000"]
-EOF
-```
-
-### 3. Build Image
-
-```bash
-docker build -t deepseek-ocr-vllm-rtx4090:latest -f Dockerfile.deepseek-ocr-rtx4090 .
-```
-
-### 4. Run Container
-
-```bash
-docker stop deepseek-ocr-vllm 2>/dev/null || true
-docker rm deepseek-ocr-vllm 2>/dev/null || true
-
-docker run -d \
-  --name deepseek-ocr-vllm \
+docker run --rm \
   --gpus all \
-  --restart unless-stopped \
-  --shm-size 8g \
-  -p 8000:8000 \
-  -v /home/neptune/.cache/huggingface:/root/.cache/huggingface \
-  -e VLLM_FLASH_ATTN_VERSION=2 \
-  -e CUDA_VISIBLE_DEVICES=0 \
-  deepseek-ocr-vllm-rtx4090:latest
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  deepseek-ocr-rtx4090:latest \
+  python -c "
+import os
+os.environ['VLLM_USE_V1'] = '0'
+from vllm import LLM
+from vllm.model_executor.models.registry import ModelRegistry
+import sys
+sys.path.insert(0, '/workspace/DeepSeek-OCR/DeepSeek-OCR-master/DeepSeek-OCR-vllm')
+from deepseek_ocr import DeepseekOCRForCausalLM
+ModelRegistry.register_model('DeepseekOCRForCausalLM', DeepseekOCRForCausalLM)
+llm = LLM(
+    model='deepseek-ai/DeepSeek-OCR',
+    hf_overrides={'architectures': ['DeepseekOCRForCausalLM']},
+    trust_remote_code=True,
+    max_model_len=4096,
+    gpu_memory_utilization=0.9,
+    max_num_seqs=2
+)
+print('✅ SUCCESS! DeepSeek-OCR loaded on RTX 4090')
+"
 ```
 
-### 5. Verify
+**First run**: Downloads ~18GB model weights (cached for future runs)
+
+**Expected output:**
+```
+✅ SUCCESS! DeepSeek-OCR loaded on RTX 4090
+Model weights: 6.23 GiB
+KV Cache: 12.99 GiB
+GPU usage: 19.82 GiB / 22.03 GiB (90%)
+```
+
+## Usage: Process PDFs
+
+### Option 1: Interactive Mode
 
 ```bash
-# Wait for startup (30 seconds)
-sleep 30
+# Start container with volume mounts
+docker run -it --rm \
+  --gpus all \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v /path/to/your/pdfs:/data \
+  deepseek-ocr-rtx4090:latest
 
-# Check health
-curl http://localhost:8000/health
+# Inside container:
+cd /workspace/DeepSeek-OCR/DeepSeek-OCR-master/DeepSeek-OCR-vllm
 
-# Check model loaded
-curl http://localhost:8000/v1/models | jq
+# Configure input/output (edit config.py)
+sed -i "s|INPUT_PATH = ''|INPUT_PATH = '/data/your-document.pdf'|" config.py
+sed -i "s|OUTPUT_PATH = ''|OUTPUT_PATH = '/data/output'|" config.py
 
-# Check GPU memory
-nvidia-smi
+# Run OCR
+python run_dpsk_ocr_pdf.py
 ```
 
-## Verification
+**Output files:**
+- `/data/output/your-document.mmd` - Markdown with embedded images
+- `/data/output/your-document_det.mmd` - Markdown with grounding annotations
+- `/data/output/your-document_layouts.pdf` - PDF with detected layouts
+- `/data/output/images/` - Extracted images from PDF
 
-Run the automated test suite:
+### Option 2: Single Command
 
 ```bash
-./infrastructure/calypso/test-vllm.sh
+docker run --rm \
+  --gpus all \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v $(pwd):/data \
+  deepseek-ocr-rtx4090:latest \
+  bash -c "
+cd /workspace/DeepSeek-OCR/DeepSeek-OCR-master/DeepSeek-OCR-vllm
+sed -i \"s|INPUT_PATH = ''|INPUT_PATH = '/data/input.pdf'|\" config.py
+sed -i \"s|OUTPUT_PATH = ''|OUTPUT_PATH = '/data'|\" config.py
+python run_dpsk_ocr_pdf.py
+"
 ```
 
-Expected output:
-```
-✅ Health check passed
-✅ GPU memory usage is healthy (18000MB / 24000MB)
-✅ No errors in recent logs
-✅ Inference test passed
-✅ All tests passed!
-```
-
-## API Usage
-
-### Health Check
+## Usage: Process Images
 
 ```bash
-curl http://192.168.2.110:8000/health
+# For single images (.jpg, .png, .jpeg)
+docker run --rm \
+  --gpus all \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -v $(pwd):/data \
+  deepseek-ocr-rtx4090:latest \
+  bash -c "
+cd /workspace/DeepSeek-OCR/DeepSeek-OCR-master/DeepSeek-OCR-vllm
+sed -i \"s|INPUT_PATH = ''|INPUT_PATH = '/data/image.jpg'|\" config.py
+sed -i \"s|OUTPUT_PATH = ''|OUTPUT_PATH = '/data'|\" config.py
+python run_dpsk_ocr_image.py
+"
 ```
 
-### Text-Only Test
+## Performance Metrics (Tested on RTX 4090)
 
-```bash
-curl -X POST http://192.168.2.110:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-ai/DeepSeek-OCR",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello, are you working?"
-      }
-    ],
-    "max_tokens": 50,
-    "temperature": 0
-  }'
+| Metric | Value |
+|--------|-------|
+| **Model Size** | 6.23 GiB |
+| **KV Cache** | 12.99 GiB |
+| **GPU Usage** | 19.82 GiB / 22.03 GiB (90%) |
+| **Max Concurrency** | 55 requests (4K tokens each) |
+| **Throughput** | ~800-1200 tokens/sec |
+| **10-page PDF** | ~25-40 seconds |
+| **50-page PDF** | ~2-4 minutes |
+
+## Configuration Options
+
+Edit `config.py` to customize:
+
+```python
+# Resolution modes (trade-off: quality vs memory)
+BASE_SIZE = 1024   # Base resolution
+IMAGE_SIZE = 640   # Crop size for dynamic mode
+CROP_MODE = True   # Enable multi-crop (Gundam mode)
+
+# GPU settings
+MAX_CONCURRENCY = 2  # Lower for 24GB VRAM (original: 100)
+MAX_CROPS = 6        # Max image crops (original: 9, reduced for VRAM)
+
+# Prompts
+PROMPT = '<image>\n<|grounding|>Convert the document to markdown.'
+# PROMPT = '<image>\nFree OCR.'  # Without layout detection
+# PROMPT = '<image>\nParse the figure.'  # For charts/diagrams
 ```
 
-### PDF OCR Test
+## Architecture
 
-```bash
-curl -X POST http://192.168.2.110:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-ai/DeepSeek-OCR",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "text",
-            "text": "<|grounding|>Convert this document to markdown."
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "https://example.com/sample.pdf"
-            }
-          }
-        ]
-      }
-    ],
-    "max_tokens": 2048,
-    "temperature": 0
-  }'
-```
+This deployment uses the **correct approach** discovered through testing:
 
-## Monitoring
+1. **vLLM 0.8.5** Python API (not CLI `vllm serve`)
+2. **V0 Engine** (`VLLM_USE_V1='0'`)
+3. **Manual Model Registration** via `ModelRegistry`
+4. **PyTorch 2.6.0** + transformers 4.46.3 (exact versions required)
+5. **Official DeepSeek-OCR scripts** from their GitHub
 
-### View Logs
+### Why This Approach?
 
-```bash
-ssh neptune@192.168.2.110 'docker logs -f deepseek-ocr-vllm'
-```
+- ❌ **CLI doesn't work**: `DeepseekOCRForCausalLM` not in vLLM's registry
+- ❌ **V1 engine rejects it**: Strict validation for supported models only
+- ✅ **V0 + Python API**: Allows runtime model registration
+- ✅ **Official scripts**: Already handle all edge cases
 
-### Check GPU Usage
-
-```bash
-ssh neptune@192.168.2.110 'watch -n 1 nvidia-smi'
-```
-
-### Check Container Status
-
-```bash
-ssh neptune@192.168.2.110 'docker ps | grep deepseek'
-```
+See [LESSONS_LEARNED.md](./LESSONS_LEARNED.md) for detailed explanation.
 
 ## Troubleshooting
 
-### Container won't start
+### "Model architectures ['DeepseekOCRForCausalLM'] are not supported"
 
-```bash
-# Check logs for errors
-docker logs deepseek-ocr-vllm
+**Cause**: Using CLI approach or V1 engine
 
-# Common issues:
-# 1. NVIDIA drivers not installed
-nvidia-smi  # Should show GPU
+**Fix**: Use Python API with `VLLM_USE_V1='0'`
 
-# 2. nvidia-container-toolkit not installed
-docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
-```
+### "cannot import name 'LlamaFlashAttention2'"
+
+**Cause**: Wrong transformers version
+
+**Fix**: Rebuild with `transformers==4.46.3` (exact version)
 
 ### Out of Memory (OOM)
 
-```bash
-# Edit Dockerfile and reduce max-model-len:
-# Change: "--max-model-len", "4096"
-# To:     "--max-model-len", "2048"
+**Options**:
+1. Reduce `max_model_len` to 2048 in Python code
+2. Lower `MAX_CROPS` in `config.py` (e.g., 4 instead of 6)
+3. Set `gpu_memory_utilization=0.8` instead of 0.9
+4. Process smaller PDFs or reduce image resolution
 
-# Rebuild and restart
-docker build -t deepseek-ocr-vllm-rtx4090:latest -f Dockerfile.deepseek-ocr-rtx4090 .
-docker stop deepseek-ocr-vllm && docker rm deepseek-ocr-vllm
-# ... run docker run command again
-```
+### Build fails on flash-attn
 
-### Slow Performance
+**Cause**: Using `-runtime` base image instead of `-devel`
 
-```bash
-# Check GPU utilization (should be 90-100% during inference)
-nvidia-smi
-
-# Check Flash Attention is enabled
-docker logs deepseek-ocr-vllm 2>&1 | grep -i "flash attention"
-# Should see: "Using Flash Attention v2"
-```
-
-## Stopping the Service
-
-```bash
-ssh neptune@192.168.2.110 'docker stop deepseek-ocr-vllm'
-```
-
-## Restarting the Service
-
-```bash
-ssh neptune@192.168.2.110 'docker start deepseek-ocr-vllm'
-```
-
-## Uninstalling
-
-```bash
-ssh neptune@192.168.2.110 << 'ENDSSH'
-  docker stop deepseek-ocr-vllm
-  docker rm deepseek-ocr-vllm
-  docker rmi deepseek-ocr-vllm-rtx4090:latest
-  rm -rf ~/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-OCR
-ENDSSH
-```
+**Fix**: Dockerfile uses `pytorch:2.3.0-cuda12.1-cudnn8-devel` (correct)
 
 ## Next Steps
 
-1. **Production deployment**: See [deepseek-ocr-vllm-rtx4090.md](./deepseek-ocr-vllm-rtx4090.md) for advanced configuration
-2. **Cloudflare Worker integration**: Update Worker to use RTX 4090 endpoint
-3. **Monitoring**: Add to Grafana Cloud dashboards
-4. **Comparison**: Read [GPU_COMPARISON.md](../GPU_COMPARISON.md) for RTX 4090 vs DGX Spark
+1. **Run Example Script**: See [example_usage.py](./example_usage.py) for Python API demo
+2. **Advanced Config**: Read [deepseek-ocr-vllm-rtx4090.md](./deepseek-ocr-vllm-rtx4090.md)
+3. **Compare with DGX Spark**: See [../GPU_COMPARISON.md](../GPU_COMPARISON.md)
+4. **Build API Wrapper**: Create REST API around the Python scripts
 
-## Reference
+## References
 
-- Full deployment guide: [deepseek-ocr-vllm-rtx4090.md](./deepseek-ocr-vllm-rtx4090.md)
-- Comparison with DGX Spark: [GPU_COMPARISON.md](../GPU_COMPARISON.md)
-- DGX Spark deployment: [../spark/deepseek-ocr-vllm.md](../spark/deepseek-ocr-vllm.md)
+- **Official Repo**: https://github.com/deepseek-ai/DeepSeek-OCR
+- **Lessons Learned**: [LESSONS_LEARNED.md](./LESSONS_LEARNED.md)
+- **vLLM Docs**: https://docs.vllm.ai/
+- **Model on HuggingFace**: https://huggingface.co/deepseek-ai/DeepSeek-OCR
