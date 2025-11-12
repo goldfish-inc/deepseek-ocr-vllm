@@ -1,0 +1,44 @@
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install vLLM with Flash Attention support (for Ada Lovelace RTX 4090)
+RUN pip install --no-cache-dir \
+    vllm==0.6.4.post1 \
+    transformers>=4.45.0 \
+    pillow \
+    sentencepiece \
+    && rm -rf /root/.cache/pip
+
+# Pre-download DeepSeek-OCR model
+# This downloads the full model; consider using quantized version for better VRAM usage
+RUN python -c "from transformers import AutoModel; \
+    AutoModel.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True)"
+
+# Set Flash Attention v2 (Ada Lovelace compatible)
+ENV VLLM_FLASH_ATTN_VERSION=2
+
+# Expose vLLM API
+EXPOSE 8000
+
+# Start vLLM with RTX 4090 memory optimizations
+# Key settings for 24GB VRAM:
+# - gpu-memory-utilization: 0.90 (use 90% of 24GB = 21.6GB, leave headroom)
+# - max-model-len: 4096 (reduce from default 8192 to fit in VRAM)
+# - max-num-batched-tokens: 2048 (limit batch size)
+# - max-num-seqs: 4 (max 4 concurrent requests)
+CMD ["vllm", "serve", "deepseek-ai/DeepSeek-OCR", \
+     "--logits_processors", "vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor", \
+     "--no-enable-prefix-caching", \
+     "--mm-processor-cache-gb", "0", \
+     "--gpu-memory-utilization", "0.90", \
+     "--max-model-len", "4096", \
+     "--max-num-batched-tokens", "2048", \
+     "--max-num-seqs", "4", \
+     "--host", "0.0.0.0", \
+     "--port", "8000"]
