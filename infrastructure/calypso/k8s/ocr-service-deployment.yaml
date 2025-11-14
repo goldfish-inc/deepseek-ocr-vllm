@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-service
+  namespace: deepseek-ocr
+  labels:
+    app.kubernetes.io/name: ocr-service
+    app.kubernetes.io/component: api
+    app.kubernetes.io/version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ocr-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ocr-service
+        app.kubernetes.io/component: api
+    spec:
+      # Run on control plane where image is imported
+      nodeSelector:
+        kubernetes.io/hostname: srv712429
+
+      containers:
+      - name: ocr-service
+        image: ocr-service:v1
+        imagePullPolicy: Never  # Use local image
+        ports:
+        - containerPort: 8080
+          name: http
+        envFrom:
+        - configMapRef:
+            name: ocr-service-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: ocr-inbox
+          mountPath: /data/ocr-inbox
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: ocr-inbox
+        hostPath:
+          path: /mnt/data/deepseek-ocr/inbox
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-service
+  namespace: deepseek-ocr
+  labels:
+    app.kubernetes.io/name: ocr-service
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ocr-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
