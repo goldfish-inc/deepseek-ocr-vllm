@@ -11,6 +11,7 @@ on:
       - 'apps/csv-ingestion-worker/**'
       - 'apps/postgraphile/**'
       - 'apps/ocr-service/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
