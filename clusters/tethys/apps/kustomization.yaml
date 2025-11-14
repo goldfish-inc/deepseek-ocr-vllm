@@ -6,3 +6,4 @@ resources:
   - argilla.yaml
   - postgraphile.yaml
   - training-worker-cronjob.yaml
+  - ocr-async.yaml

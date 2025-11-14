@@ -1,0 +1,154 @@
+---
+# Redis for OCR task queue
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-ocr
+  namespace: apps
+  labels:
+    app: redis-ocr
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis-ocr
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-ocr
+  namespace: apps
+  labels:
+    app: redis-ocr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-ocr
+  template:
+    metadata:
+      labels:
+        app: redis-ocr
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+# OCR async ingestion service
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocr-service-config
+  namespace: apps
+  labels:
+    app: ocr-service
+data:
+  OCR_SERVICE_REDIS_URL: "redis://redis-ocr:6379/0"
+  OCR_SERVICE_QUEUE_NAME: "ocr:tasks"
+  OCR_SERVICE_STORAGE_MODE: "local"
+  OCR_SERVICE_STORAGE_ROOT: "/data/ocr-inbox"
+  OCR_SERVICE_MAX_PDF_SIZE_MB: "80"
+  OCR_SERVICE_TASK_TTL_SECONDS: "604800"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-service
+  namespace: apps
+  labels:
+    app: ocr-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: ocr-service
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-service
+  namespace: apps
+  labels:
+    app: ocr-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ocr-service
+  template:
+    metadata:
+      labels:
+        app: ocr-service
+    spec:
+      containers:
+        - name: ocr-service
+          image: ghcr.io/goldfish-inc/deepseek-ocr-vllm/ocr-service:main
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: ocr-service-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: ocr-inbox
+              mountPath: /data/ocr-inbox
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: ocr-inbox
+          hostPath:
+            path: /mnt/data/deepseek-ocr/inbox
+            type: DirectoryOrCreate
